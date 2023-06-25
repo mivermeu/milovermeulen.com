@@ -8,6 +8,9 @@
 
 	export let form: ActionData;
 
+	$: num_guesses = 6;
+	$: num_letters_per_word = 5;
+
 	/** Whether or not the user has won */
 	$: won = data.answers.at(-1) === 'xxxxx';
 
@@ -15,7 +18,7 @@
 	$: i = won ? -1 : data.answers.length;
 
 	/** Whether the current guess can be submitted */
-	$: submittable = data.guesses[i]?.length === 5;
+	$: submittable = data.guesses[i]?.length === num_letters_per_word;
 
 	/**
 	 * A map of classnames for all letters that have been guessed,
@@ -36,7 +39,7 @@
 		data.answers.forEach((answer, i) => {
 			const guess = data.guesses[i];
 
-			for (let i = 0; i < 5; i += 1) {
+			for (let i = 0; i < num_letters_per_word; i += 1) {
 				const letter = guess[i];
 
 				if (answer[i] === 'x') {
@@ -63,7 +66,7 @@
 		if (key === 'backspace') {
 			data.guesses[i] = guess.slice(0, -1);
 			if (form?.badGuess) form.badGuess = false;
-		} else if (guess.length < 5) {
+		} else if (guess.length < num_letters_per_word) {
 			data.guesses[i] += key;
 		}
 	}
@@ -103,11 +106,11 @@
 	<a class="how-to-play" href="/sverdle/how-to-play">How to play</a>
 
 	<div class="grid" class:playing={!won} class:bad-guess={form?.badGuess}>
-		{#each Array.from(Array(6).keys()) as row (row)}
+		{#each Array.from(Array(num_guesses).keys()) as row (row)}
 			{@const current = row === i}
 			<h2 class="visually-hidden">Row {row + 1}</h2>
-			<div class="row" class:current>
-				{#each Array.from(Array(5).keys()) as column (column)}
+			<div class="row" class:current style="--num_letters_per_word: {num_letters_per_word}">
+				{#each Array.from(Array(num_letters_per_word).keys()) as column (column)}
 					{@const answer = data.answers[row]?.[column]}
 					{@const value = data.guesses[row]?.[column] ?? ''}
 					{@const selected = current && column === data.guesses[row].length}
@@ -135,7 +138,7 @@
 	</div>
 
 	<div class="controls">
-		{#if won || data.answers.length >= 6}
+		{#if won || data.answers.length >= num_guesses}
 			{#if !won && data.answer}
 				<p>the answer was "{data.answer}"</p>
 			{/if}
@@ -163,7 +166,7 @@
 								on:click|preventDefault={update}
 								data-key={letter}
 								class={classnames[letter]}
-								disabled={data.guesses[i].length === 5}
+								disabled={data.guesses[i].length === num_letters_per_word}
 								formaction="?/update"
 								name="key"
 								value={letter}
@@ -239,7 +242,7 @@
 
 	.grid .row {
 		display: grid;
-		grid-template-columns: repeat(5, 1fr);
+		grid-template-columns: repeat(var(--num_letters_per_word), 1fr);
 		grid-gap: 0.2rem;
 		margin: 0 0 0.2rem 0;
 	}
