@@ -1,5 +1,5 @@
 <script>
-    import './styles.css';
+    import './styles.scss';
 </script>
 
 <div class="app">
@@ -19,10 +19,9 @@
         flex: 1;
         display: flex;
         flex-direction: column;
-        padding: 1rem;
+        padding: 0;
+        margin: 0;
         width: 100%;
-        max-width: 64rem;
-        margin: 0 auto;
         box-sizing: border-box;
     }
 </style>
