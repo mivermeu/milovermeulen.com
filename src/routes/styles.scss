@@ -6,6 +6,7 @@
     --font-mono: monospace;
     --font-size-title: 50px;
     --font-size-subtitle: 35px;
+    --font-size-body: 18px;
     --font-weight-title: 700;
     --color-bg: darkslategray;
     --color-test: darkgray;
@@ -40,6 +41,7 @@ h2 {
 p {
     line-height: 1.5;
     font-weight: 400;
+    font-size: var(--font-size-body)
 }
 
 pre {
