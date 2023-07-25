@@ -19,9 +19,11 @@
         flex: 1;
         display: flex;
         flex-direction: column;
-        padding: 0;
-        margin: 0;
+        padding-left: 30px;
+        padding-right: 30px;
+        margin: auto;
         width: 100%;
+        max-width: 1080px;
         box-sizing: border-box;
     }
 </style>
