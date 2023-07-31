@@ -5,8 +5,8 @@
 </script>
 
 <svelte:head>
-    <title>Home</title>
-    <meta name="description" content="Personal website" />
+    <title>Milo Vermeulen</title>
+    <meta name="Milo Vermeulen" content="Personal website" />
 </svelte:head>
 
 <div class="container">
