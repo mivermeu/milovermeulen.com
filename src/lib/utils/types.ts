@@ -7,7 +7,9 @@ export type Location = {
 
 export type Company = {
     name: string,
-    location: Location
+    location: Location,
+    website: string,
+    logo: any
 }
 
 export type ExperienceEntry = {
@@ -17,7 +19,7 @@ export type ExperienceEntry = {
     stop?: Date,
     short_description: string,
     tags: string[]
-    accomplishments?: string[]  // TODO: List these on auto-generated resume.
+    accomplishments?: string[]  // TODO: List these on auto-generated resume, details list.
 }
 
 export type Thesis = {
