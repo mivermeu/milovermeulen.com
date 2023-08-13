@@ -1,38 +1,7 @@
 // Work experience.
 
-import type { Company, ExperienceEntry } from '$lib/utils/types';
-import stcorp_logo from '$lib/images/stcorp.svg'
-import uh_logo from '$lib/images/uh.svg'
-import nikhef_logo from '$lib/images/nikhef.svg'
-import cern_logo from '$lib/images/cern.svg'
-
-const stcorp: Company = {
-    name: 'Science [&] Technology',
-    location: {city: 'Delft', country: 'Netherlands'},
-    website: 'https://www.stcorp.nl',
-    logo: stcorp_logo
-}
-
-const nikhef: Company = {
-    name: 'Nikhef',
-    location: {city: 'Amsterdam', country: 'Netherlands'},
-    website: 'https://www.nikhef.nl',
-    logo: nikhef_logo
-}
-
-const cern: Company = {
-    name: 'CERN',
-    location: {city: 'Genève', country: 'Switzerland'},
-    website: 'https://www.cern.ch',
-    logo: cern_logo
-}
-
-const uh: Company = {
-    name: 'University of Houston',
-    location: {city: 'Houston', country: 'USA'},
-    website: 'https://www.uh.edu',
-    logo: uh_logo
-}
+import type { ExperienceEntry } from '$lib/utils/types';
+import { stcorp, nikhef, cern, uh } from '$lib/data/companies'
 
 
 export const jobs = [
