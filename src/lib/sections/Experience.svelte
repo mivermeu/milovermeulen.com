@@ -1,21 +1,18 @@
 <script lang='ts'>
     import { jobs } from '$lib/data/experience';
     import CompanyBadge from '$lib/components/CompanyBadge.svelte';
+    import { month_plus_year } from '$lib/utils/datetime';
+    import CompanyList from '$lib/components/CompanyList.svelte';
 
-    function month_plus_year(date: Date): string {
-        return date.toLocaleDateString('default', {'month': 'short'}) + ' ' + date.getFullYear();
-    }
 </script>
 
 <h2>Experience</h2>
 <div class='job-list'>
-    {#each jobs as job}
+    {#each jobs.sort(function(a, b) { return b.start.getTime() - a.start.getTime()}) as job}
         <div class='job-card'>
             <div class='job-body'>
                 <h3>{job.title}</h3>
-                {#each job.companies as company}
-                    <CompanyBadge {company} />
-                {/each}
+                <CompanyList companies={job.companies} />
                 <p>{job.short_description}</p>
             </div>
             <div class='job-timeline'>
@@ -42,40 +39,37 @@
 
     .job-card {
         --date-width: 150px;
-        --line-width: 2px;
-        --text-padding: 20px;
+        --timeline-width: 2px;
         --card-spacing: 60px;
         --ball-diameter: 12px;
-        --shadow: 2px 2px 7px black;
+        background-color: var(--color-card);
+        box-shadow: var(--shadow-card);
+        border-radius: var(--border-radius-card);
 
         display: flex;
-        background-color: #333;
-        grid-column: 1;
-        border-radius: 10px;
-        box-shadow: var(--shadow);
 
         .job-body {
             flex: 1 1 auto;
-            padding: var(--text-padding);
-            padding-left: calc(var(--text-padding) * 2)
+            padding: var(--text-padding-card);
+            padding-left: calc(var(--text-padding-card) * 2);
         }
         
         .job-timeline {
             position: relative;
             flex: 0 0 var(--date-width);
-    
+
             &:before {
                 position: absolute;
-                top: calc(var(--text-padding) + var(--font-size-body));
+                top: calc(var(--text-padding-card) + var(--font-size-body));
                 content: '';
-                width: var(--line-width);
-                height: calc(100% - 2 * var(--text-padding) - 2 * var(--font-size-body));
+                width: var(--timeline-width);
+                height: calc(100% - 2 * var(--text-padding-card) - 2 * var(--font-size-body));
                 background-color: white;
             }
-    
+
             .job-timeline-body {
                 box-sizing: border-box;
-                padding: var(--text-padding);
+                padding: var(--text-padding-card);
                 height: 100%;
                 width: 100%;
                 display: flex;
@@ -93,12 +87,12 @@
         // Add a little line between cards.
         &:before {
             border: none;
-            border-right: dashed var(--line-width);
+            border-right: dashed var(--timeline-width);
             content: '';
             position: absolute;
             width: 0;
             height: var(--card-spacing);
-            right: calc(var(--date-width) - var(--line-width));
+            right: calc(var(--date-width) - var(--timeline-width));
             bottom: 100%;
             z-index: -1;
         }
@@ -111,13 +105,13 @@
     .timeline-ball {
         width: var(--ball-diameter);
         height: var(--ball-diameter);
-        outline: solid var(--line-width);
+        outline: solid var(--timeline-width);
         border-radius: 50%;
         position: absolute;
         background-color: var(--color-bg);
-        left: calc(-1 * var(--text-padding) + var(--line-width) / 2 - var(--ball-diameter) / 2);
+        left: calc(-1 * var(--text-padding-card) + var(--timeline-width) / 2 - var(--ball-diameter) / 2);
         bottom: calc(var(--font-size-body) / 2);
 
-        box-shadow: inset var(--shadow);
+        box-shadow: inset var(--shadow-card);
     }
 </style>

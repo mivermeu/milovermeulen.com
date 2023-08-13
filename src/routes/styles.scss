@@ -6,12 +6,20 @@
     --font-mono: monospace;
     --font-size-title: 50px;
     --font-size-subtitle: 35px;
-    --font-size-topic: 25px;
+    --font-size-topic: 22px;
     --font-size-body: 18px;
     --font-weight-title: 700;
+
     --color-bg: darkslategray;
     --color-text: white;
+    --color-highlight: #bbb;
     --color-button: grey;
+
+    --color-card: #333;
+    --border-radius-card: 10px;
+    --shadow-card: 0 0 10px var(--color-card);
+    --text-padding-card: 20px;
+
     --column-width: 42rem;
     --column-margin-top: 4rem;
     font-family: var(--font-body);
@@ -49,34 +57,8 @@ h3 {
     margin-block-end: 0.5em;
 }
 
-pre {
-    font-size: 16px;
-    font-family: var(--font-mono);
-    background-color: rgba(255, 255, 255, 0.45);
-    border-radius: 3px;
-    box-shadow: 2px 2px 6px rgb(255 255 255 / 25%);
-    padding: 0.5em;
-    overflow-x: auto;
-    color: var(--color-text);
-}
-
-.text-column {
-    display: flex;
-    max-width: 48rem;
-    flex: 0.6;
-    flex-direction: column;
-    justify-content: center;
-    margin: 0 auto;
-}
-
-input,
-button {
-    font-size: inherit;
-    font-family: inherit;
-}
-
-button:focus:not(:focus-visible) {
-    outline: none;
+a {
+    color: var(--color-highlight);
 }
 
 .visually-hidden {
