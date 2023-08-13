@@ -12,5 +12,5 @@
 <div class="container">
     <Hero />
     <Experience />
-    <Education />
+    <!-- <Education /> -->
 </div>
