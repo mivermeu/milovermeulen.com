@@ -24,8 +24,9 @@ export type ExperienceEntry = {
 
 export type Thesis = {
     name: string,
-    link?: string,
-    short_description: string  // Layman's summary of internship contents.
+    short_description: string,  // Layman's summary of internship contents.
+    link: string,
+    image: string
 }
 
 export type EducationEntry = {
