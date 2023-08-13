@@ -1,25 +1,52 @@
 <script lang='ts'>
-    import { educations } from '$lib/data/education';
-    import type { Company } from '$lib/utils/types';
+    import CompanyList from '$lib/components/CompanyList.svelte';
+    import { bachelor, master, phd } from '$lib/data/education';
+    import type { EducationEntry } from '$lib/utils/types';
 
-    function print_company(company: Company): string {
-        return company.name + ' in ' + company.location.city + ' (' + company.location.country + ')';
-    }
-
-    function list_companies(companies: Company[]): string {
-        if(companies.length == 0) {
-            return '';
-        } else if(companies.length == 1) {
-            return print_company(companies[0]);
-        } else {
-            return companies.map(print_company).slice(0, -1).join(', ') + ' and ' + print_company(companies[companies.length - 1])
-        }
-    }
+    let educations: EducationEntry[] = [phd, master, bachelor];
 </script>
 
 <h2>Education</h2>
-{#each educations as education}
-    <p>I did a {education.name} at {list_companies(education.companies)} between {education.start.getFullYear()} and {education.stop?.getFullYear()}.</p>
-    <p>My thesis was called "{education.thesis.name}"</p>
-    <br>
-{/each}
+<div class='education-grid'>
+    {#each [phd, master, bachelor] as education}
+        <div class='education-card'>
+            <div class='education-body'>
+                <h3>{education.name}</h3>
+                <CompanyList companies={education.companies} />
+            </div>
+            <a href={education.thesis.link}>
+                <img class='education-image' src={education.thesis.image} alt={education.thesis.name} />
+            </a>
+        </div>
+    {/each}
+</div>
+
+<style lang='scss'>
+    .education-grid {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 30px;
+    }
+
+    .education-card {
+        background-color: var(--color-card);
+        border-radius: var(--border-radius-card);
+        box-shadow: var(--shadow-card);
+        overflow: hidden;
+
+        display: flex;
+        flex-direction: row;
+    }
+
+    .education-body {
+        padding: var(--text-padding-card);
+        width: 200px;
+    }
+
+    .education-image {
+        display: block;
+        width: 220px;
+        height: 100%;
+    }
+</style>
