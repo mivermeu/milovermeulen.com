@@ -37,6 +37,7 @@
         position: relative;
         padding: var(--badge-padding);
         margin-right: 7px;
+        margin-bottom: 7px;
         background-color: var(--color-button);
         border-radius: var(--border-radius);
 
