@@ -1,7 +1,7 @@
 <script lang="ts">
     import Hero from '$lib/sections/Hero.svelte';
     import Experience from '$lib/sections/Experience.svelte';
-    import Education from '$lib/sections/Education.svelte';
+    import Projects from '$lib/sections/Projects.svelte';
 </script>
 
 <svelte:head>
@@ -12,5 +12,5 @@
 <div class="container">
     <Hero />
     <Experience />
-    <!-- <Education /> -->
+    <Projects />
 </div>
