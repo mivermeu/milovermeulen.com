@@ -13,10 +13,13 @@ export type Company = {
 }
 
 export type ExperienceEntry = {
-    companies: [Company, ...Company[]],  // Require at least one company.
+    companies: Company[],
     title: string,
     start: Date,
     stop?: Date,
+    // Custom start/stop text that takes precedence over dates.
+    start_text?: string,
+    stop_text?: string,
     short_description: string,
     tags: string[]
     accomplishments?: string[]  // TODO: List these on auto-generated resume, details list.
@@ -30,7 +33,7 @@ export type Thesis = {
 }
 
 export type EducationEntry = {
-    companies: [Company, ...Company[]],  // Require at least one company.
+    companies: Company[],
     name: string,
     start: Date,
     stop: Date,
