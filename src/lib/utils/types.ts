@@ -43,6 +43,7 @@ export type EducationEntry = {
 export type Project = {
     name: string,
     description: string,
+    image: string,
     link?: string,
     source_code?: string,
     tags: string[]
