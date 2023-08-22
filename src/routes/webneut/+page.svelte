@@ -1,5 +1,19 @@
 <script lang='ts'>
-    import { exp, Matrix, pi, sin, cos, complex, matrix, multiply, conj, transpose, re, dotMultiply, range } from 'mathjs';
+    import {
+        exp,
+        Matrix,
+        pi,
+        sin,
+        cos,
+        complex,
+        matrix,
+        multiply,
+        conj,
+        transpose,
+        re,
+        dotMultiply,
+        range
+    } from 'mathjs';
     import type { Complex, MathArray } from 'mathjs';
     import type { Parameter, OscillationParameters } from '$lib/webneut/types';
     import Plot from 'svelte-plotly.js';
@@ -7,13 +21,13 @@
     import ControlPanel from '$lib/webneut/ControlPanel.svelte';
 
     const sqrt2 = Math.sqrt(2);
-    const light_speed: number = 299792458;  // In m/s.
-    const hbar: number = 1.0545718e-34  // In Js.
-    const reduced_fermi_constant: number = 4.5437957  // In J^-2.
-    const electron_charge: number = 1.602e-19;  // In C.
-    const nucleon_mass: number = 1.6726e-27  // In kg.
+    const light_speed: number = 299792458; // In m/s.
+    const hbar: number = 1.0545718e-34; // In Js.
+    const reduced_fermi_constant: number = 4.5437957; // In J^-2.
+    const electron_charge: number = 1.602e-19; // In C.
+    const nucleon_mass: number = 1.6726e-27; // In kg.
 
-    const conv: number = 1e-6 / ((2 * hbar * light_speed) / electron_charge);  // Conversion factor from natural to useful units.
+    const conv: number = 1e-6 / ((2 * hbar * light_speed) / electron_charge); // Conversion factor from natural to useful units.
     const Gf: number = reduced_fermi_constant * Math.pow(light_speed * hbar, 2); // In m^2.
 
     let pars: OscillationParameters;
@@ -109,7 +123,7 @@
             precision: 0,
             limits: [0, 10000]
         }
-    }
+    };
 
     let s12: number;
     let s23: number;
@@ -168,18 +182,20 @@
     ]);
 
     let nuvec: number[] = [0, 0, 0];
-    $: nuvec = nuvec.map((_, index) => index == pars.nu.values[0]? 1: 0 );
+    $: nuvec = nuvec.map((_, index) => (index == pars.nu.values[0] ? 1 : 0));
 
-    let xValues: number[] 
+    let xValues: number[];
     $: xValues = Array.from(
         { length: pars.nsteps.values[0] + 1 },
-        (_, index) => pars.L.values[0] + index * (pars.L.values[1] - pars.L.values[0]) / pars.nsteps.values[0]
+        (_, index) =>
+            pars.L.values[0] +
+            (index * (pars.L.values[1] - pars.L.values[0])) / pars.nsteps.values[0]
     );
 
     let yValues: number[][];
 
     // @ts-ignore: Convert object to array
-    $: yValues = xValues.map(x => {
+    $: yValues = xValues.map((x) => {
         let Hexp: Matrix = matrix([
             [1, 0, 0],
             [0, exp(complex(0, (-pars.Dm21sq.values[0] * 1e-5 * conv * x) / pars.E.values[0])), 0],
@@ -197,27 +213,86 @@
         let UHUdnu: MathArray = multiply(U, Hexp, Ud, nuvec).toArray();
         // @ts-ignore
         return re(dotMultiply(UHUdnu, conj(UHUdnu))).valueOf();
-    }) 
+    });
     let realYValues: number[][];
     $: realYValues = transpose(yValues);
-
-    $: data = [{
-        x: xValues,
-        y: realYValues[0]
-    },
-    {
-        x: xValues,
-        y: realYValues[1]
-    },
-    {
-        x: xValues,
-        y: realYValues[2]
-    }];
 
     function update_parameters(event: CustomEvent) {
         pars = event.detail;
     }
 
+    // ============
+    // Plot layout
+    // ============
+
+    let rangeKeyPar: [string, Parameter] | undefined;
+    $: rangeKeyPar = Object.entries(pars).find(function([key, par]: [string, Parameter]) { return par.values.length > 1; });
+
+    let nustr: string;
+    $: nustr = pars.anti.values[0] > 0 ? '\u03BD' : '\u03BD&#773;';
+
+    let fstr: string;
+    $: fstr = pars.nu.values[0] == 0 ? 'e' : pars.nu.values[0] == 1 ? '\u03BC' : '\u03C4';
+
+    let layout: object;
+    $: layout = {
+        font: {family: 'serif', serif: 'times', size: 16},
+        xaxis: {title: {text: rangeKeyPar? rangeKeyPar[1].label: '', standoff: 15}},
+        title: {
+            text: 'P(' + nustr + '<sub>' + fstr + '</sub>' + '\u2192' + nustr + '<sub>x</sub>)',
+            x: 0,
+            xanchor: 'left',
+            yanchor: 'bottom',
+            xref: 'paper',
+            yref: 'paper'
+        },
+        showlegend: true,
+        legend: {
+            orientation: 'h',
+            x: 1,
+            y: 1,
+            xanchor: 'right',
+            yanchor: 'bottom'
+        },
+        margin: {
+            b: 50,
+            t: 20,
+            l: 50,
+            r: 30,
+            pad: 5
+        }
+    };
+
+    //======
+    // Data
+    //======
+
+    $: data = [
+        {
+            x: xValues,
+            y: realYValues[0],
+            name: nustr + '<sub>e</sub>',
+            line: {
+                color: 'green'
+            }
+        },
+        {
+            x: xValues,
+            y: realYValues[1],
+            name: nustr + '<sub>\u03BC</sub>',
+            line: {
+                color: 'blue'
+            }
+        },
+        {
+            x: xValues,
+            y: realYValues[2],
+            name: nustr + '<sub>\u03C4</sub>',
+            line: {
+                color: 'red'
+            }
+        }
+    ];
 </script>
 
 <svelte:head>
@@ -226,20 +301,16 @@
 </svelte:head>
 
 <div class='webneut-tool'>
-    <div class=header>
+    <div class='header'>
         <h1>Webneut</h1>
     </div>
 
     <div class='plot'>
-        <Plot
-            {data}
-            layout={{ margin: { t: 0 } }}
-            fillParent
-        />
+        <Plot {data} {layout} fillParent />
     </div>
 
     <div class='controls'>
-        <ControlPanel parameters={pars} on:change={update_parameters}/>
+        <ControlPanel parameters={pars} on:change={update_parameters} />
     </div>
 </div>
 
@@ -251,9 +322,10 @@
 
         display: grid;
         grid-template-columns: 1fr 3fr;
-        grid-template-rows: auto  auto;
-        grid-template-areas: 'header header'
-                             'controls plot';
+        grid-template-rows: auto auto;
+        grid-template-areas:
+            'header header'
+            'controls plot';
     }
 
     .header {
