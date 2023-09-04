@@ -1,11 +1,24 @@
 <script lang='ts'>
     import { createEventDispatcher, type EventDispatcher } from 'svelte';
-    import RangeSlider from 'svelte-range-slider-pips';
     import type { Parameter, OscillationParameters } from '$lib/webneut/types';
+    import SliderAssembly from './SliderAssembly.svelte';
+    import NeutrinoSelector from './NeutrinoSelector.svelte';
 
     export let parameters: OscillationParameters;
 
     let dispatch: EventDispatcher<{change: OscillationParameters}> = createEventDispatcher<{change: OscillationParameters}>();
+
+    let continuous_neutrino_parameters: Parameter[] = [
+        parameters.E,
+        parameters.L,
+        parameters.th12,
+        parameters.th23,
+        parameters.th13,
+        parameters.Dm21sq,
+        parameters.Dm31sq,
+        parameters.dCP,
+        parameters.rho,
+    ]
 
     function notify() {
         dispatch('change', parameters);
@@ -13,24 +26,10 @@
 </script>
 
 <div class='control-panel'>
-    {#each Object.entries(parameters) as [parameter_name, parameter]}
-        <div class='slider-label'>
-            <span class='slider-name'>{@html parameter.label}</span>
-            <div class='slider-inputs'>
-                <input class='slider-input' bind:value={parameter.values[0]} on:input={notify} />
-                {#if parameter.values.length > 1}
-                    <input class='slider-input' bind:value={parameter.values[1]} on:input={notify} />
-                {/if}
-            </div>
-        </div>
-        <RangeSlider
-            bind:values={parameter.values}
-            range={parameter.values.length > 1? true: 'min'}
-            precision={parameter.precision}
-            step={Math.pow(10, -1 * parameter.precision)}
-            min={parameter.limits[0]}
-            max={parameter.limits[1]}
-            on:change={notify} />
+    <SliderAssembly bind:parameter={parameters.nsteps} on:change={notify} />
+    <NeutrinoSelector bind:anti_parameter={parameters.anti} bind:nu_parameter={parameters.nu} on:change={notify}/>
+    {#each continuous_neutrino_parameters as parameter}
+        <SliderAssembly bind:parameter={parameter} on:change={notify}/>
     {/each}
 </div>
 
@@ -39,28 +38,5 @@
         border: solid white;
         border-radius: 5px;
         padding: 10px;
-    }
-
-    .slider-label{
-        display: flex;
-        align-content: center;
-        justify-content: space-between;
-    }
-
-    .slider-inputs {
-        display: flex;
-        gap: 0.5em;
-    }
-
-    .slider-input {
-        height: 2em;
-        width: 7em;
-
-        border-radius: 3px;
-        border: 0;
-
-        padding: 0.3em;
-        font: var(--font-body);
-        font-size: calc(0.8 * var(--font-size-body));  // For some reason the font size in inputs turns out bigger?
     }
 </style>
