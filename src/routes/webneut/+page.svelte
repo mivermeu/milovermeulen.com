@@ -3,23 +3,24 @@
     import type { Layout } from 'svelte-plotly.js';
     import type { Parameter, OscillationParameters } from '$lib/webneut/types';
     import ControlPanel from '$lib/webneut/ControlPanel.svelte';
-    import { default_oscillation_parameters, Oscillator } from '$lib/webneut/Oscillator';
+    import { Oscillator } from '$lib/webneut/Oscillator';
+    import { oscillation_parameters } from '$lib/webneut/stores';
+    import type { Unsubscriber } from 'svelte/store';
+    import { onDestroy } from 'svelte';
 
-    let oscillation_parameters: OscillationParameters = structuredClone(default_oscillation_parameters);
-
-    let oscillator: Oscillator = new Oscillator(oscillation_parameters);
+    let oscillator: Oscillator = new Oscillator($oscillation_parameters);
     let [xValues, yValues]: [number[], number[][]] = oscillator.oscillate();
+    const unsubscribe: Unsubscriber = oscillation_parameters.subscribe((parameters) => {
+        [xValues, yValues] = oscillator.oscillate(parameters);
+    });
+    onDestroy(unsubscribe);
 
-    function update_parameters(event: CustomEvent) {
-        [xValues, yValues] = oscillator.oscillate(oscillation_parameters);
-    }
-
-    $: range_parameter = Object.entries(oscillation_parameters).find(function ([key, par]: [string, Parameter]) {
+    $: range_parameter = Object.entries($oscillation_parameters).find(function ([key, par]: [string, Parameter]) {
         return par.values.length > 1;
     }) satisfies [string, Parameter] | undefined;
 
-    $: nustr = oscillation_parameters.anti.values[0] > 0 ? '\u03BD' : '\u03BD&#773;' satisfies string;
-    $: fstr = oscillation_parameters.nu.values[0] == 0 ? 'e' : oscillation_parameters.nu.values[0] == 1 ? '\u03BC' : '\u03C4' satisfies string;
+    $: nustr = $oscillation_parameters.anti.values[0] > 0 ? '\u03BD' : '\u03BD&#773;' satisfies string;
+    $: fstr = $oscillation_parameters.nu.values[0] == 0 ? 'e' : $oscillation_parameters.nu.values[0] == 1 ? '\u03BC' : '\u03C4' satisfies string;
 
     $: layout = {
         font: { family: 'serif', size: 16 },
@@ -92,7 +93,7 @@
     </div>
 
     <div class='controls'>
-        <ControlPanel bind:parameters={oscillation_parameters} on:change={update_parameters} />
+        <ControlPanel />
     </div>
 </div>
 

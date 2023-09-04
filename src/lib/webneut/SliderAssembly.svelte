@@ -1,24 +1,39 @@
 <script lang='ts'>
+    import { oscillation_parameters } from './stores';
     import RangeSlider from 'svelte-range-slider-pips';
     import type { Parameter } from './types';
     import { createEventDispatcher, type EventDispatcher } from 'svelte';
 
-    let dispatch: EventDispatcher<{change: Parameter}> = createEventDispatcher<{change: Parameter}>();
-
     export let parameter: Parameter;
+    export let action_buttons: boolean = false;
 
-    function notify() {
-        dispatch('change', parameter);
+    function make_range(): void {
+        // Set all parameters to single values, then set the current parameter to range.
+        for(let [_, osc_parameter] of Object.entries($oscillation_parameters)) {
+            if(osc_parameter.values.length > 1) {
+                osc_parameter.values = [osc_parameter.values[1]];
+            }
+        }
+        if(parameter.values[0] > 0) {
+            parameter.values = [0, parameter.values[0]];
+        } else {
+            parameter.values = [parameter.values[0], 0];
+        }
     }
 </script>
 
+{#if action_buttons}
+    <button class='slider-button' on:click={() => console.log('Not implemented yet!')}>Animate</button>
+    {#if parameter.values.length < 2}
+        <button class='slider-button' on:click={make_range}>Range</button>
+    {/if}
+{/if}
 <div class='slider-label'>
     <span class='slider-name'>{@html parameter.label}</span>
     <div class='slider-inputs'>
-        <input class='slider-input' bind:value={parameter.values[0]} on:input={notify} />
-        {#if parameter.values.length > 1}
-            <input class='slider-input' bind:value={parameter.values[1]} on:input={notify} />
-        {/if}
+        {#each parameter.values as value}
+            <input class='slider-input' bind:value={value} />
+        {/each}
     </div>
 </div>
 <RangeSlider
@@ -27,11 +42,18 @@
     precision={parameter.precision}
     step={Math.pow(10, -1 * parameter.precision)}
     min={parameter.limits[0]}
-    max={parameter.limits[1]}
-    on:change={notify} />
+    max={parameter.limits[1]} />
 
 <style lang='scss'>
-    .slider-label{
+    .slider-button {
+        align-self: center;
+        grid-area: 1/1/1/1;
+        width: 6em;
+        height: 2em;
+        border: 0.2em solid white;
+    }
+
+    .slider-label {
         display: flex;
         align-content: center;
         justify-content: space-between;

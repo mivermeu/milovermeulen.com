@@ -1,35 +1,27 @@
 <script lang='ts'>
-    import { createEventDispatcher, type EventDispatcher } from 'svelte';
-    import type { Parameter, OscillationParameters } from '$lib/webneut/types';
+    import { oscillation_parameters } from './stores';
+    import type { Parameter } from '$lib/webneut/types';
     import SliderAssembly from './SliderAssembly.svelte';
     import NeutrinoSelector from './NeutrinoSelector.svelte';
 
-    export let parameters: OscillationParameters;
-
-    let dispatch: EventDispatcher<{change: OscillationParameters}> = createEventDispatcher<{change: OscillationParameters}>();
-
-    let continuous_neutrino_parameters: Parameter[] = [
-        parameters.E,
-        parameters.L,
-        parameters.th12,
-        parameters.th23,
-        parameters.th13,
-        parameters.Dm21sq,
-        parameters.Dm31sq,
-        parameters.dCP,
-        parameters.rho,
-    ]
-
-    function notify() {
-        dispatch('change', parameters);
-    }
+    $: continuous_neutrino_parameters = [
+        $oscillation_parameters.E,
+        $oscillation_parameters.L,
+        $oscillation_parameters.th12,
+        $oscillation_parameters.th23,
+        $oscillation_parameters.th13,
+        $oscillation_parameters.Dm21sq,
+        $oscillation_parameters.Dm31sq,
+        $oscillation_parameters.dCP,
+        $oscillation_parameters.rho,
+    ] satisfies Parameter[];
 </script>
 
 <div class='control-panel'>
-    <SliderAssembly bind:parameter={parameters.nsteps} on:change={notify} />
-    <NeutrinoSelector bind:anti_parameter={parameters.anti} bind:nu_parameter={parameters.nu} on:change={notify}/>
+    <SliderAssembly bind:parameter={$oscillation_parameters.nsteps} />
+    <NeutrinoSelector bind:anti_parameter={$oscillation_parameters.anti} bind:nu_parameter={$oscillation_parameters.nu} />
     {#each continuous_neutrino_parameters as parameter}
-        <SliderAssembly bind:parameter={parameter} on:change={notify}/>
+        <SliderAssembly bind:parameter={parameter} action_buttons={true} />
     {/each}
 </div>
 
