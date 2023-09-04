@@ -5,7 +5,7 @@ import type { OscillationParameters, Parameter } from './types';
 const sqrt2 = Math.sqrt(2);
 const light_speed: number = 299792458; // In m/s.
 const hbar: number = 1.0545718e-34; // In Js.
-const reduced_fermi_constant: number = 4.5437957; // In J^-2.
+const reduced_fermi_constant: number = 4.5437957e14; // In J^-2.
 const electron_charge: number = 1.602e-19; // In C.
 const nucleon_mass: number = 1.6726e-27; // In kg.
 
@@ -135,6 +135,9 @@ export class Oscillator {
         ['rho', this.update_rho],
     ]);
 
+    // When set to true, the much more expensive Padé approximation to the
+    // matrix exponential is used in the oscillation calculation.
+    // Otherwise, the Lie product formula is used to speed up the calculation. 
     use_exp: boolean = false;
 
     constructor(parameters: OscillationParameters) {
@@ -289,14 +292,12 @@ export class Oscillator {
     }
 
     oscillate(new_parameters: OscillationParameters | undefined = undefined): [number[], number[][]] {
-        // console.log('oscillating');
         // Given the internal oscillation parameters, return a tuple containing
         // the range values and the three neutrino probability values over that
         // range.
         if(new_parameters) {
             for(let [key, par] of Object.entries(new_parameters)) {
                 if(this.parameters[key].values[0] != par.values[0] && this.parameters[key].values.length == 1) {
-                    // console.log(`updating ${key}`)
                     const update_function: ((newval: number) => void) | undefined = this.parameter_to_update_function.get(key)?.bind(this);
                     if(update_function) {
                         update_function(par.values[0]);
@@ -307,15 +308,15 @@ export class Oscillator {
         }
         
         // Find the range parameter and key.
-        const range_key_parameter: [string, Parameter] | undefined =
+        let range_key_parameter: [string, Parameter] | undefined =
         Object.entries(this.parameters).find((key_val: [string, Parameter]) => key_val[1].values.length > 1);
         if(!range_key_parameter) {
             throw new Error('No range parameter defined in parameters ' + this.parameters)
         }
+        let [range_key, range_parameter] = range_key_parameter;
         
-        const range_start: number = range_key_parameter[1].values[0];
-        const range_stop: number = range_key_parameter[1].values[1];
-        const range_key: string = range_key_parameter[0];
+        const range_start: number = range_parameter.values[0];
+        const range_stop: number = range_parameter.values[1];
 
         // Get the x values of the oscillation.
         // @ts-ignore: No complex values in range.
@@ -333,20 +334,24 @@ export class Oscillator {
         }
 
         // Determine the update function to be called for the range calculation.
-        const update_function: ((newval: number) => void) | undefined = this.parameter_to_update_function.get(range_key)?.bind(this);
-        if(!update_function) {
+        const range_update_function: ((newval: number) => void) | undefined = this.parameter_to_update_function.get(range_key)?.bind(this);
+        if(!range_update_function) {
             throw new Error(`Could not find key ${range_key} in update function map.`)
         }
 
         // Determine the neutrino oscillation probabilities at each point in the range.
         let nu_values: [number[], number[], number[]] = [Array(range_values.length), Array(range_values.length), Array(range_values.length)];
         for(let i = 0; i < range_values.length; i++) {
-            update_function(range_values[i]);
+            // Set the range parameter to the current x value.
+            range_parameter.values = [range_values[i]];
+            range_update_function(range_values[i]);
             const [nue, numu, nutau] = oscillation_function();
             nu_values[0][i] = nue;
             nu_values[1][i] = numu;
             nu_values[2][i] = nutau;
         }
+        // Change the range parameter's value back to its original range.
+        range_parameter.values = [range_start, range_stop];
 
         return [range_values, nu_values];
     }
@@ -368,8 +373,9 @@ export class Oscillator {
         const N = 128; // Large enough N for Lie product formula.
         // Temporary Hamiltonian to component-wise exponentiate.
         let Hexp: Matrix = matrix([[1, 0, 0], [0, 1, 0], [0, 0, 1]]);
-        for (var j = 1; j < 3; ++j)
+        for (var j = 1; j < 3; ++j) {
             Hexp.set([j, j], exp(complex(0, (-this.H.get([j, j]) * conv * this.parameters.L.values[0]) / this.parameters.E.values[0] / N)));
+        }
         let Vexp = matrix([[1, 0, 0], [0, 1, 0], [0, 0, 1]]);
         Vexp.set([0, 0], exp(complex(0, (-this.V.get([0, 0]) * this.parameters.L.values[0]) / N)));
         // Slow matrix power. Better than exponential...
@@ -385,9 +391,11 @@ export class Oscillator {
         let nu: [number, number, number] = [0, 0, 0];
         nu[this.parameters.nu.values[0]] = 1;
     
-        const Htmp = multiply(complex(0, -this.H), (conv * this.parameters.L.values[0]) / this.parameters.E.values[0]);
-        const Vtmp = multiply(complex(0, -this.V), this.parameters.L.values[0]);
-        // @ts-ignore: Multiple addition
+        // @ts-ignore: Multiple multiplication
+        const Htmp = multiply(complex(0, -1), this.H, (conv * this.parameters.L.values[0]) / this.parameters.E.values[0]);
+        // @ts-ignore: Multiple multiplication
+        const Vtmp = multiply(complex(0, -1), this.V, this.parameters.L.values[0]);
+        // @ts-ignore: Multiple multiplication
         const Hmat = add(Htmp, multiply(this.Ud, Vtmp, this.U));
         // @ts-ignore: Multiple multiplication
         const UHUdnu = multiply(this.U, expm(Hmat), this.Ud, nu);
