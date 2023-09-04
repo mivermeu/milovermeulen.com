@@ -5,18 +5,21 @@
     import ControlPanel from '$lib/webneut/ControlPanel.svelte';
     import { default_oscillation_parameters, Oscillator } from '$lib/webneut/Oscillator';
 
-    let pars: OscillationParameters = structuredClone(default_oscillation_parameters);
+    let oscillation_parameters: OscillationParameters = structuredClone(default_oscillation_parameters);
 
-    // ============
-    // Plot layout
-    // ============
+    let oscillator: Oscillator = new Oscillator(oscillation_parameters);
+    let [xValues, yValues]: [number[], number[][]] = oscillator.oscillate();
 
-    $: range_parameter = Object.entries(pars).find(function ([key, par]: [string, Parameter]) {
+    function update_parameters(event: CustomEvent) {
+        [xValues, yValues] = oscillator.oscillate(oscillation_parameters);
+    }
+
+    $: range_parameter = Object.entries(oscillation_parameters).find(function ([key, par]: [string, Parameter]) {
         return par.values.length > 1;
     }) satisfies [string, Parameter] | undefined;
 
-    $: nustr = pars.anti.values[0] > 0 ? '\u03BD' : '\u03BD&#773;' satisfies string;
-    $: fstr = pars.nu.values[0] == 0 ? 'e' : pars.nu.values[0] == 1 ? '\u03BC' : '\u03C4' satisfies string;
+    $: nustr = oscillation_parameters.anti.values[0] > 0 ? '\u03BD' : '\u03BD&#773;' satisfies string;
+    $: fstr = oscillation_parameters.nu.values[0] == 0 ? 'e' : oscillation_parameters.nu.values[0] == 1 ? '\u03BC' : '\u03C4' satisfies string;
 
     $: layout = {
         font: { family: 'serif', size: 16 },
@@ -45,17 +48,6 @@
             pad: 5
         }
     } satisfies Partial<Layout>;
-
-    //======
-    // Data
-    //======
-
-    let oscillator: Oscillator = new Oscillator(pars);
-    let [xValues, yValues]: [number[], number[][]] = oscillator.oscillate();
-
-    function update_parameters(event: CustomEvent) {
-        [xValues, yValues] = oscillator.oscillate(pars);
-    }
 
     $: data = [
         {
@@ -100,7 +92,7 @@
     </div>
 
     <div class='controls'>
-        <ControlPanel bind:parameters={pars} on:change={update_parameters} />
+        <ControlPanel bind:parameters={oscillation_parameters} on:change={update_parameters} />
     </div>
 </div>
 
