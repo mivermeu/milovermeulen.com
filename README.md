@@ -1,22 +1,16 @@
-# create-svelte
+# Milo's personal website
 
-Everything you need to build a Svelte project, powered by [`create-svelte`](https://github.com/sveltejs/kit/tree/master/packages/create-svelte).
+This is my personal website. I like to spend ~~too much~~ just enough time discovering and playing with new web tech, which at the moment is mostly Svelte. Feel free to copy / fork / get inspiration from my humble code.
 
-## Creating a project
+## What's inside?
 
-If you're seeing this, you've probably already done this step. Congrats!
-
-```bash
-# create a new project in the current directory
-npm create svelte@latest
-
-# create a new project in my-app
-npm create svelte@latest my-app
-```
+Aside from a summary of myself, I like to play with the creation of web-apps. One I keep coming back to is Webneut, an interactive [neutrino](https://en.wikipedia.org/wiki/Neutrino) oscillation simulator. This is the fifth(?) iteration of this tool and probably not the last.
 
 ## Developing
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+Install the dependencies with `npm install`, `yarn install` or equivalent for your setup.
+
+To start a development server:
 
 ```bash
 npm run dev
@@ -27,7 +21,7 @@ npm run dev -- --open
 
 ## Building
 
-To create a production version of your app:
+To create a production version of the app:
 
 ```bash
 npm run build
