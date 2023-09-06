@@ -1,10 +1,18 @@
 <script lang='ts'>
     import { oscillation_parameters } from './stores';
-    import type { Parameter } from '$lib/webneut/types';
     import SliderAssembly from './SliderAssembly.svelte';
     import NeutrinoSelector from './NeutrinoSelector.svelte';
+</script>
 
-    $: continuous_neutrino_parameters = [
+<div class='control-panel'>
+    {#each [
+        $oscillation_parameters.nsteps,
+        $oscillation_parameters.animation_period
+    ] as parameter}
+        <SliderAssembly bind:parameter={parameter} />
+    {/each}
+    <NeutrinoSelector />
+    {#each [
         $oscillation_parameters.E,
         $oscillation_parameters.L,
         $oscillation_parameters.th12,
@@ -14,13 +22,7 @@
         $oscillation_parameters.Dm31sq,
         $oscillation_parameters.dCP,
         $oscillation_parameters.rho,
-    ] satisfies Parameter[];
-</script>
-
-<div class='control-panel'>
-    <SliderAssembly bind:parameter={$oscillation_parameters.nsteps} />
-    <NeutrinoSelector bind:anti_parameter={$oscillation_parameters.anti} bind:nu_parameter={$oscillation_parameters.nu} />
-    {#each continuous_neutrino_parameters as parameter}
+    ] as parameter}
         <SliderAssembly bind:parameter={parameter} action_buttons={true} />
     {/each}
 </div>
