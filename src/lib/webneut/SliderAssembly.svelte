@@ -1,15 +1,14 @@
 <script lang='ts'>
-    import { oscillation_parameters } from './stores';
-    import RangeSlider from 'svelte-range-slider-pips';
+    import { animating_parameter, oscillation_parameters } from './stores';
+    // import RangeSlider from 'svelte-range-slider-pips';
     import type { Parameter } from './types';
-    import { createEventDispatcher, type EventDispatcher } from 'svelte';
 
     export let parameter: Parameter;
     export let action_buttons: boolean = false;
 
     function make_range(): void {
         // Set all parameters to single values, then set the current parameter to range.
-        for(let [_, osc_parameter] of Object.entries($oscillation_parameters)) {
+        for(let osc_parameter of Object.values($oscillation_parameters)) {
             if(osc_parameter.values.length > 1) {
                 osc_parameter.values = [osc_parameter.values[1]];
             }
@@ -20,29 +19,47 @@
             parameter.values = [parameter.values[0], 0];
         }
     }
+
+    function toggle_animation(): void {
+        if($animating_parameter === parameter) {
+            $animating_parameter = undefined;
+        } else {
+            $animating_parameter = parameter;
+        }
+    }
 </script>
 
 {#if action_buttons}
-    <button class='slider-button' on:click={() => console.log('Not implemented yet!')}>Animate</button>
-    {#if parameter.values.length < 2}
-        <button class='slider-button' on:click={make_range}>Range</button>
-    {/if}
+    <button class='slider-button' disabled={parameter.values.length > 1} on:click={toggle_animation}>
+        {$animating_parameter === parameter? 'Stop': 'Animate'}
+    </button>
+    <button class='slider-button' disabled={parameter.values.length > 1} on:click={make_range}>Range</button>
 {/if}
 <div class='slider-label'>
     <span class='slider-name'>{@html parameter.label}</span>
     <div class='slider-inputs'>
         {#each parameter.values as value}
-            <input class='slider-input' bind:value={value} />
+            <input class='slider-input' bind:value={value} type='number' />
         {/each}
     </div>
 </div>
+{#each parameter.values as value}
+    <input
+        type=range bind:value={value}
+        min={parameter.limits[0]}
+        max={parameter.limits[1]}
+        step={Math.pow(10, -1 * parameter.precision)} />
+{/each}
+<br>
+<!-- TODO: Reimplement this once the store update bug is fixed: https://github.com/simeydotme/svelte-range-slider-pips/issues/116
 <RangeSlider
     bind:values={parameter.values}
     range={parameter.values.length > 1? true: 'min'}
     precision={parameter.precision}
     step={Math.pow(10, -1 * parameter.precision)}
     min={parameter.limits[0]}
-    max={parameter.limits[1]} />
+    max={parameter.limits[1]}
+    springValues={{stiffness: 1, damping: 1 }} /> -->
 
 <style lang='scss'>
     .slider-button {

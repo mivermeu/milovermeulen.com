@@ -4,12 +4,13 @@ export type Parameter = {
     snaps: number[],
     precision: number,
     limits: [number, number],
+    animating: boolean,
 };
 
 export type OscillationParameters = {
     [key: string]: Parameter,
     nsteps: Parameter,
-    animspeed: Parameter,
+    animation_period: Parameter,
     nu: Parameter,
     anti: Parameter,
     E: Parameter,

@@ -4,27 +4,52 @@
     import type { Parameter, OscillationParameters } from '$lib/webneut/types';
     import ControlPanel from '$lib/webneut/ControlPanel.svelte';
     import { Oscillator } from '$lib/webneut/Oscillator';
-    import { oscillation_parameters } from '$lib/webneut/stores';
+    import { animating_parameter, oscillation_parameters } from '$lib/webneut/stores';
     import type { Unsubscriber } from 'svelte/store';
     import { onDestroy } from 'svelte';
 
     let oscillator: Oscillator = new Oscillator($oscillation_parameters);
     let [xValues, yValues]: [number[], number[][]] = oscillator.oscillate();
-    const unsubscribe: Unsubscriber = oscillation_parameters.subscribe((parameters) => {
+    const update_unsubscribe: Unsubscriber = oscillation_parameters.subscribe(parameters => {
         [xValues, yValues] = oscillator.oscillate(parameters);
     });
-    onDestroy(unsubscribe);
 
-    $: range_parameter = Object.entries($oscillation_parameters).find(function ([key, par]: [string, Parameter]) {
+    $: animation_period = $oscillation_parameters.animation_period.values[0] satisfies number;
+
+    // Animation.
+    let interval: number;
+    const animate_unsubscribe: Unsubscriber = animating_parameter.subscribe((parameter) => {
+        window.clearInterval(interval);
+        if(parameter != undefined) {
+            const start_value: number = parameter.values[0];
+            const start_time: number = Date.now();
+            interval = window.setInterval(() => {
+                const progress_fraction: number = ((Date.now() - start_time) / (animation_period * 1000)) % 1;
+                let new_value: number = start_value + progress_fraction * (parameter.limits[1] - parameter.limits[0]);
+                while (new_value > parameter.limits[1]) {
+                    new_value -= (parameter.limits[1] - parameter.limits[0]);
+                }
+                parameter.values[0] = new_value;
+                $oscillation_parameters = $oscillation_parameters;
+            });
+        }
+    });
+
+    onDestroy(() => {
+        update_unsubscribe();
+        animate_unsubscribe();
+    });
+
+    $: range_parameter = Object.values($oscillation_parameters).find(function (par: Parameter) {
         return par.values.length > 1;
-    }) satisfies [string, Parameter] | undefined;
+    }) satisfies Parameter | undefined;
 
     $: nustr = $oscillation_parameters.anti.values[0] > 0 ? '\u03BD' : '\u03BD&#773;' satisfies string;
     $: fstr = $oscillation_parameters.nu.values[0] == 0 ? 'e' : $oscillation_parameters.nu.values[0] == 1 ? '\u03BC' : '\u03C4' satisfies string;
 
     $: layout = {
         font: { family: 'serif', size: 16 },
-        xaxis: { title: { text: range_parameter ? range_parameter[1].label : '', standoff: 15 } },
+        xaxis: { title: { text: range_parameter ? range_parameter.label : '', standoff: 15 } },
         title: {
             text: 'P(' + nustr + '<sub>' + fstr + '</sub>' + '\u2192' + nustr + '<sub>x</sub>)',
             x: 0,
