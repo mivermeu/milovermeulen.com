@@ -1,17 +1,18 @@
 <script lang='ts'>
     import Plot from 'svelte-plotly.js';
     import type { Layout } from 'svelte-plotly.js';
-    import type { Parameter, OscillationParameters } from '$lib/webneut/types';
+    import type { Parameter } from '$lib/webneut/types';
     import ControlPanel from '$lib/webneut/ControlPanel.svelte';
     import { Oscillator } from '$lib/webneut/Oscillator';
-    import { animating_parameter, oscillation_parameters } from '$lib/webneut/stores';
+    import { animating_parameter, oscillation_parameters, x_values, y_values } from '$lib/webneut/stores';
     import type { Unsubscriber } from 'svelte/store';
     import { onDestroy } from 'svelte';
+    import DownloadButton from '$lib/webneut/DownloadButton.svelte';
 
     let oscillator: Oscillator = new Oscillator($oscillation_parameters);
-    let [xValues, yValues]: [number[], number[][]] = oscillator.oscillate();
+    [$x_values, $y_values] = oscillator.oscillate();
     const update_unsubscribe: Unsubscriber = oscillation_parameters.subscribe(parameters => {
-        [xValues, yValues] = oscillator.oscillate(parameters);
+        [$x_values, $y_values] = oscillator.oscillate(parameters);
     });
 
     $: animation_period = $oscillation_parameters.animation_period.values[0] satisfies number;
@@ -77,24 +78,24 @@
 
     $: data = [
         {
-            x: xValues,
-            y: yValues[0],
+            x: $x_values,
+            y: $y_values[0],
             name: nustr + '<sub>e</sub>',
             line: {
                 color: 'green'
             }
         },
         {
-            x: xValues,
-            y: yValues[1],
+            x: $x_values,
+            y: $y_values[1],
             name: nustr + '<sub>\u03BC</sub>',
             line: {
                 color: 'blue'
             }
         },
         {
-            x: xValues,
-            y: yValues[2],
+            x: $x_values,
+            y: $y_values[2],
             name: nustr + '<sub>\u03C4</sub>',
             line: {
                 color: 'red'
@@ -111,6 +112,7 @@
 <div class='webneut-tool'>
     <div class='header'>
         <h1>Webneut</h1>
+        <DownloadButton />
     </div>
 
     <div class='plot'>
@@ -139,6 +141,9 @@
     .header {
         margin: 0;
         grid-area: header;
+
+        display: flex;
+        justify-content: space-between;
     }
 
     .plot {

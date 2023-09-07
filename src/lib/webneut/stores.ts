@@ -2,9 +2,12 @@ import { pi } from "mathjs";
 import type { OscillationParameters, Parameter } from "./types";
 import { writable, type Writable } from "svelte/store";
 
-export const animating_parameter: Writable<Parameter | undefined> = writable(undefined);
+export let x_values: Writable<number[]> = writable([]);
+export let y_values: Writable<number[][]> = writable([]);
 
-export const oscillation_parameters: Writable<OscillationParameters> = writable({
+export let animating_parameter: Writable<Parameter | undefined> = writable(undefined);
+
+export let oscillation_parameters: Writable<OscillationParameters> = writable({
     nsteps: {
         values: [500],
         label: 'Number of points',

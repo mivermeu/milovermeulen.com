@@ -42,6 +42,7 @@
     },
     "type": "module",
     "dependencies": {
+        "jszip": "^3.10.1",
         "mathjs": "^11.9.1",
         "svelte-plotly.js": "^0.3.2"
     }
