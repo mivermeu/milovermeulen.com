@@ -3,43 +3,8 @@
     import type { Layout } from 'svelte-plotly.js';
     import type { Parameter } from '$lib/webneut/types';
     import ControlPanel from '$lib/webneut/ControlPanel.svelte';
-    import { Oscillator } from '$lib/webneut/Oscillator';
-    import { animating_parameter, oscillation_parameters, x_values, y_values } from '$lib/webneut/stores';
-    import type { Unsubscriber } from 'svelte/store';
-    import { onDestroy } from 'svelte';
+    import { oscillation_parameters, x_values, y_values } from '$lib/webneut/stores';
     import DownloadButton from '$lib/webneut/DownloadButton.svelte';
-
-    let oscillator: Oscillator = new Oscillator($oscillation_parameters);
-    [$x_values, $y_values] = oscillator.oscillate();
-    const update_unsubscribe: Unsubscriber = oscillation_parameters.subscribe(parameters => {
-        [$x_values, $y_values] = oscillator.oscillate(parameters);
-    });
-
-    $: animation_period = $oscillation_parameters.animation_period.values[0] satisfies number;
-
-    // Animation.
-    let interval: number;
-    const animate_unsubscribe: Unsubscriber = animating_parameter.subscribe((parameter) => {
-        window.clearInterval(interval);
-        if(parameter != undefined) {
-            const start_value: number = parameter.values[0];
-            const start_time: number = Date.now();
-            interval = window.setInterval(() => {
-                const progress_fraction: number = ((Date.now() - start_time) / (animation_period * 1000)) % 1;
-                let new_value: number = start_value + progress_fraction * (parameter.limits[1] - parameter.limits[0]);
-                while (new_value > parameter.limits[1]) {
-                    new_value -= (parameter.limits[1] - parameter.limits[0]);
-                }
-                parameter.values[0] = new_value;
-                $oscillation_parameters = $oscillation_parameters;
-            });
-        }
-    });
-
-    onDestroy(() => {
-        update_unsubscribe();
-        animate_unsubscribe();
-    });
 
     $: range_parameter = Object.values($oscillation_parameters).find(function (par: Parameter) {
         return par.values.length > 1;
