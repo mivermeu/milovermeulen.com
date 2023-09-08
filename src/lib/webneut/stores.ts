@@ -1,5 +1,5 @@
 import { pi } from "mathjs";
-import type { OscillationParameters, Parameter } from "./types";
+import { PlotType, type OscillationParameters, type Parameter } from "./types";
 import { writable, type Writable } from "svelte/store";
 
 export let x_values: Writable<number[]> = writable([]);
@@ -8,6 +8,14 @@ export let y_values: Writable<number[][]> = writable([]);
 export let animating_parameter: Writable<Parameter | undefined> = writable(undefined);
 
 export let oscillation_parameters: Writable<OscillationParameters> = writable({
+    plot_type: {
+        values: [PlotType.Linear],
+        label: 'Plot type',
+        snaps: [],
+        precision: 0,
+        limits: [PlotType.Linear, PlotType.Ternary],
+        animating: false
+    },
     nsteps: {
         values: [500],
         label: 'Number of points',

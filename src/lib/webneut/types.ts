@@ -9,6 +9,7 @@ export type Parameter = {
 
 export type OscillationParameters = {
     [key: string]: Parameter,
+    plot_type: Parameter,
     nsteps: Parameter,
     animation_period: Parameter,
     nu: Parameter,
@@ -22,4 +23,9 @@ export type OscillationParameters = {
     Dm31sq: Parameter,
     dCP: Parameter,
     rho: Parameter
+}
+
+export enum PlotType {
+    Linear,
+    Ternary
 }

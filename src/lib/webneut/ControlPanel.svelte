@@ -5,6 +5,7 @@
     import { Oscillator } from './Oscillator';
     import type { Unsubscriber } from 'svelte/store';
     import { onDestroy } from 'svelte';
+    import PlotTypeSelector from './PlotTypeSelector.svelte';
 
     let oscillator: Oscillator = new Oscillator($oscillation_parameters);
     [$x_values, $y_values] = oscillator.oscillate();
@@ -40,6 +41,7 @@
 </script>
 
 <div class='control-panel'>
+    <PlotTypeSelector />
     {#each [
         $oscillation_parameters.nsteps,
         $oscillation_parameters.animation_period
