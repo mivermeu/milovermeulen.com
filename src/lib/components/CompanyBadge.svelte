@@ -3,6 +3,7 @@
 
 <script lang='ts'>
     import type { Company } from '$lib/utils/types';
+    import { fly } from 'svelte/transition';
 
     export let company: Company;
 
@@ -12,23 +13,19 @@
     const leave = () => (hovering = false)
 </script>
 
-<span class='badge' on:mouseenter={enter} on:mouseleave={leave} role='presentation'>
+<a class='badge' on:mouseenter={enter} on:mouseleave={leave} href={company.website} target='_blank'>
     {company.name}
     {#if hovering}
-        <div class='hover-window'>
+        <div class='hover-window' transition:fly={{y: 30, x: 0, duration: 100}}>
             {#if company.logo}
                 <img class='hover-image' src={company.logo} alt='{company.name} logo' />
             {/if}
             <div class='hover-body'>
                 {company.location.city}, {company.location.country}
-                {#if company.website}
-                    <br>
-                    <a href={company.website} target='_blank'>Go to website</a>
-                {/if}
             </div>
         </div>
     {/if}
-</span>
+</a>
 
 <style lang='scss'>
     .badge {
@@ -41,7 +38,11 @@
         background-color: var(--color-button);
         border-radius: var(--border-radius);
 
+        font: var(--font-body);
+        color: var(--color-text);
+
         .hover-window {
+            pointer-events: none;
             position: absolute;
             left: 0;
             top: calc(var(--font-size-body) + var(--badge-padding) * 2 + var(--border-radius));
@@ -57,6 +58,7 @@
 
             .hover-image {
                 flex: 1 1 auto;
+                max-height: 200px;
             }
 
             .hover-body {
