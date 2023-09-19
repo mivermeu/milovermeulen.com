@@ -2,7 +2,7 @@
     import Hero from '$lib/sections/Hero.svelte';
     import Experience from '$lib/sections/Experience.svelte';
     import Projects from '$lib/sections/Projects.svelte';
-    import Contact from '$lib/sections/Contact.svelte';
+    import AboutWebsite from '$lib/sections/AboutWebsite.svelte';
 </script>
 
 <svelte:head>
@@ -15,7 +15,7 @@
         <Hero />
         <Experience />
         <Projects />
-        <Contact />
+        <AboutWebsite />
     </main>
 </div>
 
