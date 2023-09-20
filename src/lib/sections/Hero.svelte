@@ -1,11 +1,12 @@
 <script lang='ts'>
     import Socials from "$lib/components/Socials.svelte";
+    import TextScroll from "$lib/components/TextScroll.svelte";
 </script>
 
 <section id="hero">
     <h1>Hi, I'm Milo!</h1>
     <p class="subtitle">
-        I do software engineering / data science / particle physics
+        I do <TextScroll strings={['software engineering', 'data science', 'particle physics']} />
     </p>
     <Socials />
 </section>
