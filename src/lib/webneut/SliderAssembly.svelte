@@ -1,4 +1,5 @@
 <script lang='ts'>
+    import RangeSlider from 'svelte-range-slider-pips';
     import { animating_parameter, oscillation_parameters } from './stores';
     // import RangeSlider from 'svelte-range-slider-pips';
     import type { Parameter } from './types';
@@ -43,15 +44,6 @@
         {/each}
     </div>
 </div>
-{#each parameter.values as value}
-    <input
-        type=range bind:value={value}
-        min={parameter.limits[0]}
-        max={parameter.limits[1]}
-        step={Math.pow(10, -1 * parameter.precision)} />
-{/each}
-<br>
-<!-- TODO: Reimplement this once the store update bug is fixed: https://github.com/simeydotme/svelte-range-slider-pips/issues/116
 <RangeSlider
     bind:values={parameter.values}
     range={parameter.values.length > 1? true: 'min'}
@@ -59,7 +51,7 @@
     step={Math.pow(10, -1 * parameter.precision)}
     min={parameter.limits[0]}
     max={parameter.limits[1]}
-    springValues={{stiffness: 1, damping: 1 }} /> -->
+    springValues={{stiffness: 1, damping: 1 }} />
 
 <style lang='scss'>
     .slider-button {
