@@ -3,6 +3,7 @@
     import Experience from '$lib/sections/Experience.svelte';
     import Projects from '$lib/sections/Projects.svelte';
     import AboutWebsite from '$lib/sections/AboutWebsite.svelte';
+    import Footer from '$lib/sections/Footer.svelte';
 </script>
 
 <svelte:head>
@@ -17,6 +18,8 @@
         <Projects />
         <AboutWebsite />
     </main>
+
+    <Footer />
 </div>
 
 <style>

@@ -48,3 +48,9 @@ export type Project = {
     source_code?: string,
     tags: string[]
 }
+
+export type Social = {
+    name: string,
+    icon: string,
+    link: string
+}

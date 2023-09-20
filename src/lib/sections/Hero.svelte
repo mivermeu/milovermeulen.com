@@ -1,8 +1,13 @@
+<script lang='ts'>
+    import Socials from "$lib/components/Socials.svelte";
+</script>
+
 <section id="hero">
     <h1>Hi, I'm Milo!</h1>
     <p class="subtitle">
         I do software engineering / data science / particle physics
     </p>
+    <Socials />
 </section>
 
 <style lang="scss">
