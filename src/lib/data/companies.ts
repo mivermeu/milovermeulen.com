@@ -2,13 +2,13 @@
 
 import type { Company } from '$lib/utils/types'
 
-import stcorp_logo from '$lib/images/stcorp.svg'
-import uh_logo from '$lib/images/uh.svg'
-import nikhef_logo from '$lib/images/nikhef.svg'
-import cern_logo from '$lib/images/cern.svg'
-import ru_logo from '$lib/images/ru.svg'
-import felix_logo from '$lib/images/felix.svg'
-import goteborg_logo from '$lib/images/goteborg.svg'
+import stcorp_logo from '$lib/images/logos/stcorp.svg'
+import uh_logo from '$lib/images/logos/uh.svg'
+import nikhef_logo from '$lib/images/logos/nikhef.svg'
+import cern_logo from '$lib/images/logos/cern.svg'
+import ru_logo from '$lib/images/logos/ru.svg'
+import felix_logo from '$lib/images/logos/felix.svg'
+import goteborg_logo from '$lib/images/logos/goteborg.svg'
 
 export const ru: Company = {
     name: 'Radboud University',

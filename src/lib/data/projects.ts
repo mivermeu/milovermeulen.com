@@ -2,7 +2,6 @@
 
 import type { Project } from '$lib/utils/types';
 import webneut from '$lib/images/webneut.svg'
-import scheduler from '$lib/images/webneut.svg'
 
 export const projects: Project[] = [
     {
