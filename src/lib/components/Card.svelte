@@ -1,41 +1,65 @@
 <!-- Define a card element for general use. -->
 
 <script lang='ts'>
-    import { createEventDispatcher } from 'svelte';
+    import { slide } from 'svelte/transition';
+    import downarrow from '$lib/images/icons/down-arrow.svg'
 
     export let href: string | undefined = undefined;
     export let additional_class: string | undefined = undefined;
+    export let details_present: boolean = false;
+    export let expand_duration: number = 500;
 
-    const dispatch = createEventDispatcher();
+    // Protect card from having to handle href and details simultaneously.
+    if(href && details_present) {
+        throw new Error('Cannot present href and details at the same time.')
+    }
+
+    let open: boolean = false;
+
     function handle_card_click(): void {
-        dispatch('click', href);
+        open = !open;
     }
 </script>
 
 <svelte:element
-    this={href? 'a': 'article'}
+    this={href? 'a': 'div'}
     {href}
-    role={href? 'button': 'article'}
+    role={href? 'a': 'div'}
     class='card {additional_class}'
-    on:click={handle_card_click}
+    on:click={() => open = !open}
     {...$$restProps}
+    data-expandable={details_present}
 >
-    <div class='wrapper'>
-        {#if $$slots.image}
-            <div class='image-container'>
-                <slot name='image' />
+    {#if $$slots.image}
+        <div class='image-container'>
+            <slot name='image' />
+        </div>
+    {/if}
+    <div class='content'>
+        <slot name='content' />
+        {#if $$slots.details && details_present}
+            {#if open}
+                <div
+                    class='details-container'
+                    transition:slide={{duration: expand_duration}}
+                >
+                    <slot name='details' />
+                </div>
+            {/if}
+            <div class='expand-arrow'>
+                <img
+                    class='expand-arrow-img'
+                    src={downarrow} alt='expand-arrow'
+                    style={`transform: scale(1, ${open? -1: 1}); transition: ${expand_duration}ms;`}
+                />
             </div>
         {/if}
-        <div class='content'>
-            <slot name='content' />
-        </div>
     </div>
 </svelte:element>
 
 <style lang='scss'>
     .card {
         background-color: var(--color-card);
-        box-shadow: var(--shadow-card);
         border-radius: var(--border-radius-card);
         position: relative;
 
@@ -45,16 +69,21 @@
 
         transition: 0.3s;
 
-        &[href],
-        &[onclick] {
-            &:hover{
-                box-shadow: 0 0 15px var(--color-highlight);
-                transform: translate(0, -3px);
+        // Work around a Safari bug that causes shadows to be cut off after animating.
+        -webkit-transform: translateZ(0);
+        transform: translateZ(0);
+
+        &[href], &[data-expandable=true] {
+            &:hover {
+                filter: var(--shadow);
+                translate: var(--shadow-opposite-translation);
+                cursor: pointer;
+                .expand-arrow-img {
+                    filter: drop-shadow(0 0 2px white);
+                }
             }
         }
-    }
 
-    .wrapper {
         display: flex;
         flex-wrap: wrap;
     }
@@ -73,5 +102,21 @@
         flex: 1 0 50%;
         padding: var(--text-padding-card);
         margin: auto;
+    }
+
+    .details-container {
+        // The slide transition stutters if no padding is added, for some reason.
+        padding: 0.1px;
+    }
+
+    .expand-arrow {
+        --arrow-width: 30px;
+        margin: auto;
+        width: var(--arrow-width);
+
+        .expand-arrow-img {
+            width: var(--arrow-width);
+            margin-bottom: -20px;
+        }
     }
 </style>

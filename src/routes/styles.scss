@@ -15,10 +15,12 @@
     --color-highlight: #bbb;
     --color-button: grey;
     --color-shadow: #333;
+    --shadow-translate-distance: 5px;
+    --shadow: drop-shadow(var(--shadow-translate-distance) var(--shadow-translate-distance) 2px var(--color-shadow));
+    --shadow-opposite-translation: calc(-1 * var(--shadow-translate-distance)) calc(-1 * var(--shadow-translate-distance));
 
-    --color-card: #333;
+    --color-card: #666;
     --border-radius-card: 10px;
-    --shadow-card: 0 0 10px var(--color-shadow);
     --text-padding-card: 30px;
 
     --column-width: 42rem;

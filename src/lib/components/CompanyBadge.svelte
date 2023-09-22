@@ -13,7 +13,7 @@
     const leave = () => (hovering = false)
 </script>
 
-<a class='badge' on:mouseenter={enter} on:mouseleave={leave} href={company.website} target='_blank'>
+<a class='badge' on:mouseenter={enter} on:mouseleave={leave} on:click|stopPropagation href={company.website} target='_blank'>
     {company.name}
     {#if hovering}
         <div class='hover-window' transition:fly={{y: 30, x: 0, duration: 100}}>
@@ -30,13 +30,12 @@
 <style lang='scss'>
     .badge {
         --badge-padding: 5px;
-        --border-radius: 3px;
         position: relative;
         padding: var(--badge-padding);
         margin-right: 7px;
         margin-bottom: 7px;
         background-color: var(--color-button);
-        border-radius: var(--border-radius);
+        border-radius: var(--border-radius-card);
 
         font: var(--font-body);
         color: var(--color-text);
@@ -47,14 +46,17 @@
             left: 0;
             top: calc(var(--font-size-body) + var(--badge-padding) * 2 + var(--border-radius));
             background-color: var(--color-button);
-            border-radius: var(--border-radius);
+            border-radius: var(--border-radius-card);
             z-index: 100000;
             overflow: hidden;
 
             display: flex;
             flex-direction: column;
 
-            box-shadow: var(--shadow);
+            // Work around a Safari bug that causes shadows to be cut off after animating.
+            -webkit-transform: translateZ(0);
+            transform: translateZ(0);
+            filter: var(--shadow);
 
             .hover-image {
                 flex: 1 1 auto;

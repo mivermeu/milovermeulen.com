@@ -19,12 +19,14 @@
     }
     .social-icon {
         width: 30px;
-        filter: drop-shadow(4px 6px 1px transparent);
 
-        transition: 0.3s;
+        transition: 0.5s;
+        // Work around a Safari bug that causes shadows to be cut off after animating.
+        -webkit-transform: translateZ(0);
+        transform: translateZ(0);
         &:hover {
-            -webkit-filter: drop-shadow(4px 6px 1px var(--color-shadow));
-            filter: drop-shadow(4px 6px 1px var(--color-shadow));
+            translate: var(--shadow-opposite-translation);
+            filter: var(--shadow);
         }
     }
 </style>

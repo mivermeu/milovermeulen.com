@@ -21,6 +21,8 @@ export type ExperienceEntry = {
     start_text?: string,
     stop_text?: string,
     short_description: string,
+    details?: string[],
+    href?: string,
     tags: string[]
     accomplishments?: string[]  // TODO: List these on auto-generated resume, details list.
 }
