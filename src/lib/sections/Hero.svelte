@@ -1,23 +1,22 @@
 <script lang='ts'>
     import Socials from "$lib/components/Socials.svelte";
     import TextScroll from "$lib/components/TextScroll.svelte";
+
+    export let height: number = 0;
 </script>
 
-<section id="hero">
-    <h1>Hi, I'm Milo!</h1>
-    <p class="subtitle">
+<section id="hero" bind:clientHeight={height}>
+    <h1>
+        Hi, I'm Milo!<br>
         I do <TextScroll strings={['software engineering', 'data science', 'particle physics']} />
-    </p>
+    </h1>
     <Socials />
 </section>
 
 <style lang="scss">
     #hero {
         padding: 80px;
-        outline: solid;
-
-        .subtitle {
-            font-size: larger;
-        }
+        pointer-events: none;
+        z-index: 2;
     }
 </style>

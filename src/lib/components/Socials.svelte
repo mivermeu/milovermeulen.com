@@ -19,6 +19,7 @@
     }
     .social-icon {
         width: 30px;
+        pointer-events: all;
 
         transition: 0.5s;
         // Work around a Safari bug that causes shadows to be cut off after animating.

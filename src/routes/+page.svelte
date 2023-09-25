@@ -4,6 +4,9 @@
     import Projects from '$lib/sections/Projects.svelte';
     import AboutWebsite from '$lib/sections/AboutWebsite.svelte';
     import Footer from '$lib/sections/Footer.svelte';
+    import HexGrid from '$lib/components/HexGrid.svelte';
+
+    let hero_height: number = 0;
 </script>
 
 <svelte:head>
@@ -12,8 +15,10 @@
 </svelte:head>
 
 <div class='app'>
+    <HexGrid grid_height={hero_height} />
+
     <main>
-        <Hero />
+        <Hero bind:height={hero_height}/>
         <Experience />
         <Projects />
         <AboutWebsite />
