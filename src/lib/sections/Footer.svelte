@@ -8,7 +8,9 @@
     <div>
         © {new Date().getFullYear()} Milo Vermeulen
     </div>
-    <Socials />
+    <div class='socials-container'>
+        <Socials />
+    </div>
 </div>
 
 <style lang='scss'>
@@ -22,8 +24,15 @@
 
         display: flex;
         flex-direction: column;
-        justify-content: space-evenly;
+        justify-content: end;
         align-content: center;
         text-align: center;
+    }
+
+    .socials-container {
+        margin-top: 40px;
+        margin-bottom: 40px;
+        margin-left: auto;
+        margin-right: auto;
     }
 </style>

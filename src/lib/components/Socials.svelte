@@ -12,7 +12,6 @@
 
 <style lang='scss'>
     .socials {
-        margin: auto;
         display: flex;
         flex-direction: row;
         gap: 20px;
