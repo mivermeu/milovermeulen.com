@@ -36,19 +36,19 @@
         }, pulse_delay);
 
         return () => window.clearInterval(pulse_interval);
-    })
+    });
 
     function vertical_down_grid_pulse(): void {
         for(let ri = 0; ri < num_rows; ri++) {
-            setTimeout(() => {
-                for(let ci = 0; ci < num_cols; ci++) {
-                    hexagons[ri * num_cols + ci * 2].pulse(hex_sustain);                }
-            }, ri * pulse_propagation_delay);
-            setTimeout(() => {
-                for(let ci = 0; ci < num_cols; ci++) {
-                    hexagons[ri * num_cols + ci * 2 + 1].pulse(hex_sustain);
-                }
-            }, (ri + 0.5) * pulse_propagation_delay);
+            [0, 0.5].forEach((row_offset) => {
+                [0, hex_sustain].forEach((time_in_pulse) => {
+                    setTimeout(() => {
+                        for(let ci = 0; ci < num_cols; ci++) {
+                            hexagons[ri * num_cols + ci * 2 + row_offset * 2].raised = time_in_pulse === 0? true: false;
+                        }
+                    }, (ri + row_offset) * pulse_propagation_delay + time_in_pulse);
+                })
+            });
         }
     }
 </script>

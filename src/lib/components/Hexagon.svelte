@@ -13,11 +13,6 @@
     export let transition_speed: number = 600;
     export let raised: boolean = false;
 
-    export function pulse(sustain: number = 350): void {
-        raised = true;
-        setTimeout(() => raised = false, sustain);
-    }
-
     const raise_translation: number = width / 4;
 
     $: z_index = raised? 1: 0 satisfies number;
