@@ -28,22 +28,25 @@
     const pulse_propagation_delay: number = 200;
 
     onMount(() => {
-        pulse(hex_sustain);
+        setTimeout(() => vertical_down_grid_pulse(), 200);
         pulse_interval = window.setInterval(() => {
-            pulse(hex_sustain);
+            vertical_down_grid_pulse();
         }, pulse_delay);
 
         return () => window.clearInterval(pulse_interval);
     })
 
-    function pulse(hex_sustain: number): void {
+    function vertical_down_grid_pulse(): void {
         for(let ri = 0; ri < num_rows; ri++) {
             setTimeout(() => {
                 for(let ci = 0; ci < num_cols; ci++) {
-                    hexagons[ri * num_cols + ci * 2].pulse(hex_sustain);
+                    hexagons[ri * num_cols + ci * 2].pulse(hex_sustain);                }
+            }, ri * pulse_propagation_delay);
+            setTimeout(() => {
+                for(let ci = 0; ci < num_cols; ci++) {
                     hexagons[ri * num_cols + ci * 2 + 1].pulse(hex_sustain);
                 }
-            }, ri * pulse_propagation_delay);
+            }, (ri + 0.5) * pulse_propagation_delay);
         }
     }
 </script>
