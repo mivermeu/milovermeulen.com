@@ -11,26 +11,26 @@
     export let rotation: number = 0;
     export let color: string = 'var(--color-card)';
     export let transition_speed: number = 600;
-    export let raising: boolean = false;
+    export let raised: boolean = false;
 
     export function pulse(sustain: number = 350): void {
-        raising = true;
-        setTimeout(() => raising = false, sustain);
+        raised = true;
+        setTimeout(() => raised = false, sustain);
     }
 
     const raise_translation: number = width / 4;
 
-    $: z_index = raising? 1: 0 satisfies number;
-    $: display_color = raising? 'var(--color-button)': color satisfies string;
-    $: display_y = raising? y - raise_translation: y satisfies number;
+    $: z_index = raised? 1: 0 satisfies number;
+    $: display_color = raised? 'var(--color-button)': color satisfies string;
+    $: display_y = raised? y - raise_translation: y satisfies number;
 
-    function toggle_raise(): void {
-        raising = !raising;
+    function enter_raise(): void {
+        raised = true;
     }
 </script>
 
 <div
-    class='hex {raising? 'shadow': ''}'
+    class='hex {raised? 'shadow': ''}'
     style='
         --x: {x + 'px'};
         --y: {display_y + 'px'};
@@ -40,7 +40,7 @@
         --rotation: {rotation + 'deg'};
         --z-index: {z_index};
         --transition-speed: {transition_speed}ms'
-    on:mouseover={toggle_raise}
+    on:mouseover={enter_raise}
     on:focus
     role='presentation'
 />
