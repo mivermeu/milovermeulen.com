@@ -4,7 +4,9 @@
     import { onMount, type SvelteComponent } from 'svelte';
     import Hexagon from './Hexagon.svelte';
 
-    export let hex_width: number = 35;
+    export let hex_width: number = 45;
+    export let top: number | undefined = undefined;
+    export let bottom: number | undefined = undefined;
     export let horizontal_gap: number = 10;
     export let grid_height: number = 600;
     export let border_radius: number = hex_width / 5;
@@ -16,9 +18,9 @@
     const vertical_gap: number = horizontal_gap / Math.sqrt(3);
 
     $: num_cols = innerWidth / horizontal_distance satisfies number;
-    $: num_rows = grid_height / (vertical_distance + vertical_gap) satisfies number;
+    $: num_rows = grid_height / (vertical_distance + vertical_gap) + 1 satisfies number;
     const x_start: number = -hex_width / 2;
-    const y_start: number = -hex_width;
+    const y_start: number = bottom === undefined? -3 * hex_width: hex_width;
 
     let hexagons: SvelteComponent[] = [];
     let pulse_interval: number = 0;
@@ -55,7 +57,7 @@
 
 <div
     class='hex-grid'
-    style='--hex-width: {hex_width}px; --grid-height: {grid_height}px;'>
+    style='--hex-width: {hex_width}px; --grid-height: {grid_height}px; --top: {top}px; --bottom: {bottom}px;'>
     {#each {length: num_rows} as _, ri}
         {#each {length: num_cols} as _, ci}
             {#each [0, 0.5] as offset, oi}
@@ -75,8 +77,10 @@
 
 <style lang='scss'>
     .hex-grid {
+        top: var(--top);
+        bottom: var(--bottom);
         position: absolute;
-        height: 100vh;
+        height: calc(var(--grid-height) + 2 * var(--hex-width));
         width: 100vw;
         overflow: hidden;
     }

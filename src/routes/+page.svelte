@@ -7,6 +7,7 @@
     import HexGrid from '$lib/components/HexGrid.svelte';
 
     let hero_height: number = 0;
+    let footer_height: number = 0;
 </script>
 
 <svelte:head>
@@ -24,11 +25,13 @@
         <AboutWebsite />
     </main>
 
-    <Footer />
+    <Footer bind:height={footer_height} />
+    <HexGrid bind:grid_height={footer_height} bottom={0} />
 </div>
 
 <style>
     .app {
+        position: relative;
         display: flex;
         flex-direction: column;
         min-height: 100vh;
