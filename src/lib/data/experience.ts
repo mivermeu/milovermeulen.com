@@ -17,7 +17,7 @@ export const jobs = [
             'Led frequent meetings with customers to report progress and set priorities in an agile workflow.',
             'Played a key role in onboarding multiple new members of the team by code walkthroughs and pair-programming sessions.'
         ],
-        tags: ['Python', 'Django', 'Postgres', 'Docker']
+        tags: ['Django', 'Python', 'PostgreSQL', 'Docker', 'Grafana']
     },
     {
         companies: [nikhef, cern, uh],
@@ -34,6 +34,6 @@ export const jobs = [
             'Oversaw two years of university exercise classes in topics ranging from lab courses to quantum mechanics.',
             'Carried out multiple tours of the ProtoDUNE experiment for groups of CERN visitors.',
         ],
-        tags: ['C++', 'Python', 'Particle physics']
+        tags: ['Particle physics', 'Data science', 'C++', 'Python', 'Pandas']
     }
 ] as ExperienceEntry[];
