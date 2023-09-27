@@ -4,6 +4,7 @@
     import Card from '$lib/components/Card.svelte';
     import CompanyList from '$lib/components/CompanyList.svelte';
     import { month_plus_year } from '$lib/utils/datetime';
+    import Badge from '$lib/components/Badge.svelte';
 
     const open_to_work: boolean = true;
 
@@ -35,6 +36,9 @@
                     <h3>{job.title}</h3>
                     <CompanyList companies={job.companies} />
                     <p>{@html job.short_description}</p>
+                    {#each job.tags as tag}
+                        <Badge>{tag}</Badge>
+                    {/each}
                 </div>
                 <div class='job-timeline'>
                     <div class='job-timeline-body'>

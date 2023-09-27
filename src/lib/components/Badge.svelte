@@ -8,9 +8,9 @@
     const leave = () => (hovering = false)
 </script>
 
-<div class='badge' on:mouseenter={enter} on:mouseleave={leave} role='presentation'>
+<span class='badge' on:mouseenter={enter} on:mouseleave={leave} role='presentation'>
     <slot />
-</div>
+</span>
 
 <style lang='scss'>
     .badge {
