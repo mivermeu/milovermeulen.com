@@ -9,7 +9,6 @@
     export let bottom: number | undefined = undefined;
     export let horizontal_gap: number = 10;
     export let grid_height: number = 600;
-    export let border_radius: number = hex_width / 5;
     export let transition_speed: number = 800;
 
     let innerWidth: number = 0;
@@ -65,7 +64,6 @@
                 {@const y = y_start + (ri + offset) * (vertical_distance + vertical_gap)}
                 <Hexagon
                     bind:this={hexagons[ri * num_cols + ci * 2 + oi]}
-                    border_radius={border_radius}
                     width={hex_width}
                     {x}
                     {y}

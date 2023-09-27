@@ -7,7 +7,7 @@
     export let x: number = 0;
     export let y: number = 0;
     export let width: number = 50;
-    export let border_radius: number = 20;
+    export let border_radius: number = width / 10;
     export let rotation: number = 0;
     export let color: string = 'var(--color-card)';
     export let transition_speed: number = 600;
