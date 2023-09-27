@@ -13,19 +13,27 @@
 
 <div class='badge-container'>
     {#each companies as company, ci}
-        <Badge bind:hovering={hovering[ci]}>
-            <a on:click|stopPropagation href={company.website} target='_blank'>{company.name}</a>
-            {#if hovering[ci]}
-                <div class='hover-window' transition:fly={{y: 30, x: 0, duration: 100}}>
-                    {#if company.logo}
-                        <img class='hover-image' src={company.logo} alt='{company.name} logo' />
-                    {/if}
-                    <div class='hover-body'>
-                        {company.location.city}, {company.location.country}
+        <a
+            on:click|stopPropagation
+            href={company.website}
+            target='_blank'
+            on:mouseenter={() => hovering[ci] = true}
+            on:mouseleave={() => hovering[ci] = false}
+        >
+            <Badge>
+                <u>{company.name}</u>
+                {#if hovering[ci]}
+                    <div class='hover-window' transition:fly={{y: 30, x: 0, duration: 100}}>
+                        {#if company.logo}
+                            <img class='hover-image' src={company.logo} alt='{company.name} logo' />
+                        {/if}
+                        <div class='hover-body'>
+                            {company.location.city}, {company.location.country}
+                        </div>
                     </div>
-                </div>
-            {/if}
-        </Badge>
+                {/if}
+            </Badge>
+        </a>
     {/each}
 </div>
 
