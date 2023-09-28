@@ -61,11 +61,16 @@
             </div>
             <div class='details' slot='details'>
                 {#if job.details}
-                    <ul class='detail-list'>
-                        {#each job.details as detail}
-                            <li class='detail-entry'>{detail}</li>
+                    <div class='detail-list'>
+                        {#each job.details as detail, di}
+                            <div class='detail-entry'>
+                                <div class='detail-icon'>
+                                    <img src={detail.icon} alt={detail.name} />
+                                </div>
+                                {@html detail.description}
+                            </div>
                         {/each}
-                    </ul>
+                    </div>
                 {/if}
             </div>
         </Card>
@@ -148,7 +153,41 @@
         bottom: calc(var(--font-size-body) / 2);
     }
 
-    .detail-entry + .detail-entry {
-        margin-top: 20px;
+    .detail-list {
+        --icon-gap: 1em;
+        --icon-width: 3em;
+
+        list-style-type: none;
+        display: flex;
+        flex-direction: column;
+        padding: 2em;
+
+        .detail-entry + .detail-entry {
+            margin-top: 2em;
+        }
+
+        .detail-entry {
+            display: flex;
+            gap: var(--icon-gap);
+            align-items: center;
+        }
+
+        .detail-entry:nth-child(odd) {
+            flex-direction: row;
+            text-align: left;
+            padding-right: calc(var(--icon-width) + var(--icon-gap));
+        }
+
+        .detail-entry:nth-child(even) {
+            flex-direction: row-reverse;
+            text-align: right;
+            padding-left: calc(var(--icon-width) + var(--icon-gap));
+        }
+
+        .detail-icon {
+            flex-shrink: 0;
+            width: var(--icon-width);
+            height: var(--icon-width);
+        }
     }
 </style>

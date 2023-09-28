@@ -93,7 +93,6 @@
         flex: 1 0 30%;
         min-height: 250px;
         max-height: 350px;
-        // TODO: Don't repeat the border radius here. 
         border-radius: var(--border-radius-card);
         overflow: hidden;
     }

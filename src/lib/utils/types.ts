@@ -21,10 +21,15 @@ export type ExperienceEntry = {
     start_text?: string,
     stop_text?: string,
     short_description: string,
-    details?: string[],
+    details?: ExperienceDetail[],
     href?: string,
     tags: string[]
-    accomplishments?: string[]  // TODO: List these on auto-generated resume, details list.
+}
+
+export type ExperienceDetail = {
+    name: string,
+    description: string,
+    icon: string
 }
 
 export type Thesis = {
