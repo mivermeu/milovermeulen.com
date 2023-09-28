@@ -13,6 +13,7 @@ import compression from '$lib/images/icons/compression.svg'
 import sine from '$lib/images/icons/sine.svg'
 import database_stats from '$lib/images/icons/database_stats.svg'
 import teaching from '$lib/images/icons/teaching.svg'
+import database_configuration from '$lib/images/icons/database_configuration.svg'
 
 
 export const jobs = [
@@ -25,8 +26,13 @@ export const jobs = [
         details: [
             {
                 name: 'Satellite',
-                description: 'Implemented and maintained a Python/Django-based monitoring system for earth-observation satellite missions.',
+                description: 'Implemented and maintained a Python-based monitoring system for earth-observation satellite missions.',
                 icon: satellite
+            },
+            {
+                name: 'Database',
+                description: 'Used Django to define a PostgreSQL database structure and perform analysis on large streams of data.',
+                icon: database_configuration
             },
             {
                 name: 'GUI',
@@ -48,7 +54,7 @@ export const jobs = [
     },
     {
         companies: [nikhef, cern, uh],
-        title: 'PhD Candidate',
+        title: 'Particle Physics PhD Candidate',
         start: new Date(2016, 8, 1),
         stop: new Date(2021, 2, 1),
         short_description: 'Investigated impostor particle signatures in a large-scale neutrino experiment and ' + 
@@ -56,32 +62,32 @@ export const jobs = [
         details: [
             {
                 name: 'Pi0',
-                description: 'Demonstrated a method to distinguish positrons from photons in ProtoDUNE, as well as a method to identify π&#8304;-particles, a major background to the physics signal in DUNE.',
+                description: 'Demonstrated a method to distinguish positrons from photons in a large-scale physics experiment, as well as a method to identify π<sup>0</sup>-particles, a major background to the physics signal.',
                 icon: atom
             },
             {
                 name: 'Neutrino oscillation',
-                description: 'Wrote a neutrino oscillation tool in JavaScript, as well as others in C++ and Python.',
+                description: 'Wrote <a href=\'webneut\'>an interactive neutrino oscillation tool</a> in TypeScript, now ported to Svelte, as well as previous versions in C++ and Python.',
                 icon: sine
             },
             {
                 name: 'Data acquisition',
-                description: 'Created high-performance compression and readout algorithms for the ProtoDUNE FELIX data acquisition.',
+                description: 'Created high-performance compression and readout algorithms for particle interaction data acquisition.',
                 icon: compression
             },
             {
                 name: 'Data taking',
-                description: 'Logged over 170 hours of data taking during ProtoDUNE\'s two month beam run.',
+                description: 'Logged over 170 hours of data taking during the two month-long beam run of a large-scale physics experiment.',
                 icon: database_stats
             },
             {
                 name: 'Teaching assisting',
-                description: 'Oversaw two years of university exercise classes in topics ranging from lab courses to quantum mechanics.',
+                description: 'Oversaw two years of university physics exercise classes in topics ranging from lab courses to quantum mechanics.',
                 icon: teaching
             },
             {
                 name: 'Tours',
-                description: 'Carried out multiple tours of the ProtoDUNE experiment for groups of CERN visitors.',
+                description: 'Participated in outreach efforts by carrying out tours of our experiment for groups of CERN visitors, represented my collaboration at various conferences and more.',
                 icon: community
             },
         ],

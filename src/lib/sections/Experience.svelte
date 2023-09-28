@@ -67,7 +67,9 @@
                                 <div class='detail-icon'>
                                     <img src={detail.icon} alt={detail.name} />
                                 </div>
-                                {@html detail.description}
+                                <div>
+                                    {@html detail.description}
+                                </div>
                             </div>
                         {/each}
                     </div>
