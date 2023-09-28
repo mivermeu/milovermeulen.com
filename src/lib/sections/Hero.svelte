@@ -10,6 +10,13 @@
         Hi, I'm Milo!<br>
         I do <TextScroll strings={['software engineering', 'data science', 'particle physics']} />
     </h1>
+    <p id='about'>
+        I'm driven to contribute meaningfully to global challenges, leveraging
+        expertise in physics, data science, and software engineering. I excel in
+        big data science, high-performance code development and agile customer
+        relations. I'm eager to bring this expertise to a forward-thinking team.
+        Open to new opportunities — let's connect!
+    </p>
     <Socials />
 </section>
 
@@ -18,5 +25,10 @@
         padding: 80px;
         pointer-events: none;
         z-index: 2;
+    }
+
+    #about {
+        font-size: var(--font-size-topic);
+        max-width: 30em;
     }
 </style>
