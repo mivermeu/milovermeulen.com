@@ -5,6 +5,7 @@
     import AboutWebsite from '$lib/sections/AboutWebsite.svelte';
     import Footer from '$lib/sections/Footer.svelte';
     import HexGrid from '$lib/components/HexGrid.svelte';
+    import Education from '$lib/sections/Education.svelte';
 
     let hero_height: number = 0;
     let footer_height: number = 0;
@@ -21,6 +22,7 @@
     <main>
         <Hero bind:height={hero_height}/>
         <Experience />
+        <Education />
         <Projects />
         <AboutWebsite />
     </main>

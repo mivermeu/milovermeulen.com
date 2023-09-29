@@ -30,7 +30,7 @@
 <h2>Experience</h2>
 <div class='job-list'>
     {#each sorted_jobs as job}
-        <Card additional_class='job-card' href={job.href} details_present={job.details !== undefined}>
+        <Card href={job.href} details_present={job.details !== undefined}>
             <div class='content' slot='content'>
                 <div class='job-body'>
                     <h3>{job.title}</h3>
