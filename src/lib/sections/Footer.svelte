@@ -10,9 +10,9 @@
     </div>
     <div>
         Sources of inspiration: 
-        <a href='https://fantinel.dev'>Matt Fantinel</a>
-        <a href='https://brittanychiang.com'>Brittany Chiang</a>
-        <a href='https://olaolu.dev'>Olaolu Olawuyi</a>
+        <a href='https://fantinel.dev'>Matt Fantinel</a>,
+        <a href='https://brittanychiang.com'>Brittany Chiang</a>,
+        <a href='https://olaolu.dev'>Olaolu Olawuyi</a> and
         <a href='https://www.seanhalpin.xyz'>Séan Halpin</a>
     </div>
     <div>
