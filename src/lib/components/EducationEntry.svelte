@@ -10,7 +10,7 @@
     <div class='content-text'>
         <h3>{education.name}</h3>
         <CompanyList companies={education.companies} />
-        <p>{education.thesis.short_description}</p>
+        <p>{education.description}</p>
     </div>
     <div class='thesis-container'>
         <a href={education.thesis.link} target='_blank' on:click|stopPropagation>

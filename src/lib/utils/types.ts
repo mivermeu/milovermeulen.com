@@ -34,7 +34,6 @@ export type ExperienceDetail = {
 
 export type Thesis = {
     name: string,
-    short_description: string,  // Layman's summary of internship contents.
     link: string,
     image: string
 }
@@ -44,6 +43,7 @@ export type EducationEntry = {
     name: string,
     start: Date,
     stop: Date,
+    description: string,
     thesis: Thesis
 }
 
