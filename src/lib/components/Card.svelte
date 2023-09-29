@@ -15,10 +15,6 @@
     }
 
     let open: boolean = false;
-
-    function handle_card_click(): void {
-        open = !open;
-    }
 </script>
 
 <svelte:element
@@ -46,12 +42,8 @@
                     <slot name='details' />
                 </div>
             {/if}
-            <div class='expand-arrow'>
-                <img
-                    class='expand-arrow-img'
-                    src={downarrow} alt='expand-arrow'
-                    style={`transform: scale(1, ${open? -1: 1}); transition: ${expand_duration}ms;`}
-                />
+            <div style='transform: scale(1, {open? -1: 1}); transition: {expand_duration}ms;'>
+                <div class='expand-arrow' style='--url: url({downarrow});' />
             </div>
         {/if}
     </div>
@@ -78,9 +70,6 @@
                 filter: var(--shadow);
                 translate: var(--shadow-opposite-translation);
                 cursor: pointer;
-                .expand-arrow-img {
-                    filter: drop-shadow(0 0 2px white);
-                }
             }
         }
 
@@ -109,13 +98,15 @@
     }
 
     .expand-arrow {
-        --arrow-width: 30px;
         margin: auto;
-        width: var(--arrow-width);
+        width: 30px;
+        height: 30px;
+        margin-top: 20px;
+        margin-bottom: -10px;
 
-        .expand-arrow-img {
-            width: var(--arrow-width);
-            margin-bottom: -20px;
-        }
+        background-color: var(--color-icon);
+        -webkit-mask-image: var(--url);
+        mask-image: var(--url);
+        mask-size: 100%;
     }
 </style>

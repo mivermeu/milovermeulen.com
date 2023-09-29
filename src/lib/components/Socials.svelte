@@ -1,11 +1,13 @@
 <script lang='ts'>
-    import { Socials } from '$lib/data/socials';
+    import { socials } from '$lib/data/socials';
 </script>
 
 <div class='socials'>
-    {#each Socials as social}
-        <a class='social-entry' href={social.link} title={social.name}>
-            <img class='social-icon' src={social.icon} alt={social.name} />
+    {#each socials as social}
+        <a href={social.link} title={social.name}>
+            <div class='social-entry'>
+                <div class='social-icon' style='--url: url({social.icon})' />
+            </div>
         </a>
     {/each}
 </div>
@@ -16,11 +18,9 @@
         flex-direction: row;
         gap: 20px;
     }
-    .social-icon {
-        width: 30px;
-        pointer-events: all;
 
-        transition: 0.5s;
+    .social-entry {
+        transition: 0.2s;
         // Work around a Safari bug that causes shadows to be cut off after animating.
         -webkit-transform: translateZ(0);
         transform: translateZ(0);
@@ -28,5 +28,16 @@
             translate: var(--shadow-opposite-translation);
             filter: var(--shadow);
         }
+    }
+
+    .social-icon {
+        width: 30px;
+        height: 30px;
+        pointer-events: all;
+
+        background-color: var(--color-icon);
+        -webkit-mask-image: var(--url);
+        mask-image: var(--url);
+        mask-size: 100%;
     }
 </style>

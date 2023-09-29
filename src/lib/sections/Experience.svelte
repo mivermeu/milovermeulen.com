@@ -64,9 +64,7 @@
                     <div class='detail-list'>
                         {#each job.details as detail, di}
                             <div class='detail-entry'>
-                                <div class='detail-icon'>
-                                    <img src={detail.icon} alt={detail.name} />
-                                </div>
+                                <div class='detail-icon' style='--url: url({detail.icon})' />
                                 <div>
                                     {@html detail.description}
                                 </div>
@@ -125,7 +123,7 @@
             content: '';
             width: var(--timeline-width);
             height: calc(100% - 2 * var(--font-size-body));
-            background-color: white;
+            background-color: var(--color-icon);
         }
 
         .job-timeline-body {
@@ -147,7 +145,7 @@
     .timeline-ball {
         width: var(--ball-diameter);
         height: var(--ball-diameter);
-        outline: solid var(--timeline-width);
+        outline: solid var(--timeline-width) var(--color-icon);
         border-radius: 50%;
         position: absolute;
         background-color: var(--color-bg);
@@ -190,6 +188,10 @@
             flex-shrink: 0;
             width: var(--icon-width);
             height: var(--icon-width);
+            background-color: var(--color-icon);
+            -webkit-mask-image: var(--url);
+            mask-image: var(--url);
+            mask-size: 100%;
         }
     }
 </style>
