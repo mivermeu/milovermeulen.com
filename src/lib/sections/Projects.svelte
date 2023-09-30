@@ -7,8 +7,8 @@ import { projects } from '$lib/data/projects';
 <h2>Projects</h2>
 
 <div class='projects-container'>
-    {#each projects as project}
-        <Card href={project.link} on:click>
+    {#each projects as project, pi}
+        <Card href={project.link} on:click image_on_right={pi % 2 === 0}>
             <div slot='image'>
                 <Image src={project.image} alt={project.name} />
             </div>

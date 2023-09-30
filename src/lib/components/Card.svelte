@@ -8,6 +8,7 @@
     export let additional_class: string | undefined = undefined;
     export let details_present: boolean = false;
     export let expand_duration: number = 500;
+    export let image_on_right: boolean = false;
 
     // Protect card from having to handle href and details simultaneously.
     if(href && details_present) {
@@ -20,11 +21,13 @@
 <svelte:element
     this={href? 'a': 'div'}
     {href}
+    target='_blank'
     role={href? 'a': 'div'}
     class='card {additional_class}'
     on:click={() => open = !open}
     {...$$restProps}
     data-expandable={details_present}
+    style='flex-direction: {image_on_right? 'row-reverse': 'row'};'
 >
     {#if $$slots.image}
         <div class='image-container'>
