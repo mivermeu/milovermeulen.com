@@ -46,7 +46,7 @@
         top: var(--y);
         left: var(--x);
         width: var(--width);
-        height: calc(var(--width) * sqrt(3));
+        height: calc(var(--width) * 1.732);  // Chrome can't handle sqrt(3) in CSS?
         border-radius: var(--border-radius) / calc(var(--border-radius) / 2);
         background: var(--color);
         transition: 600ms;

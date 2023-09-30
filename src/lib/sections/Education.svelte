@@ -1,6 +1,5 @@
 <script lang='ts'>
     import Card from '$lib/components/Card.svelte';
-    import CompanyList from '$lib/components/CompanyList.svelte';
     import EducationEntry from '$lib/components/EducationEntry.svelte';
     import { bachelor, master, phd } from '$lib/data/education';
 </script>

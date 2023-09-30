@@ -3,9 +3,9 @@
 import type { EducationEntry } from "$lib/utils/types"
 import { nikhef, ru, goteborg, felix, cern, uh } from '$lib/data/companies'
 
-import phd_thesis_cover from '$lib/images/covers/phd_thesis_cover.pdf'
-import master_thesis_cover from '$lib/images/covers/master_thesis_cover.pdf'
-import bachelor_thesis_cover from '$lib/images/covers/bachelor_thesis_cover.pdf'
+import phd_thesis_cover from '$lib/images/covers/phd_thesis_cover.svg'
+import master_thesis_cover from '$lib/images/covers/master_thesis_cover.svg'
+import bachelor_thesis_cover from '$lib/images/covers/bachelor_thesis_cover.svg'
 
 import phd_thesis from '$lib/documents/A_Blessing_in_Disguise.pdf'
 import master_thesis from '$lib/documents/Calcium_Enrichment_for_the_Study_of_Neutrinoless_Double_Beta_Decay.pdf'

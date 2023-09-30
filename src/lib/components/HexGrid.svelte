@@ -3,7 +3,6 @@
 <script lang='ts'>
     import { onMount, type SvelteComponent } from 'svelte';
     import Hexagon from './Hexagon.svelte';
-    import { writable } from 'svelte/store';
 
     export let hex_width: number = 45;
     export let top: number | undefined = undefined;
@@ -44,7 +43,7 @@
     let last_pulse_time: number = -pulse_delay;
 
     $: if(timer - last_pulse_time > pulse_delay) {
-        last_pulse_time += pulse_delay;
+        last_pulse_time = timer;
 
         hexagons.forEach((hexagon, hex_index) => {
             const row_index: number = Math.floor(hex_index / num_cols);

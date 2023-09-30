@@ -110,6 +110,7 @@
         background-color: var(--color-icon);
         -webkit-mask-image: var(--url);
         mask-image: var(--url);
+        -webkit-mask-size: 100%;
         mask-size: 100%;
     }
 </style>
