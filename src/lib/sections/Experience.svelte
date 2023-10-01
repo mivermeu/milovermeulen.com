@@ -30,10 +30,13 @@
 <h2>Experience</h2>
 <div class='job-list'>
     {#each sorted_jobs as job}
+        {@const job_start_text = job.start_text? job.start_text: month_plus_year(job.start)}
+        {@const job_stop_text = job.stop_text? job.stop_text: job.stop? month_plus_year(job.stop): 'Current'}
         <Card href={job.href} details_present={job.details !== undefined}>
             <div class='content' slot='content'>
                 <div class='job-body'>
                     <h3>{job.title}</h3>
+                    <p class='small-screen-period'>{job_start_text} &#8594; {job_stop_text}</p>
                     <CompanyList companies={job.companies} />
                     <p>{@html job.short_description}</p>
                     {#each job.tags as tag}
@@ -44,17 +47,11 @@
                     <div class='job-timeline-body'>
                         <div class='stop-date'>
                             <div class='timeline-ball' />
-                            {#if job.stop_text}
-                                {job.stop_text}
-                            {:else if job.stop}
-                                {month_plus_year(job.stop)}
-                            {:else}
-                                Current
-                            {/if}
+                            {job_stop_text}
                         </div>
                         <div class='start-date'>
                             <div class='timeline-ball' />
-                            {job.start_text? job.start_text: month_plus_year(job.start)}
+                            {job_start_text}
                         </div>
                     </div>
                 </div>
@@ -102,6 +99,10 @@
             right: calc(var(--date-width) + var(--text-padding-card) - var(--timeline-width));
             top: calc(0.5 * var(--text-padding-card));
             z-index: -1;
+
+            @media screen and (max-width: 550px) {
+                right: 50%;
+            }
         }
     }
 
@@ -111,6 +112,14 @@
 
     .job-body {
         flex: 1 1 auto;
+    }
+
+    .small-screen-period {
+        margin-top: -10px;
+
+        @media screen and (min-width: 550px) {
+            display: none;
+        }
     }
 
     .job-timeline {
@@ -127,7 +136,6 @@
         }
 
         .job-timeline-body {
-            box-sizing: border-box;
             padding-left: var(--text-padding-card);
             height: 100%;
             width: 100%;
@@ -135,6 +143,10 @@
             flex-direction: column;
             justify-content: space-between;
             align-content: center;
+        }
+
+        @media screen and (max-width: 550px) {
+            display: none;
         }
     }
 
@@ -156,11 +168,17 @@
     .detail-list {
         --icon-gap: 1em;
         --icon-width: 3em;
+        --extra-text-padding: calc(var(--icon-width) + var(--icon-gap));
 
         list-style-type: none;
         display: flex;
         flex-direction: column;
         padding: 2em;
+
+        @media screen and (max-width: 600px) {
+            --extra-text-padding: 0;
+            padding: 0.5em;
+        }
 
         .detail-entry + .detail-entry {
             margin-top: 2em;
@@ -175,13 +193,21 @@
         .detail-entry:nth-child(odd) {
             flex-direction: row;
             text-align: left;
-            padding-right: calc(var(--icon-width) + var(--icon-gap));
+            padding-right: var(--extra-text-padding);
+
+            @media screen and (max-width: 350px) {
+                flex-direction: column;
+            }
         }
 
         .detail-entry:nth-child(even) {
             flex-direction: row-reverse;
             text-align: right;
-            padding-left: calc(var(--icon-width) + var(--icon-gap));
+            padding-left: var(--extra-text-padding);
+
+            @media screen and (max-width: 350px) {
+                flex-direction: column;
+            }
         }
 
         .detail-icon {

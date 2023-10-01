@@ -25,6 +25,20 @@
         padding: 80px;
         pointer-events: none;
         z-index: 2;
+
+        @media screen and (max-width: 750px) {
+            padding: 0;
+        }
+
+        @media screen and (max-width: 350px) {
+            h1 {
+                font-size: calc(var(--font-size-title) / 1.3);
+            }
+
+            p {
+                font-size: var(--font-size-text);
+            }
+        }
     }
 
     #about {

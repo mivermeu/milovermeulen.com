@@ -15,7 +15,7 @@
         throw new Error('Cannot present href and details at the same time.')
     }
 
-    let open: boolean = false;
+    let open: boolean = true;
 </script>
 
 <svelte:element
@@ -82,14 +82,15 @@
 
     .image-container {
         position: relative;
-        flex: 1 0 30%;
-        min-height: 250px;
-        max-height: 350px;
+        flex: 1 0 50%;
+        min-width: 250px;
+        min-height: 350px;
         border-radius: var(--border-radius-card);
         overflow: hidden;
     }
 
     .content {
+        box-sizing: border-box;
         flex: 1 0 50%;
         padding: var(--text-padding-card);
         margin: auto;

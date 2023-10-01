@@ -43,8 +43,7 @@
         flex: 1;
         display: flex;
         flex-direction: column;
-        padding-left: 30px;
-        padding-right: 30px;
+        padding: 0 20px;
         margin: auto;
         width: 100%;
         max-width: 1080px;

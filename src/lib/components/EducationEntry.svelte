@@ -23,6 +23,14 @@
     .content {
         display: flex;
         margin-bottom: 1.5em;
+
+        @media screen and (max-width: 550px) {
+            flex-direction: column;
+        }
+    }
+
+    .thesis-container {
+        margin: auto;
     }
 
     .education-image {
