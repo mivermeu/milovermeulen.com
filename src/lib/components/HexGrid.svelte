@@ -4,7 +4,7 @@
     import { onMount, type SvelteComponent } from 'svelte';
     import Hexagon from './Hexagon.svelte';
 
-    export let hex_width: number = 45;
+    export let hex_width: number = 80;
     export let top: number | undefined = undefined;
     export let bottom: number | undefined = undefined;
     export let horizontal_gap: number = 10;
@@ -20,7 +20,7 @@
     const vertical_gap: number = horizontal_gap / Math.sqrt(3);
 
     $: num_cols = Math.floor(innerWidth / horizontal_distance) + 2 satisfies number;
-    $: num_rows = Math.floor(grid_height / (vertical_distance + vertical_gap)) + 6 satisfies number;
+    $: num_rows = Math.floor(grid_height / (vertical_distance + vertical_gap)) + 5 satisfies number;
     const x_start: number = -hex_width / 2;
     const y_start: number = bottom === undefined? -3 * hex_width: hex_width;
 
