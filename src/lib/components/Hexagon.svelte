@@ -34,7 +34,8 @@
         --color: {display_color};
         --rotation: {rotation + 'deg'};
         --z-index: {z_index};
-        --transition-speed: {transition_speed}ms'
+        --transition-speed: {transition_speed}ms;
+        --raise-translation: {raise_translation}px;'
     on:mouseover={enter_raise}
     on:focus
     role='presentation'
@@ -77,6 +78,8 @@
     }
 
     .shadow {
-        box-shadow: 0 5px 5px var(--color-shadow);
+        -webkit-transform: translateZ(0);
+        transform: translateZ(0);
+        filter: drop-shadow(0 var(--raise-translation) 5px var(--color-shadow));
     }
 </style>

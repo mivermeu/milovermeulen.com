@@ -22,31 +22,51 @@ export const jobs = [
         title: 'Scientific Software Engineer',
         start: new Date(2021, 6, 1),
         stop: new Date(2023, 6, 1),
-        short_description: 'Created an interactive monitoring tool for the ground segment of two ESA satellite missions.',
+        short_description: `
+            I worked on a team to develop an interactive monitoring system for
+            EarthCARE and Biomass, two ESA satellite missions that aim to
+            measure and map changes in our planet's atmosphere and forests.
+        `,
         details: [
             {
                 name: 'Satellite',
-                description: 'Implemented and maintained a Python-based monitoring system for earth-observation satellite missions.',
+                description: `
+                    Built and maintained a Python-based monitoring system
+                    for the data processing pipeline of earth-observation
+                    satellite missions.
+                `,
                 icon: satellite
             },
             {
                 name: 'Database',
-                description: 'Used Django to define a PostgreSQL database structure and perform analysis on large streams of data.',
+                description: `
+                    Used Django to define a PostgreSQL database structure and
+                    perform analysis on large streams of data.
+                `,
                 icon: database_configuration
             },
             {
                 name: 'GUI',
-                description: 'Set up a dynamically generated Grafana-based monitoring user interface.',
+                description: `
+                    Set up a dynamically generated Grafana-based monitoring user
+                    interface.
+                `,
                 icon: gui
             },
             {
                 name: 'Agile',
-                description: 'Led frequent meetings with customers to report progress and set priorities in an agile workflow.',
+                description: `
+                    Led frequent meetings with customers to report progress and
+                    set priorities in an agile workflow.
+                `,
                 icon: agile
             },
             {
                 name: 'Onboarding',
-                description: 'Played a key role in onboarding multiple new members of the team by code walkthroughs and pair-programming sessions.',
+                description: `
+                    Played a key role in onboarding multiple new members of the
+                    team by code walkthroughs and pair-programming sessions.
+                `,
                 icon: group
             },
         ],
@@ -57,37 +77,62 @@ export const jobs = [
         title: 'Particle Physics PhD Candidate',
         start: new Date(2016, 8, 1),
         stop: new Date(2021, 2, 1),
-        short_description: 'Investigated impostor particle signatures in a large-scale neutrino experiment and ' + 
-            'created performant data-acquisition code.',
+        short_description: `
+            I worked in the Deep Underground Neutrino Experiment to uncover
+            impostor particle signatures, characterise photon showers and write
+            performant data-acquisition code.
+        `,
         details: [
             {
                 name: 'Pi0',
-                description: 'Demonstrated a method to distinguish positrons from photons in a large-scale physics experiment, as well as a method to identify π<sup>0</sup>-particles, a major background to the physics signal.',
+                description: `
+                    Demonstrated a method to distinguish positrons from photons
+                    in a large-scale physics experiment, as well as a method to
+                    identify π<sup>0</sup>-particles, a major background to the
+                    physics signal.
+                `,
                 icon: atom
             },
             {
                 name: 'Neutrino oscillation',
-                description: 'Wrote <a href=\'webneut\'>an interactive neutrino oscillation tool</a> in TypeScript, now ported to Svelte, as well as previous versions in C++ and Python.',
+                description: `
+                    Developed <a href='webneut'>an interactive neutrino
+                    oscillation tool</a> in TypeScript, now ported to Svelte, as
+                    well as previous versions in C++ and Python.
+                `,
                 icon: sine
             },
             {
                 name: 'Data acquisition',
-                description: 'Created high-performance compression and readout algorithms for particle interaction data acquisition.',
+                description: `
+                    Created high-performance compression and readout algorithms
+                    for our experiment's data acquisition chain.
+                `,
                 icon: compression
             },
             {
                 name: 'Data taking',
-                description: 'Logged over 170 hours of data taking during the two month-long beam run of a large-scale physics experiment.',
+                description: `
+                    Performed over 170 hours of data taking duties during the
+                    two month-long beam run of our physics experiment.
+                `,
                 icon: database_stats
             },
             {
                 name: 'Teaching assisting',
-                description: 'Oversaw two years of university physics exercise classes in topics ranging from lab courses to quantum mechanics.',
+                description: `
+                    Oversaw two years of university physics exercise classes in
+                    topics ranging from lab courses to quantum mechanics.
+                `,
                 icon: teaching
             },
             {
                 name: 'Tours',
-                description: 'Participated in outreach efforts by carrying out tours of our experiment for groups of CERN visitors, represented my collaboration at various conferences and more.',
+                description: `
+                    Participated in outreach efforts by carrying out tours of
+                    our experiment for groups of CERN visitors, represented my
+                    collaboration at various conferences and more.
+                `,
                 icon: community
             },
         ],

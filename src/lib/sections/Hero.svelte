@@ -27,6 +27,9 @@
 </section>
 
 <style lang="scss">
+    section {
+        margin-bottom: 5em;
+    }
     #hero {
         padding: 80px;
         pointer-events: none;

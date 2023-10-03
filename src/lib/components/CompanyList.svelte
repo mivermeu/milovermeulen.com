@@ -71,6 +71,7 @@
             padding: var(--badge-padding);
             white-space: nowrap;
             flex: 1 1 auto;
+            text-align: center;
         }
     }
 </style>

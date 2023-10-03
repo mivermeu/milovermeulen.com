@@ -5,6 +5,7 @@
     import CompanyList from '$lib/components/CompanyList.svelte';
     import { month_plus_year } from '$lib/utils/datetime';
     import Badge from '$lib/components/Badge.svelte';
+    import resume from '$lib/documents/Resume_Milo_Vermeulen.pdf'
 
     const open_to_work: boolean = true;
 
@@ -27,62 +28,86 @@
     }
 </script>
 
-<h2>Experience</h2>
-<div class='job-list'>
-    {#each sorted_jobs as job}
-        {@const job_start_text = job.start_text? job.start_text: month_plus_year(job.start)}
-        {@const job_stop_text = job.stop_text? job.stop_text: job.stop? month_plus_year(job.stop): 'Current'}
-        <Card href={job.href} details_present={job.details !== undefined}>
-            <div class='content' slot='content'>
-                <div class='job-body'>
-                    <h3>{job.title}</h3>
-                    <p class='small-screen-period'>{job_start_text} &#8594; {job_stop_text}</p>
-                    <CompanyList companies={job.companies} />
-                    <p>{@html job.short_description}</p>
-                    {#each job.tags as tag}
-                        <Badge>{tag}</Badge>
-                    {/each}
-                </div>
-                <div class='job-timeline'>
-                    <div class='job-timeline-body'>
-                        <div class='stop-date'>
-                            <div class='timeline-ball' />
-                            {job_stop_text}
-                        </div>
-                        <div class='start-date'>
-                            <div class='timeline-ball' />
-                            {job_start_text}
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class='details' slot='details'>
-                {#if job.details}
-                    <div class='detail-list'>
-                        {#each job.details as detail, di}
-                            <div class='detail-entry'>
-                                <div class='detail-icon' style='--url: url({detail.icon})' />
-                                <div>
-                                    {@html detail.description}
-                                </div>
-                            </div>
+<section>
+    <h2>Work Experience</h2>
+    <p class='description'>
+        I've had the good fortune to work with inspiring colleagues on
+        truly impactful projects. Here is a short summary on my most recent
+        positions.
+    </p>
+    <div class='resume-download'>
+        <Badge><a href={resume} target='_blank'>View resume</a></Badge>
+    </div>
+    <div class='job-list'>
+        {#each sorted_jobs as job}
+            {@const job_start_text = job.start_text? job.start_text: month_plus_year(job.start)}
+            {@const job_stop_text = job.stop_text? job.stop_text: job.stop? month_plus_year(job.stop): 'Current'}
+            <Card href={job.href} details_present={job.details !== undefined}>
+                <div class='content' slot='content'>
+                    <div class='job-body'>
+                        <h3>{job.title}</h3>
+                        <p class='small-screen-period'>{job_start_text} &#8594; {job_stop_text}</p>
+                        <CompanyList companies={job.companies} />
+                        <p>{@html job.short_description}</p>
+                        {#each job.tags as tag}
+                            <Badge>{tag}</Badge>
                         {/each}
                     </div>
-                {/if}
-            </div>
-        </Card>
-    {/each}
-</div>
+                    <div class='job-timeline'>
+                        <div class='job-timeline-body'>
+                            <div class='stop-date'>
+                                <div class='timeline-ball' />
+                                {job_stop_text}
+                            </div>
+                            <div class='start-date'>
+                                <div class='timeline-ball' />
+                                {job_start_text}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class='details' slot='details'>
+                    {#if job.details}
+                        <div class='detail-list'>
+                            {#each job.details as detail, di}
+                                <div class='detail-entry'>
+                                    <div class='detail-icon' style='--url: url({detail.icon})' />
+                                    <div>
+                                        {@html detail.description}
+                                    </div>
+                                </div>
+                            {/each}
+                        </div>
+                    {/if}
+                </div>
+            </Card>
+        {/each}
+    </div>
+</section>
 
 <style lang="scss">
+    section {
+        max-width: 700px;
+        margin: auto;
+    }
+
+    .description {
+        max-width: 500px;
+        margin: 0 auto;
+    }
+
+    .resume-download {
+        text-align: center;
+        margin: auto;
+        margin-bottom: 1em;
+    }
+
     .job-list {
         --date-width: 150px;
         --timeline-width: 2px;
         --card-spacing: 60px;
         --ball-diameter: 12px;
 
-        max-width: 700px;
-        margin: auto;
         display: flex;
         flex-direction: column;
         gap: var(--card-spacing);
