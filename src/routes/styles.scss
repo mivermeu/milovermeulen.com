@@ -1,26 +1,26 @@
 // General style rules for the entire website.
 
 :root {
-    --font-body: Arial, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu,
-        Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    --font-body: 'Open Sans', Arial, sans-serif;
     --font-mono: monospace;
     --font-size-title: 40px;
     --font-size-subtitle: 35px;
     --font-size-topic: 22px;
     --font-size-body: 18px;
     --font-weight-title: 700;
+    --font-weight-body: 400;
 
-    --color-bg: darkslategray;
-    --color-text: white;
-    --color-icon: var(--color-text);
-    --color-highlight: #bbb;
-    --color-button: grey;
-    --color-shadow: #333;
+    --color-bg: #2f4f4f;
+    --color-text: #ffffff;
+    --color-icon: #ffffff;
+    --color-highlight: #bbbbbb;
+    --color-button: #808080;
+    --color-shadow: #333333;
     --shadow-translate-distance: 5px;
     --shadow: drop-shadow(var(--shadow-translate-distance) var(--shadow-translate-distance) 2px var(--color-shadow));
     --shadow-opposite-translation: calc(-1 * var(--shadow-translate-distance)) calc(-1 * var(--shadow-translate-distance));
 
-    --color-card: #666;
+    --color-card: #666666;
     --border-radius-card: 10px;
     --text-padding-card: 30px;
 
@@ -29,7 +29,7 @@
     font-family: var(--font-body);
     color: var(--color-text);
     line-height: 1.5;
-    font-weight: 400;
+    font-weight: var(--font-weight-body);
     font-size: var(--font-size-body)
 }
 
