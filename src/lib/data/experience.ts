@@ -96,7 +96,7 @@ export const jobs = [
             {
                 name: 'Neutrino oscillation',
                 description: `
-                    Developed <a href='webneut'>an interactive neutrino
+                    Developed <a href='/webneut' target='_blank'>an interactive neutrino
                     oscillation tool</a> in TypeScript, now ported to Svelte, as
                     well as previous versions in C++ and Python.
                 `,
