@@ -6,6 +6,7 @@
     import Footer from '$lib/sections/Footer.svelte';
     import HexGrid from '$lib/components/HexGrid.svelte';
     import Education from '$lib/sections/Education.svelte';
+    import DevBar from '$lib/components/DevBar.svelte';
 
     let hero_height: number = 0;
     let footer_height: number = 0;
@@ -17,6 +18,7 @@
 </svelte:head>
 
 <div class='app'>
+    <DevBar />
     <HexGrid grid_height={hero_height} />
 
     <main>

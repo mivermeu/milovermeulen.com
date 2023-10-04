@@ -3,6 +3,8 @@
 <svelte:options accessors />
 
 <script lang='ts'>
+    import { dev_hexagon_pressed } from "../../routes/stores";
+
     // It's a bit ugly to set CSS strings via props, but I don't know a better way to propagate them.
     export let x: number = 0;
     export let y: number = 0;
@@ -22,6 +24,14 @@
     function enter_raise(): void {
         raised = true;
     }
+
+    function handle_click(): void {
+        // Activate a dev environment.
+        if(x < 0 && y < 0) {
+            console.log('*hacker voice* I\'m in.');
+            dev_hexagon_pressed.set(true);
+        }
+    }
 </script>
 
 <div
@@ -38,6 +48,7 @@
         --raise-translation: {raise_translation}px;'
     on:mouseover={enter_raise}
     on:focus
+    on:click={handle_click}
     role='presentation'
 />
 
