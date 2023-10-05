@@ -23,6 +23,7 @@
     {href}
     target='_blank'
     role={href? 'link': 'switch'}
+    aria-checked={!href? open: undefined}
     class='card {additional_class}'
     on:click={() => open = !open}
     {...$$restProps}
