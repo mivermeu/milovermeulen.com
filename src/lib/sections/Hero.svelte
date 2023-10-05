@@ -22,7 +22,7 @@
         <div id='socials-container'>
             <Socials />
         </div>
-        <img id='headshot' src={headshot} alt='hi' />
+        <img id='headshot' src={headshot} alt='Milo Vermeulen' width='300px' height='431px' />
     </div>
 </section>
 
