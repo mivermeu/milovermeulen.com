@@ -22,7 +22,7 @@
     this={href? 'a': 'div'}
     {href}
     target='_blank'
-    role={href? 'a': 'div'}
+    role={href? 'link': 'switch'}
     class='card {additional_class}'
     on:click={() => open = !open}
     {...$$restProps}
