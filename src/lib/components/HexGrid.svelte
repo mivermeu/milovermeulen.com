@@ -33,9 +33,9 @@
     const pulse_propagation_delay: number = 150;
 
     onMount(() => {
-        interval = window.setInterval(() => {
-            timer = Date.now() - start_time;
-        }, 100);
+        // interval = window.setInterval(() => {
+        //     timer = Date.now() - start_time;
+        // }, 100);
 
         return () => window.clearInterval(interval);
     });
@@ -55,6 +55,36 @@
             }, row_index * pulse_propagation_delay + hex_sustain);
         })
     }
+
+    function raise_surrounding_hexagons(hex_index: number, raise_fraction: number = 0.2): void {
+        // Set all surrounding hexagons to be half raised.
+        let hex_indices_to_be_raised: number[] = [
+            hex_index - num_cols,
+            hex_index - 2 * num_cols,
+            hex_index + num_cols,
+            hex_index + 2 * num_cols,
+        ];
+        if(Math.floor(hex_index / num_cols) % 2 === 0) {
+            hex_indices_to_be_raised.push(
+                hex_index - num_cols - 1,
+                hex_index + num_cols - 1
+            );
+        } else {
+            hex_indices_to_be_raised.push(
+                hex_index - num_cols + 1,
+                hex_index + num_cols + 1
+            );
+        }
+        hex_indices_to_be_raised = hex_indices_to_be_raised.filter(x => x >= 0 && x < hexagons.length);
+
+        hex_indices_to_be_raised.forEach(index => hexagons[index].raised = 0.3);
+    }
+
+    function reset_hexagons(): void {
+        // Set all hexagons to not be raised.
+        hexagons.forEach((_, hi, hexagons) => hexagons[hi].raised = false);
+        hexagons.forEach((_, hi, hexagons) => hexagons[hi].half_raised = false);
+    }
 </script>
 
 <svelte:window bind:innerWidth />
@@ -73,7 +103,9 @@
             width={hex_width}
             {x}
             {y}
-            {transition_speed} />
+            {transition_speed}
+            on:mouseenter={() => raise_surrounding_hexagons(hex_index)}
+            on:mouseleave={reset_hexagons} />
     {/each}
 </div>
 

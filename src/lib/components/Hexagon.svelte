@@ -3,6 +3,7 @@
 <svelte:options accessors />
 
 <script lang='ts'>
+    import { createEventDispatcher } from "svelte";
     import { dev_hexagon_pressed } from "../../routes/stores";
 
     // It's a bit ugly to set CSS strings via props, but I don't know a better way to propagate them.
@@ -13,17 +14,25 @@
     export let rotation: number = 0;
     export let color: string = 'var(--color-card)';
     export let transition_speed: number = 600;
-    export let raised: boolean = false;
+    export let raised: number = 0;
+
+    let dispatch = createEventDispatcher();
 
     const raise_translation: number = width / 4;
 
     $: z_index = raised? 1: 0 satisfies number;
-    $: display_color = raised? 'var(--color-button)': color satisfies string;
-    $: display_y = raised? y - raise_translation: y satisfies number;
+    $: display_color = 'color-mix(in srgb, var(--color-button) ' + raised * 100 + '%, ' + color + ')' satisfies string;
+    $: display_y = y - raise_translation * raised satisfies number;
 
-    function enter_raise(): void {
-        raised = true;
-    }
+function enter_raise(): void {
+    raised = 1;
+    dispatch('mouseenter')
+}
+
+function leave_raise(): void {
+    raised = 0;
+    dispatch('mouseleave')
+}
 
     function handle_click(): void {
         // Activate a dev environment.
@@ -45,8 +54,9 @@
         --rotation: {rotation + 'deg'};
         --z-index: {z_index};
         --transition-speed: {transition_speed}ms;
-        --raise-translation: {raise_translation}px;'
-    on:mouseover={enter_raise}
+        --raise-translation: {raise_translation * raised}px;'
+    on:mouseenter={enter_raise}
+    on:mouseleave={leave_raise}
     on:focus
     on:click={handle_click}
     role='presentation'
@@ -61,9 +71,10 @@
         height: calc(var(--width) * 1.732);  // Chrome can't handle sqrt(3) in CSS?
         border-radius: var(--border-radius) / calc(var(--border-radius) / 2);
         background: var(--color);
-        transition: 600ms;
         transform: rotate(var(--rotation));
         z-index: var(--z-index);
+        transition: 200ms;
+        animation-composition: replace;
 
         pointer-events: auto;
 
