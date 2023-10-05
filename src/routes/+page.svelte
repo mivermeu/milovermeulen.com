@@ -10,11 +10,18 @@
 
     let hero_height: number = 0;
     let footer_height: number = 0;
+
+    const keywords: string = `
+        Milo Vermeulen, software engineer, particle physics, physicist,
+        data science, data analysis, PhD, web development, open to work
+    `
 </script>
 
 <svelte:head>
     <title>Milo Vermeulen</title>
-    <meta name='Milo Vermeulen' content='Personal website' />
+    <meta name='author' content='Milo Vermeulen' />
+    <meta name='description' content='Milo Vermeulen s personal website' />
+    <meta name='keywords' content={keywords} />
 </svelte:head>
 
 <div class='app'>
