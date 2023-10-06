@@ -32,10 +32,10 @@
             font: { family: 'serif', size: 20 }
         },
         margin: {
-            b: 80,
-            t: 80,
-            l: 50,
-            r: 30,
+            b: 60,
+            t: 30,
+            l: 40,
+            r: 20,
             pad: 5
         }
     } satisfies Partial<Layout>;

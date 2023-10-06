@@ -96,6 +96,10 @@
                 'neutrino-controls';
         }
 
+        @container (max-width: 500px) {
+            margin: 1em 0;
+        }
+
         // Avoid text selection when dragging sliders.
         -webkit-user-select: none; /* Safari */
         -ms-user-select: none; /* IE 10 and IE 11 */

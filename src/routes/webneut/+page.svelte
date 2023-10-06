@@ -39,6 +39,10 @@
         @media screen and (max-width: 1200px) {
             display: flex;
             flex-direction: column;
+
+            .plot, .controls {
+                flex: 1 1 500px;
+            }
         }
     }
 
@@ -57,10 +61,6 @@
 
     .plot {
         grid-area: plot;
-
-        @media screen and (max-width: 1200px) {
-            flex: 1 0 500px;
-        }
     }
 
     .controls {
