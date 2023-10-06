@@ -42,45 +42,40 @@
 </script>
 
 <div class='control-panel'>
-    <Card additional_class='control-card'>
-        <div id='plot-controls' slot='content'>
-            <h3>Plot options</h3>
-            <PlotTypeSelector />
-            {#each [
-                $oscillation_parameters.nsteps,
-                $oscillation_parameters.animation_period
-            ] as parameter}
-                <SliderAssembly bind:parameter={parameter} />
-            {/each}
-        </div>
-    </Card>
-    <Card additional_class='control-card'>
-        <div id='experiment-controls'  slot='content'>
-            <h3>Experiment parameters</h3>
-            <NeutrinoSelector />
-            {#each [$oscillation_parameters.E, $oscillation_parameters.L, $oscillation_parameters.rho] as parameter}
-                <SliderAssembly bind:parameter={parameter} action_buttons={true} />
-            {/each}
-        </div>
-    </Card>
-    <Card additional_class='control-card'>
-        <div id='neutrino-controls'  slot='content'>
-            <h3>Neutrino mixing parameters</h3>
-            {#each [
-                $oscillation_parameters.th12,
-                $oscillation_parameters.th23,
-                $oscillation_parameters.th13,
-                $oscillation_parameters.Dm21sq,
-                $oscillation_parameters.Dm31sq,
-                $oscillation_parameters.dCP,
-            ] as parameter}
-                <SliderAssembly bind:parameter={parameter} action_buttons={true} />
-            {/each}
-        </div>
-    </Card>
+    <div id='plot-controls' class='control-card'>
+        <h3>Plot options</h3>
+        <PlotTypeSelector />
+        {#each [
+            $oscillation_parameters.nsteps,
+            $oscillation_parameters.animation_period
+        ] as parameter}
+            <SliderAssembly bind:parameter={parameter} />
+        {/each}
+    </div>
+    <div id='experiment-controls' class='control-card'>
+        <h3>Experiment parameters</h3>
+        <NeutrinoSelector />
+        {#each [$oscillation_parameters.E, $oscillation_parameters.L, $oscillation_parameters.rho] as parameter}
+            <SliderAssembly bind:parameter={parameter} action_buttons={true} />
+        {/each}
+    </div>
+    <div id='neutrino-controls' class='control-card'>
+        <h3>Neutrino mixing parameters</h3>
+        {#each [
+            $oscillation_parameters.th12,
+            $oscillation_parameters.th23,
+            $oscillation_parameters.th13,
+            $oscillation_parameters.Dm21sq,
+            $oscillation_parameters.Dm31sq,
+            $oscillation_parameters.dCP,
+        ] as parameter}
+            <SliderAssembly bind:parameter={parameter} action_buttons={true} />
+        {/each}
+    </div>
 </div>
 
 <style lang="scss">
+
     .control-panel {
         display: grid;
         grid-template-areas:
@@ -89,7 +84,14 @@
         gap: 1em;
         margin: 1em;
 
-        @container (max-width: 800px) {
+        .control-card {
+            background-color: var(--color-card);
+            padding: var(--text-padding-card);
+            border-radius: var(--border-radius-card);
+            align-self: start;
+        }
+
+        @container (max-width: 600px) {
             grid-template-areas:
                 'plot-controls'
                 'experiment-controls'
@@ -97,7 +99,12 @@
         }
 
         @container (max-width: 500px) {
-            margin: 1em 0;
+            margin: 0;
+            .control-card {
+                margin: 0;
+                padding: calc(var(--text-padding-card) / 2);
+                border-radius: 0;
+            }
         }
 
         // Avoid text selection when dragging sliders.
@@ -116,9 +123,5 @@
 
     #experiment-controls {
         grid-area: experiment-controls;
-    }
-
-    :global(.control-card) {
-        align-self: start;
     }
 </style>

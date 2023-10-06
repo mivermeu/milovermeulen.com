@@ -36,7 +36,7 @@
             'header header'
             'controls plot';
 
-        @media screen and (max-width: 1200px) {
+        @media screen and (orientation: portrait) {
             display: flex;
             flex-direction: column;
 
@@ -56,6 +56,10 @@
 
         h1 {
             margin: 0.5em 1em;
+
+            @media screen and (max-height: 600px) {
+                font-size: var(--font-size-topic);
+            }
         }
     }
 
