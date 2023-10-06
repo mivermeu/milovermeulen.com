@@ -6,6 +6,7 @@
     import type { Unsubscriber } from 'svelte/store';
     import { onDestroy } from 'svelte';
     import PlotTypeSelector from './PlotTypeSelector.svelte';
+    import Card from '$lib/components/Card.svelte';
 
     let oscillator: Oscillator = new Oscillator($oscillation_parameters);
     [$x_values, $y_values] = oscillator.oscillate();
@@ -41,33 +42,79 @@
 </script>
 
 <div class='control-panel'>
-    <PlotTypeSelector />
-    {#each [
-        $oscillation_parameters.nsteps,
-        $oscillation_parameters.animation_period
-    ] as parameter}
-        <SliderAssembly bind:parameter={parameter} />
-    {/each}
-    <NeutrinoSelector />
-    {#each [
-        $oscillation_parameters.E,
-        $oscillation_parameters.L,
-        $oscillation_parameters.th12,
-        $oscillation_parameters.th23,
-        $oscillation_parameters.th13,
-        $oscillation_parameters.Dm21sq,
-        $oscillation_parameters.Dm31sq,
-        $oscillation_parameters.dCP,
-        $oscillation_parameters.rho,
-    ] as parameter}
-        <SliderAssembly bind:parameter={parameter} action_buttons={true} />
-    {/each}
+    <Card additional_class='control-card'>
+        <div id='plot-controls' slot='content'>
+            <h3>Plot options</h3>
+            <PlotTypeSelector />
+            {#each [
+                $oscillation_parameters.nsteps,
+                $oscillation_parameters.animation_period
+            ] as parameter}
+                <SliderAssembly bind:parameter={parameter} />
+            {/each}
+        </div>
+    </Card>
+    <Card additional_class='control-card'>
+        <div id='experiment-controls'  slot='content'>
+            <h3>Experiment parameters</h3>
+            <NeutrinoSelector />
+            {#each [$oscillation_parameters.E, $oscillation_parameters.L, $oscillation_parameters.rho] as parameter}
+                <SliderAssembly bind:parameter={parameter} action_buttons={true} />
+            {/each}
+        </div>
+    </Card>
+    <Card additional_class='control-card'>
+        <div id='neutrino-controls'  slot='content'>
+            <h3>Neutrino mixing parameters</h3>
+            {#each [
+                $oscillation_parameters.th12,
+                $oscillation_parameters.th23,
+                $oscillation_parameters.th13,
+                $oscillation_parameters.Dm21sq,
+                $oscillation_parameters.Dm31sq,
+                $oscillation_parameters.dCP,
+            ] as parameter}
+                <SliderAssembly bind:parameter={parameter} action_buttons={true} />
+            {/each}
+        </div>
+    </Card>
 </div>
 
 <style lang="scss">
     .control-panel {
-        border: solid white;
-        border-radius: 5px;
-        padding: 10px;
+        display: grid;
+        grid-template-areas:
+            'plot-controls neutrino-controls'
+            'experiment-controls neutrino-controls';
+        gap: 1em;
+        margin: 1em;
+
+        @container (max-width: 800px) {
+            grid-template-areas:
+                'plot-controls'
+                'experiment-controls'
+                'neutrino-controls';
+        }
+
+        // Avoid text selection when dragging sliders.
+        -webkit-user-select: none; /* Safari */
+        -ms-user-select: none; /* IE 10 and IE 11 */
+        user-select: none; /* Standard syntax */
+    }
+
+    #plot-controls {
+        grid-area: plot-controls;
+    }
+
+    #neutrino-controls {
+        grid-area: neutrino-controls;
+    }
+
+    #experiment-controls {
+        grid-area: experiment-controls;
+    }
+
+    :global(.control-card) {
+        align-self: start;
     }
 </style>

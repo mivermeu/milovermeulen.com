@@ -26,35 +26,47 @@
 
 <style lang='scss'>
     .webneut-tool {
-        margin: 0;
         height: 100vh;
         width: 100vw;
 
         display: grid;
-        grid-template-columns: 1fr 3fr;
+        grid-template-columns: 1fr 2fr;
         grid-template-rows: auto auto;
         grid-template-areas:
             'header header'
             'controls plot';
+
+        @media screen and (max-width: 1200px) {
+            display: flex;
+            flex-direction: column;
+        }
     }
 
     .header {
-        margin: 0;
         grid-area: header;
 
         display: flex;
         justify-content: space-between;
+
+        background-color: #333;
+
+        h1 {
+            margin: 0.5em 1em;
+        }
     }
 
     .plot {
-        margin: 0;
         grid-area: plot;
+
+        @media screen and (max-width: 1200px) {
+            flex: 1 0 500px;
+        }
     }
 
     .controls {
-        margin: 0;
-        padding: 10px;
         grid-area: controls;
-        overflow-y: auto;
+        overflow-y: scroll;
+
+        container-type: inline-size;
     }
 </style>

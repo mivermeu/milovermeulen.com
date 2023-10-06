@@ -35,6 +35,10 @@
 </div>
 
 <style lang='scss'>
+    .radio-input-container {
+        margin: 1em 0;
+    }
+
     .radio-container label {
         font-family: serif;
     }

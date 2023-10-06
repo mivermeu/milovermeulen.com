@@ -1,6 +1,6 @@
 <script lang='ts'>
-    import { oscillation_parameters, x_values, y_values } from "./stores";
-    import type { Parameter } from "./types";
+    import { oscillation_parameters, x_values, y_values } from './stores';
+    import type { Parameter } from './types';
     import JSZip from 'jszip';
 
     // Function to convert the nu arrays to a csv format.
@@ -57,5 +57,13 @@
 </script>
 
 <button on:click={save_data}>
-    <slot>Download</slot>
+    <slot>Download CSV</slot>
 </button>
+
+<style lang='scss'>
+    button {
+        display: block;
+        // margin: auto;
+        font-size: var(--font-size-tpoic);
+    }
+</style>

@@ -28,11 +28,12 @@
             x: 1,
             y: 1,
             xanchor: 'right',
-            yanchor: 'bottom'
+            yanchor: 'bottom',
+            font: { family: 'serif', size: 20 }
         },
         margin: {
-            b: 50,
-            t: 20,
+            b: 80,
+            t: 80,
             l: 50,
             r: 30,
             pad: 5

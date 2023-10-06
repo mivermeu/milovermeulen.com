@@ -1,7 +1,6 @@
 <script lang='ts'>
     import RangeSlider from 'svelte-range-slider-pips';
     import { animating_parameter, oscillation_parameters } from './stores';
-    // import RangeSlider from 'svelte-range-slider-pips';
     import type { Parameter } from './types';
 
     export let parameter: Parameter;
@@ -30,52 +29,70 @@
     }
 </script>
 
-{#if action_buttons}
-    <button class='slider-button' disabled={parameter.values.length > 1} on:click={toggle_animation}>
-        {$animating_parameter === parameter? 'Stop': 'Animate'}
-    </button>
-    <button class='slider-button' disabled={parameter.values.length > 1} on:click={make_range}>Range</button>
-{/if}
-<div class='slider-label'>
-    <span class='slider-name'>{@html parameter.label}</span>
+<div class='slider-container'>
+    {#if action_buttons}
+        <div class='button-container'>
+            <button class='slider-button' disabled={parameter.values.length > 1} on:click={toggle_animation}>
+                {$animating_parameter === parameter? 'Stop': 'Animate'}
+            </button>
+            <button class='slider-button' disabled={parameter.values.length > 1} on:click={make_range}>Range</button>
+        </div>
+    {/if}
+    <div class='slider'>
+        <div class='slider-name'>{@html parameter.label}</div>
+        <RangeSlider
+            bind:values={parameter.values}
+            range={parameter.values.length > 1? true: 'min'}
+            precision={parameter.precision}
+            step={Math.pow(10, -1 * parameter.precision)}
+            min={parameter.limits[0]}
+            max={parameter.limits[1]}
+            springValues={{stiffness: 1, damping: 1 }} />
+        </div>
     <div class='slider-inputs'>
         {#each parameter.values as value}
             <input class='slider-input' bind:value={value} type='number' />
         {/each}
     </div>
 </div>
-<RangeSlider
-    bind:values={parameter.values}
-    range={parameter.values.length > 1? true: 'min'}
-    precision={parameter.precision}
-    step={Math.pow(10, -1 * parameter.precision)}
-    min={parameter.limits[0]}
-    max={parameter.limits[1]}
-    springValues={{stiffness: 1, damping: 1 }} />
 
 <style lang='scss'>
+    .slider-container {
+        display: flex;
+        align-items: center;
+        gap: 0.2em;
+    }
+
+    .button-container {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5em;
+    }
     .slider-button {
         align-self: center;
         grid-area: 1/1/1/1;
         width: 6em;
         height: 2em;
-        border: 0.2em solid white;
     }
 
-    .slider-label {
-        display: flex;
-        align-content: center;
-        justify-content: space-between;
+    .slider {
+        flex: 1 0 50%;
+    }
+
+    .slider-name {
+        padding-left: 1em;
     }
 
     .slider-inputs {
         display: flex;
+        flex-direction: column;
         gap: 0.5em;
+        justify-content: end;
     }
 
     .slider-input {
         height: 2em;
-        width: 7em;
+        width: 5em;
 
         border-radius: 3px;
         border: 0;
