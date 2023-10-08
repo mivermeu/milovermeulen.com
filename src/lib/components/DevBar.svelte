@@ -102,6 +102,11 @@
         z-index: 10;
         display: flex;
         justify-content: space-between;
+
+        // Hard-code font settings so users cannot change them.
+        color: white;
+        font-size: 14px;
+        font-weight: 400;
     }
 
     .pickers {
