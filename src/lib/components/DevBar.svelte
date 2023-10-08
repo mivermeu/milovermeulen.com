@@ -44,7 +44,7 @@
         const subject: string = 'Website feedback'
         let body: string = 'Thanks for previewing my website! Feel free to provide any additional feedback here or send the message as-is.\n\n'
 
-        let messages: string[] = css_props.map((css_prop, ci) =>  css_prop.css_name + ': ' + prop_values[ci])
+        let messages: string[] = css_props.map((css_prop, ci) =>  css_prop.css_name + ': ' + prop_values[ci] + ';');
         const max_message_length: number = messages.reduce((a, b) => a.length > b.length? a: b).length;
         body += '='.repeat(max_message_length) + '\n';
         messages.forEach(message => body += message + '\n')
