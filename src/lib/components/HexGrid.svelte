@@ -171,7 +171,8 @@
     role='presentation'
     class='hex-grid'
     style='--hex-width: {hex_width}px; --grid-height: {grid_height}px; --top: {top}px; --bottom: {bottom}px;'>
-    {#each {length: num_rows * num_cols} as _, hex_index}
+    <!-- Tie the identity of each hexagon to the total number of columns, to force recreate them when the window size changes. -->
+    {#each {length: num_rows * num_cols} as _, hex_index (hex_index + '-' + num_cols)}
         {@const [x, y] = hex_origin(hex_index)}
         <Hexagon
             bind:this={hexagons[hex_index]}
