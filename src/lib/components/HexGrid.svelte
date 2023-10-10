@@ -165,23 +165,26 @@
 
 <svelte:window bind:innerWidth />
 
-<div
-    bind:this={grid}
-    on:mousemove={on_move}
-    role='presentation'
-    class='hex-grid'
-    style='--hex-width: {hex_width}px; --grid-height: {grid_height}px; --top: {top}px; --bottom: {bottom}px;'>
-    <!-- Tie the identity of each hexagon to the total number of columns, to force recreate them when the window size changes. -->
-    {#each {length: num_rows * num_cols} as _, hex_index (hex_index + '-' + num_cols)}
-        {@const [x, y] = hex_origin(hex_index)}
-        <Hexagon
-            bind:this={hexagons[hex_index]}
-            width={hex_width}
-            {x}
-            {y}
-            {transition_speed} />
-    {/each}
-</div>
+<!-- Don't draw any hexagons if we don't yet know the window size. -->
+{#if innerWidth}
+    <div
+        bind:this={grid}
+        on:mousemove={on_move}
+        role='presentation'
+        class='hex-grid'
+        style='--hex-width: {hex_width}px; --grid-height: {grid_height}px; --top: {top}px; --bottom: {bottom}px;'>
+        <!-- Tie the identity of each hexagon to the total number of columns, to force recreate them when the window size changes. -->
+        {#each {length: num_rows * num_cols} as _, hex_index (hex_index + '-' + num_cols)}
+            {@const [x, y] = hex_origin(hex_index)}
+            <Hexagon
+                bind:this={hexagons[hex_index]}
+                width={hex_width}
+                {x}
+                {y}
+                {transition_speed} />
+        {/each}
+    </div>
+{/if}
 
 <style lang='scss'>
     .hex-grid {
