@@ -24,7 +24,7 @@
     const x_start: number = -hex_width / 2;
     const y_start: number = bottom === undefined? -3 * hex_width: hex_width;
 
-    let hexagons: SvelteComponent[] = [];
+    let hexagons: Hexagon[] = [];
     $: hexagons = hexagons.filter((hexagon) => hexagon !== null)  // When changing the screen, sometimes null hexagons are left over.
     let interval: number = 0;
 
@@ -48,10 +48,10 @@
         hexagons.forEach((hexagon, hex_index) => {
             const row_index: number = Math.floor(hex_index / num_cols);
             setTimeout(() => {
-                hexagon.raised = true;
+                hexagon.raised = 1;
             }, row_index * pulse_propagation_delay);
             setTimeout(() => {
-                hexagon.raised = false;
+                hexagon.raised = 0;
             }, row_index * pulse_propagation_delay + hex_sustain);
         })
     }
@@ -82,8 +82,8 @@
 
     function reset_hexagons(): void {
         // Set all hexagons to not be raised.
-        hexagons.forEach((_, hi, hexagons) => hexagons[hi].raised = false);
-        hexagons.forEach((_, hi, hexagons) => hexagons[hi].half_raised = false);
+        hexagons.forEach((hexagon) => hexagon.raised = 0);
+    }
     }
 </script>
 
