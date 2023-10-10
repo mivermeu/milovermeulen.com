@@ -9,11 +9,23 @@
 
     let index = 0;
 
+    // Used to reset the component after each full rotation, without a transition.
+    let key = false;
+
     let interval: NodeJS.Timer;
 
     onMount(() => {
         interval = setInterval(() => {
-            index = (index + 1) % strings.length;
+            index += 1;
+
+            // If we have reached the end, reset the component in between animations.
+            // We only wrap around after `strings.length` is reached because the first string is duplicated at the end.
+            if (index === strings.length) {
+                setTimeout(() => {
+                    key = !key;
+                    index = 0;
+                }, 1000);
+            }
         }, animation_speed);
     });
 
@@ -22,14 +34,16 @@
     });
 </script>
 
-<span class='change-container'>
-    {longest_string}
-    {#each strings as text, ti}
-        <span class='text-container' style={`top: calc(100% * (${ti} - ${index}));`}>
-            {text}
-        </span>
-    {/each}
-</span>
+{#key key}
+    <span class='change-container'>
+        {longest_string}
+        {#each [...strings, strings[0]] as text, ti} <!-- Duplicate the first element at the end. -->
+            <span class='text-container' style={`top: calc(100% * (${ti} - ${index}));`}>
+                {text}
+            </span>
+        {/each}
+    </span>
+{/key}
 <!-- A little insurance in case JavaScript is disabled for whatever reason. -->
 <noscript>
     and more!
