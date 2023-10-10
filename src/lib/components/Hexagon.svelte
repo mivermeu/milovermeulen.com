@@ -3,7 +3,6 @@
 <svelte:options accessors />
 
 <script lang='ts'>
-    import { createEventDispatcher } from "svelte";
     import { dev_hexagon_pressed } from "../../routes/stores";
 
     // It's a bit ugly to set CSS strings via props, but I don't know a better way to propagate them.
@@ -16,23 +15,11 @@
     export let transition_speed: number = 600;
     export let raised: number = 0;
 
-    let dispatch = createEventDispatcher();
-
     const raise_translation: number = width / 4;
 
     $: z_index = raised? 1: 0 satisfies number;
     $: display_color = 'color-mix(in srgb, var(--color-button) ' + raised * 100 + '%, ' + color + ')' satisfies string;
     $: display_y = y - raise_translation * raised satisfies number;
-
-function enter_raise(): void {
-    raised = 1;
-    dispatch('mouseenter')
-}
-
-function leave_raise(): void {
-    raised = 0;
-    dispatch('mouseleave')
-}
 
     function handle_click(): void {
         // Activate a dev environment.
@@ -55,8 +42,6 @@ function leave_raise(): void {
         --z-index: {z_index};
         --transition-speed: {transition_speed}ms;
         --raise-translation: {raise_translation * raised}px;'
-    on:mouseenter={enter_raise}
-    on:mouseleave={leave_raise}
     on:focus
     on:click={handle_click}
     role='presentation'
