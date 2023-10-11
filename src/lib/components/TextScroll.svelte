@@ -2,7 +2,7 @@
     import { onDestroy, onMount } from 'svelte';
 
     export let strings: [string, ...string[]];
-    export let animation_speed: number = 2000;
+    export let animation_period: number = 2000;
 
     // Not necessarily the widest string, but it will do for now.
     $: longest_string = strings.reduce((a, b) => a.length > b.length? a: b) satisfies string;
@@ -24,9 +24,9 @@
                 setTimeout(() => {
                     key = !key;
                     index = 0;
-                }, 1000);
+                }, animation_period / 2);
             }
-        }, animation_speed);
+        }, animation_period);
     });
 
     onDestroy(() => {
