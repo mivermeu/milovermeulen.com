@@ -56,7 +56,7 @@
         })
     }
 
-    function highlight_hexagon(hex_index: number, raise_fraction: number = 0.3): void {
+    function highlight_hexagon(hex_index: number, neighbour_raise_fraction: number = 0.3): void {
         // Raise a hexagon and partially raise its neighbours. 
         hexagons[hex_index].raised = 1;
 
@@ -79,7 +79,7 @@
         }
         hex_indices_to_be_raised = hex_indices_to_be_raised.filter(x => x >= 0 && x < hexagons.length);
 
-        hex_indices_to_be_raised.forEach(index => hexagons[index].raised = raise_fraction);
+        hex_indices_to_be_raised.forEach(index => hexagons[index].raised = neighbour_raise_fraction);
     }
 
     function reset_hexagons(): void {
