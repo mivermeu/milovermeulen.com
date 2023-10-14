@@ -7,14 +7,13 @@
 
     let root: HTMLElement;
 
-    type CSSProperty = { name: string, css_name: string, type: string};
+    type CSSProperty = { name: string, css_name: string, type: string, value: string | undefined };
 
     let css_props: CSSProperty[] = [
         {name: 'Background', css_name: '--color-bg', type: 'color'},
         {name: 'Text', css_name: '--color-text', type: 'color'},
         {name: 'Icon', css_name: '--color-icon', type: 'color'},
         {name: 'Card', css_name: '--color-card', type: 'color'},
-        // {name: 'Highlight', css_name: '--color-highlight', type: 'color'},
         {name: 'Badge', css_name: '--color-button', type: 'color'},
         {name: 'Shadow', css_name: '--color-shadow', type: 'color'},
         {name: 'Title size', css_name: '--font-size-title', type: 'text'},
@@ -25,17 +24,13 @@
         {name: 'Body font weight', css_name: '--font-weight-body', type: 'text'},
     ]
 
-    let prop_values: string[] = Array(css_props.length);
-
     onMount(() => {
         // @ts-ignore: There will be a root element until CSS-in-JS is implemented.
         root = document.documentElement;
         const root_style = getComputedStyle(root);
 
         // Prepopulate inputs.
-        css_props.forEach((css_prop, ci) => {
-            prop_values[ci] = root_style.getPropertyValue(css_prop.css_name);
-        });
+        css_props = css_props.map(css_prop => ({ ...css_prop, value: root_style.getPropertyValue(css_prop.css_name) }));
     })
 
     function send_email(): void {
@@ -44,7 +39,7 @@
         const subject: string = 'Website feedback'
         let body: string = 'Thanks for previewing my website! Feel free to provide any additional feedback here or send the message as-is.\n\n'
 
-        let messages: string[] = css_props.map((css_prop, ci) =>  css_prop.css_name + ': ' + prop_values[ci] + ';');
+        let messages: string[] = css_props.map(css_prop =>  css_prop.css_name + ': ' + css_prop.value + ';');
         const max_message_length: number = messages.reduce((a, b) => a.length > b.length? a: b).length;
         body += '='.repeat(max_message_length) + '\n';
         messages.forEach(message => body += message + '\n')
@@ -57,32 +52,28 @@
 <div class='bar' style={$dev_hexagon_pressed? '': 'display: none;'}>
     <div class='pickers'>
         <div class='color-pickers'>
-            {#each css_props as css_prop, pi}
-                {#if css_prop.type === 'color'}
-                    <div>
-                        {css_prop.name}:
-                        <input
-                            type='color'
-                            class='color-picker'
-                            bind:value={prop_values[pi]}
-                            on:change={() => root.style.setProperty(css_prop.css_name, prop_values[pi])}
-                        />
-                    </div>
-                {/if}
+            {#each css_props.filter(css_prop => css_prop.type === 'color') as css_prop}
+                <div>
+                    {css_prop.name}:
+                    <input
+                        type='color'
+                        class='color-picker'
+                        bind:value={css_prop.value}
+                        on:change={() => root.style.setProperty(css_prop.css_name, css_prop.value)}
+                    />
+                </div>
             {/each}
         </div>
         <div class='text-pickers'>
-            {#each css_props as css_prop, pi}
-                {#if css_prop.type === 'text'}
-                    <div>
-                        {css_prop.name}:
-                        <input
-                            type='text'
-                            bind:value={prop_values[pi]}
-                            on:change={() => root.style.setProperty(css_prop.css_name, prop_values[pi])}
-                        />
-                    </div>
-                {/if}
+            {#each css_props.filter(css_prop => css_prop.type === 'text') as css_prop}
+                <div>
+                    {css_prop.name}:
+                    <input
+                        type='text'
+                        bind:value={css_prop.value}
+                        on:change={() => root.style.setProperty(css_prop.css_name, css_prop.value)}
+                    />
+                </div>
             {/each}
         </div>
     </div>
@@ -117,10 +108,6 @@
 
     .controls {
         flex-grow: 0;
-
-        button {
-            font-size: var(--font-size-topic)
-        }
     }
 
     .color-picker {
