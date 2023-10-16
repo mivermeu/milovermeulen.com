@@ -3,7 +3,7 @@
 <svelte:options accessors />
 
 <script lang='ts'>
-    import { dev_hexagon_pressed } from "../../routes/stores";
+    import { dev_hexagon_pressed } from '$lib/data/stores';
 
     // It's a bit ugly to set CSS strings via props, but I don't know a better way to propagate them.
     export let x: number = 0;

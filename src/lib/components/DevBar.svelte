@@ -2,12 +2,10 @@
 
 <script lang='ts'>
     import { onMount } from "svelte";
-    import { writable, type Writable } from "svelte/store";
-    import { dev_hexagon_pressed } from "../../routes/stores";
+    import { dev_hexagon_pressed } from "../data/stores";
+    import type { CSSProperty } from "$lib/utils/types"
 
     let root: HTMLElement;
-
-    type CSSProperty = { name: string, css_name: string, type: string, value: string | undefined };
 
     let css_props: CSSProperty[] = [
         {name: 'Background', css_name: '--color-bg', type: 'color'},
@@ -47,6 +45,12 @@
 
         window.location.href = mailto_link + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
     }
+
+    function update_css(css_prop: CSSProperty): void {
+        if(css_prop.value) {
+            root.style.setProperty(css_prop.css_name, css_prop.value);
+        }
+    }
 </script>
 
 <div class='bar' style={$dev_hexagon_pressed? '': 'display: none;'}>
@@ -59,7 +63,7 @@
                         type='color'
                         class='color-picker'
                         bind:value={css_prop.value}
-                        on:change={() => root.style.setProperty(css_prop.css_name, css_prop.value)}
+                        on:change={() => update_css(css_prop)}
                     />
                 </div>
             {/each}
@@ -71,7 +75,7 @@
                     <input
                         type='text'
                         bind:value={css_prop.value}
-                        on:change={() => root.style.setProperty(css_prop.css_name, css_prop.value)}
+                        on:change={() => update_css(css_prop)}
                     />
                 </div>
             {/each}

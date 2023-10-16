@@ -7,6 +7,7 @@
     import HexGrid from '$lib/components/HexGrid.svelte';
     import Education from '$lib/sections/Education.svelte';
     import DevBar from '$lib/components/DevBar.svelte';
+    import ThemePicker from '$lib/components/ThemePicker.svelte';
 
     let hero_height: number = 0;
     let footer_height: number = 0;
@@ -37,6 +38,7 @@
 <div class='app'>
     <DevBar />
     <HexGrid grid_height={hero_height} />
+    <ThemePicker />
 
     <main>
         <Hero bind:height={hero_height}/>

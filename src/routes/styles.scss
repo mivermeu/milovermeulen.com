@@ -3,6 +3,7 @@
 :root {
     --font-body: 'Open Sans', Arial, sans-serif;
     --font-mono: monospace;
+
     --font-size-title: 40px;
     --font-size-subtitle: 35px;
     --font-size-topic: 22px;
@@ -13,14 +14,14 @@
     --color-bg: #2f4f4f;
     --color-text: #ffffff;
     --color-icon: #ffffff;
-    --color-highlight: #bbbbbb;
     --color-button: #808080;
     --color-shadow: #333333;
+    --color-card: #666666;
+
     --shadow-translate-distance: 5px;
     --shadow: drop-shadow(var(--shadow-translate-distance) var(--shadow-translate-distance) 2px var(--color-shadow));
     --shadow-opposite-translation: calc(-1 * var(--shadow-translate-distance)) calc(-1 * var(--shadow-translate-distance));
 
-    --color-card: #666666;
     --border-radius-card: 10px;
     --text-padding-card: 30px;
 
@@ -60,10 +61,6 @@ h3 {
     font-size: var(--font-size-topic);
     margin-block-start: 0.5em;
     margin-block-end: 0.5em;
-}
-
-a {
-    color: var(--color-highlight);
 }
 
 a, a:visited {
