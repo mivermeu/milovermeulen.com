@@ -2,7 +2,7 @@
 
 <script lang='ts'>
     import { onMount } from "svelte";
-    import { dev_hexagon_pressed } from "../data/stores";
+    import { dev_hexagon_pressed, theme } from "../data/stores";
     import type { CSSProperty } from "$lib/utils/types"
 
     let root: HTMLElement;
@@ -23,13 +23,13 @@
     ]
 
     onMount(() => {
-        // @ts-ignore: There will be a root element until CSS-in-JS is implemented.
-        root = document.documentElement;
-        const root_style = getComputedStyle(root);
-
-        // Prepopulate inputs.
-        css_props = css_props.map(css_prop => ({ ...css_prop, value: root_style.getPropertyValue(css_prop.css_name) }));
-    })
+        theme.subscribe(() => {
+            // @ts-ignore: There will be a root element until CSS-in-JS is implemented.
+            root = document.documentElement;
+            const root_style = getComputedStyle(root);
+            css_props = css_props.map(css_prop => ({ ...css_prop, value: root_style.getPropertyValue(css_prop.css_name) }));
+        });
+    });
 
     function send_email(): void {
         // Send an email message with all the values included.
