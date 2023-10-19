@@ -1,47 +1,97 @@
 <script lang='ts'>
-    import { theme } from '$lib/data/stores';
+    import { theme, theme_dark, theme_light, theme_preference } from '$lib/data/stores';
     import { themes } from '$lib/data/themes';
     import { set_theme_in_css } from '$lib/utils/theme';
+    import type { Theme } from '$lib/utils/types';
     import { onDestroy } from 'svelte';
     import type { Unsubscriber } from 'svelte/store';
     import { slide } from 'svelte/transition';
+    import { browser } from '$app/environment';
 
     export let theme_menu_open: boolean = false;
 
-    const theme_unsubscribe: Unsubscriber = theme.subscribe(new_theme => set_theme_in_css(new_theme));
+    const theme_unsubscribe: Unsubscriber = theme.subscribe((new_theme) =>
+        set_theme_in_css(new_theme)
+    );
     onDestroy(theme_unsubscribe);
+
+    function set_theme(new_theme: Theme): void {
+        theme.set(new_theme);
+        if (new_theme.brightness === 'light') {
+            theme_light.set(new_theme);
+            if (
+                $theme_preference === 'dark' ||
+                ($theme_preference === 'auto' &&
+                    browser &&
+                    window.matchMedia('(prefers-color-scheme: dark)').matches)
+            ) {
+                theme_preference.set('light');
+            }
+        } else if (new_theme.brightness === 'dark') {
+            theme_dark.set(new_theme);
+            if (
+                $theme_preference === 'light' ||
+                ($theme_preference === 'auto' &&
+                    browser &&
+                    !window.matchMedia('(prefers-color-scheme: dark)').matches)
+            ) {
+                theme_preference.set('dark');
+            }
+        }
+    }
+
+    function set_brightness(brightness: 'light' | 'dark' | 'auto'): void {
+        theme_preference.set(brightness);
+        if(brightness === 'light' || (brightness === 'auto' && browser && !window.matchMedia('(prefers-color-scheme: dark').matches)) {
+            theme.set($theme_light);
+        } else if(brightness === 'dark' || (brightness === 'auto' && browser && window.matchMedia('(prefers-color-scheme: dark').matches)) {
+            theme.set($theme_dark);
+        }
+    }
 </script>
 
 <div class='theme-picker'>
-    <button class='theme-picker-button' on:click={() => theme_menu_open = !theme_menu_open }>
+    <button class='theme-picker-button' on:click={() => (theme_menu_open = !theme_menu_open)}>
         Theme
     </button>
 
     {#if theme_menu_open}
-        <div class='theme-picker-menu' transition:slide={{duration: 200}}>
+        <div class='theme-picker-menu' transition:slide={{ duration: 200 }}>
             <div class='theme-brightness-picker'>
-                <div>Light</div>
-                <div>Auto</div>
-                <div>Dark</div>
+                <button
+                    class='theme-picker-button'
+                    on:click={() => set_brightness('light')}
+                    disabled={$theme_preference === 'light'}>Light</button
+                >
+                <button
+                    class='theme-picker-button'
+                    on:click={() => set_brightness('auto')}
+                    disabled={$theme_preference === 'auto'}>Auto</button
+                >
+                <button
+                    class='theme-picker-button'
+                    on:click={() => set_brightness('dark')}
+                    disabled={$theme_preference === 'dark'}>Dark</button
+                >
             </div>
             <div class='theme-lists'>
                 <div class='theme-list'>
-                    {#each themes.filter(theme => theme.brightness === 'light') as theme_option}
+                    {#each themes.filter((theme) => theme.brightness === 'light') as theme_option}
                         <button
                             class='theme-picker-button'
-                            disabled={$theme.name === theme_option.name}
-                            on:click={() => theme.set(theme_option)}
+                            disabled={$theme_light.name === theme_option.name}
+                            on:click={() => set_theme(theme_option)}
                         >
                             {theme_option.name}
                         </button>
                     {/each}
                 </div>
                 <div class='theme-list'>
-                    {#each themes.filter(theme => theme.brightness === 'dark') as theme_option}
+                    {#each themes.filter((theme) => theme.brightness === 'dark') as theme_option}
                         <button
                             class='theme-picker-button'
-                            disabled={$theme.name === theme_option.name}
-                            on:click={() => theme.set(theme_option)}
+                            disabled={$theme_dark.name === theme_option.name}
+                            on:click={() => set_theme(theme_option)}
                         >
                             {theme_option.name}
                         </button>
@@ -71,9 +121,9 @@
     .theme-picker-menu {
         background-color: var(--color-card);
         outline: 2px solid var(--color-icon);
-        padding: 0.5em;
+        padding: 1em;
         border-radius: var(--border-radius-card);
-            filter: var(--shadow);
+        filter: var(--shadow);
     }
 
     .theme-brightness-picker {
