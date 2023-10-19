@@ -3,8 +3,6 @@
 <svelte:options accessors />
 
 <script lang='ts'>
-    import { dev_hexagon_pressed } from '$lib/data/stores';
-
     // It's a bit ugly to set CSS strings via props, but I don't know a better way to propagate them.
     export let x: number = 0;
     export let y: number = 0;
@@ -20,14 +18,6 @@
     $: z_index = raised? 1: 0 satisfies number;
     $: display_color = 'color-mix(in srgb, var(--color-button) ' + raised * 100 + '%, ' + color + ')' satisfies string;
     $: display_y = y - raise_translation * raised satisfies number;
-
-    function handle_click(): void {
-        // Activate a dev environment.
-        if(x < 0 && y < 0) {
-            console.log('*hacker voice* I\'m in.');
-            dev_hexagon_pressed.set(true);
-        }
-    }
 </script>
 
 <div
@@ -43,7 +33,6 @@
         --transition-speed: {transition_speed}ms;
         --raise-translation: {raise_translation * raised}px;'
     on:focus
-    on:click={handle_click}
     role='presentation'
 />
 

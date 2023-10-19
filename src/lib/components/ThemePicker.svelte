@@ -1,5 +1,5 @@
 <script lang='ts'>
-    import { theme, theme_dark, theme_light, theme_preference } from '$lib/data/stores';
+    import { dev_menu_open, theme, theme_dark, theme_light, theme_preference } from '$lib/data/stores';
     import { themes } from '$lib/data/themes';
     import { set_theme_in_css } from '$lib/utils/theme';
     import type { Theme } from '$lib/utils/types';
@@ -48,6 +48,11 @@
             theme.set($theme_dark);
         }
     }
+
+    function contribute_theme(): void {
+        theme_menu_open = false;
+        dev_menu_open.set(true);
+    }
 </script>
 
 <div class='theme-picker'>
@@ -57,6 +62,7 @@
 
     {#if theme_menu_open}
         <div class='theme-picker-menu' transition:slide={{ duration: 200 }}>
+            <div class='theme-menu-title'>Theme brightness preference</div>
             <div class='theme-brightness-picker'>
                 <button
                     class='theme-picker-button'
@@ -74,6 +80,7 @@
                     disabled={$theme_preference === 'dark'}>Dark</button
                 >
             </div>
+            <div class='theme-menu-title'>Preferred light / dark mode theme</div>
             <div class='theme-lists'>
                 <div class='theme-list'>
                     {#each themes.filter((theme) => theme.brightness === 'light') as theme_option}
@@ -98,8 +105,9 @@
                     {/each}
                 </div>
             </div>
-            <div class='theme-acknoledgement'>
-                Theme contributed by {$theme.author}.
+            <div class='theme-acknowledgement'>
+                Theme contributed by {$theme.author}.<br>
+                <button on:click={contribute_theme}>Contribute your own</button>
             </div>
         </div>
     {/if}
@@ -124,6 +132,10 @@
         padding: 1em;
         border-radius: var(--border-radius-card);
         filter: var(--shadow);
+    }
+
+    .theme-menu-title {
+        padding: 0.5em 0;
     }
 
     .theme-brightness-picker {
@@ -169,8 +181,18 @@
         }
     }
 
-    .theme-acknoledgement {
+    .theme-acknowledgement {
         font-size: calc(var(--font-size-body) / 1.5);
         padding-top: 1em;
+
+        button {
+            background: none!important;
+            border: none;
+            padding: 0!important;
+            font: var(--font-body);
+            color: var(--font-color);
+            text-decoration: underline;
+            cursor: pointer;
+        }
     }
 </style>

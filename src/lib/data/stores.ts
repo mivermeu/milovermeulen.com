@@ -3,7 +3,7 @@ import type { Theme } from '$lib/utils/types'
 import { themes } from './themes';
 import { browser } from '$app/environment';
 
-export let dev_hexagon_pressed: Writable<boolean> = writable<boolean>(false);
+export let dev_menu_open: Writable<boolean> = writable<boolean>(false);
 
 // Theme settings load from localStorage.
 export let theme_light: Writable<Theme> = writable<Theme>(

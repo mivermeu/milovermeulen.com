@@ -2,7 +2,7 @@
 
 <script lang='ts'>
     import { onMount } from "svelte";
-    import { dev_hexagon_pressed, theme } from "../data/stores";
+    import { dev_menu_open, theme } from "../data/stores";
     import type { CSSProperty } from "$lib/utils/types"
 
     let root: HTMLElement;
@@ -53,7 +53,7 @@
     }
 </script>
 
-<div class='bar' style={$dev_hexagon_pressed? '': 'display: none;'}>
+<div class='bar' style={$dev_menu_open? '': 'display: none;'}>
     <div class='pickers'>
         <div class='color-pickers'>
             {#each css_props.filter(css_prop => css_prop.type === 'color') as css_prop}
@@ -82,7 +82,7 @@
         </div>
     </div>
     <div class='controls'>
-        <button on:click={() => dev_hexagon_pressed.set(false)}>Hide dev bar</button>
+        <button on:click={() => dev_menu_open.set(false)}>Hide dev bar</button>
         <button on:click={send_email}>Send current values</button>
     </div>
 </div>
