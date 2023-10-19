@@ -9,12 +9,12 @@ export let dev_menu_open: Writable<boolean> = writable<boolean>(false);
 export let theme_light: Writable<Theme> = writable<Theme>(
     browser && localStorage.theme_light?
         themes.find(theme => theme.name === localStorage.theme_light):
-        themes.find(theme => theme.brightness === 'light')
+        themes.find(theme => theme.name === 'Light ☀️')
 );
 export let theme_dark: Writable<Theme> = writable<Theme>(
     browser && localStorage.theme_dark?
         themes.find(theme => theme.name === localStorage.theme_dark):
-        themes.find(theme => theme.brightness === 'dark')
+        themes.find(theme => theme.name === 'Redwood 🌳')
 );
 export let theme_preference: Writable<'light' | 'dark' | 'auto'> = writable<'light' | 'dark' | 'auto'>(
     browser && localStorage.theme_preference?
