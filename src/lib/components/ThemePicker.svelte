@@ -140,8 +140,12 @@
 
     .theme-brightness-picker {
         display: flex;
-        justify-content: space-between;
         margin-bottom: 0.5em;
+        gap: 0.5em;
+
+        .theme-picker-button {
+            flex: 1;
+        }
     }
 
     .theme-lists {
