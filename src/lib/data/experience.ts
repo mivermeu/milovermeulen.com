@@ -1,7 +1,7 @@
 // Work experience.
 
 import type { ExperienceEntry } from '$lib/utils/types';
-import { stcorp, nikhef, cern, uh } from '$lib/data/companies'
+import { nypc, stcorp, nikhef, cern, uh } from '$lib/data/companies'
 
 import agile from '$lib/images/icons/agile.svg'
 import group from '$lib/images/icons/group.svg'
@@ -14,9 +14,60 @@ import sine from '$lib/images/icons/sine.svg'
 import database_stats from '$lib/images/icons/database_stats.svg'
 import teaching from '$lib/images/icons/teaching.svg'
 import database_configuration from '$lib/images/icons/database_configuration.svg'
+import git from '$lib/images/icons/git.svg'
+import repetition from '$lib/images/icons/repetition.svg'
+import clinical_research from '$lib/images/icons/clinical-research.svg'
+import clinical from '$lib/images/icons/clinical.svg'
 
 
 export const jobs = [
+    {
+        companies: [nypc],
+        title: 'Medical Physicist Assistant',
+        start: new Date(2024, 2, 11),
+        short_description: `
+            As part of the physics group, I help ensure that proton therapy
+            patients receive their planned care. I also manage the center's
+            software version control and am involved in several research
+            projects.
+        `,
+        details: [
+            {
+                name: 'Version control',
+                description: `
+                    Set up and streamlined git-based version control for all of
+                    the center's custom software.
+                `,
+                icon: git
+            },
+            {
+                name: 'Scripting',
+                description: `
+                    Wrote clinical software in Python and C# to perform
+                    repetitive tasks automatically.
+                `,
+                icon: repetition
+            },
+            {
+                name: 'Research',
+                description: `
+                    Investigated various research projects, including
+                    improvements to patient imaging and monitoring of treatment
+                    delivery.
+                `,
+                icon: clinical_research
+            },
+            {
+                name: 'Clinical',
+                description: `
+                    Performed various clinical tasks, such as patient-specific
+                    QA and plan evaluations.
+                `,
+                icon: clinical
+            },
+        ],
+        tags: ['Python', 'C#', 'Raystation', 'Varian Eclipse']
+    },
     {
         companies: [stcorp],
         title: 'Scientific Software Engineer',
@@ -78,7 +129,7 @@ export const jobs = [
         start: new Date(2016, 8, 1),
         stop: new Date(2021, 2, 1),
         short_description: `
-            I worked in the Deep Underground Neutrino Experiment to uncover
+            I worked on the Deep Underground Neutrino Experiment to uncover
             impostor particle signatures, characterise photon showers and write
             performant data-acquisition code.
         `,

@@ -7,7 +7,7 @@
     import Badge from '$lib/components/Badge.svelte';
     import resume from '$lib/documents/Resume_Milo_Vermeulen.pdf'
 
-    const open_to_work: boolean = true;
+    const open_to_work: boolean = false;
 
     const next_job: ExperienceEntry = {
         companies: [],

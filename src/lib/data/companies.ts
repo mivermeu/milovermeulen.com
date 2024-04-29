@@ -9,6 +9,14 @@ import cern_logo from '$lib/images/logos/cern.svg'
 import ru_logo from '$lib/images/logos/ru.svg'
 import felix_logo from '$lib/images/logos/felix.svg'
 import goteborg_logo from '$lib/images/logos/goteborg.svg'
+import nypc_logo from '$lib/images/logos/nypc.svg'
+
+export const nypc: Company = {
+    name: 'New York Proton Center',
+    location: {city: 'New York City', country: 'United States'},
+    website: 'https://www.nyproton.com',
+    logo: nypc_logo
+}
 
 export const ru: Company = {
     name: 'Radboud University',
