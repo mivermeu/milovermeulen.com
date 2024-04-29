@@ -13,11 +13,11 @@
     </h1>
     <div id='about-container'>
         <p id='about'>
-            I'm driven to contribute meaningfully to global challenges, leveraging
-            expertise in physics, data science, and software engineering. I excel in
-            big data science, high-performance code development and agile customer
-            relations. I'm eager to bring this expertise to a forward-thinking team.
-            Open to new opportunities — let's connect!
+            I like to work on meaningful challenges and have some fun along the way,
+            combining my background in physics with my software engineering skills.
+            In the past I've worked on particle detectors at CERN and ESA satellite
+            missions, and I currently work in medical physics at the New York Proton
+            Center.
         </p>
         <div id='socials-container'>
             <Socials />
