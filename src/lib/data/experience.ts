@@ -3,22 +3,6 @@
 import type { ExperienceEntry } from '$lib/utils/types';
 import { nypc, stcorp, nikhef, cern, uh } from '$lib/data/companies'
 
-import agile from '$lib/images/icons/agile.svg'
-import group from '$lib/images/icons/group.svg'
-import atom from '$lib/images/icons/atom.svg'
-import community from '$lib/images/icons/community.svg'
-import gui from '$lib/images/icons/gui.svg'
-import satellite from '$lib/images/icons/satellite.svg'
-import compression from '$lib/images/icons/compression.svg'
-import sine from '$lib/images/icons/sine.svg'
-import database_stats from '$lib/images/icons/database_stats.svg'
-import teaching from '$lib/images/icons/teaching.svg'
-import database_configuration from '$lib/images/icons/database_configuration.svg'
-import git from '$lib/images/icons/git.svg'
-import repetition from '$lib/images/icons/repetition.svg'
-import clinical_research from '$lib/images/icons/clinical-research.svg'
-import clinical from '$lib/images/icons/clinical.svg'
-
 
 export const jobs = [
     {
@@ -38,7 +22,7 @@ export const jobs = [
                     Set up and streamlined git-based version control for all of
                     the center's custom software.
                 `,
-                icon: git
+                icon: 'git'
             },
             {
                 name: 'Scripting',
@@ -46,7 +30,7 @@ export const jobs = [
                     Wrote clinical software in Python and C# to perform
                     repetitive tasks automatically.
                 `,
-                icon: repetition
+                icon: 'repetition'
             },
             {
                 name: 'Research',
@@ -55,7 +39,7 @@ export const jobs = [
                     improvements to patient imaging and monitoring of treatment
                     delivery.
                 `,
-                icon: clinical_research
+                icon: 'clinical_research'
             },
             {
                 name: 'Clinical',
@@ -63,7 +47,7 @@ export const jobs = [
                     Performed various clinical tasks, such as patient-specific
                     QA and plan evaluations.
                 `,
-                icon: clinical
+                icon: 'clinical'
             },
         ],
         tags: ['Python', 'C#', 'Raystation', 'Varian Eclipse']
@@ -86,7 +70,7 @@ export const jobs = [
                     for the data processing pipeline of earth-observation
                     satellite missions.
                 `,
-                icon: satellite
+                icon: 'satellite'
             },
             {
                 name: 'Database',
@@ -94,7 +78,7 @@ export const jobs = [
                     Used Django to define a PostgreSQL database structure and
                     perform analysis on large streams of data.
                 `,
-                icon: database_configuration
+                icon: 'database_configuration'
             },
             {
                 name: 'GUI',
@@ -102,7 +86,7 @@ export const jobs = [
                     Set up a dynamically generated Grafana-based monitoring user
                     interface.
                 `,
-                icon: gui
+                icon: 'gui'
             },
             {
                 name: 'Agile',
@@ -110,7 +94,7 @@ export const jobs = [
                     Led frequent meetings with customers to report progress and
                     set priorities in an agile workflow.
                 `,
-                icon: agile
+                icon: 'agile'
             },
             {
                 name: 'Onboarding',
@@ -118,7 +102,7 @@ export const jobs = [
                     Played a key role in onboarding multiple new members of the
                     team by code walkthroughs and pair-programming sessions.
                 `,
-                icon: group
+                icon: 'group'
             },
         ],
         tags: ['Django', 'Python', 'PostgreSQL', 'Docker', 'Grafana']
@@ -142,7 +126,7 @@ export const jobs = [
                     identify π<sup>0</sup>-particles, a major background to the
                     physics signal.
                 `,
-                icon: atom
+                icon: 'atom'
             },
             {
                 name: 'Neutrino oscillation',
@@ -151,7 +135,7 @@ export const jobs = [
                     oscillation tool</a> in TypeScript, now ported to Svelte, as
                     well as previous versions in C++ and Python.
                 `,
-                icon: sine
+                icon: 'sine'
             },
             {
                 name: 'Data acquisition',
@@ -159,7 +143,7 @@ export const jobs = [
                     Created high-performance compression and readout algorithms
                     for our experiment's data acquisition chain.
                 `,
-                icon: compression
+                icon: 'compression'
             },
             {
                 name: 'Data taking',
@@ -167,7 +151,7 @@ export const jobs = [
                     Performed over 170 hours of data taking duties during the
                     two month-long beam run of our physics experiment.
                 `,
-                icon: database_stats
+                icon: 'database_stats'
             },
             {
                 name: 'Teaching assisting',
@@ -175,7 +159,7 @@ export const jobs = [
                     Oversaw two years of university physics exercise classes in
                     topics ranging from lab courses to quantum mechanics.
                 `,
-                icon: teaching
+                icon: 'teaching'
             },
             {
                 name: 'Tours',
@@ -184,7 +168,7 @@ export const jobs = [
                     our experiment for groups of CERN visitors, represented my
                     collaboration at various conferences and more.
                 `,
-                icon: community
+                icon: 'community'
             },
         ],
         tags: ['Particle physics', 'Data science', 'C++', 'Python', 'Pandas']

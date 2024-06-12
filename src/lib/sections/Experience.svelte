@@ -6,6 +6,7 @@
     import { month_plus_year } from '$lib/utils/datetime';
     import Badge from '$lib/components/Badge.svelte';
     import resume from '$lib/documents/Resume_Milo_Vermeulen.pdf'
+    import Icon from '$lib/components/Icon.svelte';
 
     const open_to_work: boolean = false;
 
@@ -71,7 +72,9 @@
                         <div class='detail-list'>
                             {#each job.details as detail, di}
                                 <div class='detail-entry'>
-                                    <div class='detail-icon' style='--url: url({detail.icon})' />
+                                    <div class='detail-icon'>
+                                        <Icon icon_name={detail.icon} />
+                                    </div>
                                     <div>
                                         {@html detail.description}
                                     </div>
@@ -239,11 +242,6 @@
             flex-shrink: 0;
             width: var(--icon-width);
             height: var(--icon-width);
-            background-color: var(--color-icon);
-            -webkit-mask-image: var(--url);
-            mask-image: var(--url);
-            -webkit-mask-size: 100%;
-            mask-size: 100%;
         }
     }
 </style>

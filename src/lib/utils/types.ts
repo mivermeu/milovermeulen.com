@@ -1,5 +1,7 @@
 // General data types.
 
+import type { icons } from "$lib/data/icons"
+
 export type Location = {
     city: string,
     country: string
@@ -29,7 +31,7 @@ export type ExperienceEntry = {
 export type ExperienceDetail = {
     name: string,
     description: string,
-    icon: string
+    icon: keyof typeof icons
 }
 
 export type Thesis = {
@@ -58,7 +60,7 @@ export type Project = {
 
 export type Social = {
     name: string,
-    icon: string,
+    icon: keyof typeof icons,
     link: string
 }
 

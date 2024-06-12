@@ -2,7 +2,7 @@
 
 <script lang='ts'>
     import { slide } from 'svelte/transition';
-    import downarrow from '$lib/images/icons/down-arrow.svg'
+    import Icon from './Icon.svelte';
 
     export let href: string | undefined = undefined;
     export let additional_class: string | undefined = undefined;
@@ -47,7 +47,9 @@
                 </div>
             {/if}
             <div style='transform: scale(1, {open? -1: 1}); transition: {expand_duration}ms;'>
-                <div class='expand-arrow' style='--url: url({downarrow});' />
+                <div class='expand-arrow'>
+                    <Icon icon_name='expand_arrow' height='30px' width='30px' />
+                </div>
             </div>
         {/if}
     </div>
@@ -109,11 +111,5 @@
         height: 30px;
         margin-top: 20px;
         margin-bottom: -10px;
-
-        background-color: var(--color-icon);
-        -webkit-mask-image: var(--url);
-        mask-image: var(--url);
-        -webkit-mask-size: 100%;
-        mask-size: 100%;
     }
 </style>
