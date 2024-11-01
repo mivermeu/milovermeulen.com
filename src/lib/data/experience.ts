@@ -7,30 +7,30 @@ import { nypc, stcorp, nikhef, cern, uh } from '$lib/data/companies'
 export const jobs = [
     {
         companies: [nypc],
-        title: 'Medical Physicist Assistant',
+        title: 'Clinical Software Engineer',
         start: new Date(2024, 2, 11),
         short_description: `
             As part of the physics group, I help ensure that proton therapy
             patients receive their planned care. I also manage the center's
-            software version control and am involved in several research
+            software and version control, and am involved in several research
             projects.
         `,
         details: [
             {
+                name: 'Scripting',
+                description: `
+                    Streamlined dosimetry and physics processes by developing
+                    clinical software in Python.
+                `,
+                icon: 'repetition'
+            },
+            {
                 name: 'Version control',
                 description: `
-                    Set up and streamlined git-based version control for all of
+                    Established git-based version control protocols for all of
                     the center's custom software.
                 `,
                 icon: 'git'
-            },
-            {
-                name: 'Scripting',
-                description: `
-                    Wrote clinical software in Python and C# to perform
-                    repetitive tasks automatically.
-                `,
-                icon: 'repetition'
             },
             {
                 name: 'Research',
@@ -50,7 +50,7 @@ export const jobs = [
                 icon: 'clinical'
             },
         ],
-        tags: ['Python', 'C#', 'Raystation', 'Varian Eclipse']
+        tags: ['Python', 'Grafana', 'Raystation', 'Varian Eclipse']
     },
     {
         companies: [stcorp],
