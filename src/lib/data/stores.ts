@@ -14,7 +14,7 @@ export let theme_light: Writable<Theme> = writable<Theme>(
 export let theme_dark: Writable<Theme> = writable<Theme>(
     browser && localStorage.theme_dark?
         themes.find(theme => theme.name === localStorage.theme_dark):
-        themes.find(theme => theme.name === 'Redwood 🌳')
+        themes.find(theme => theme.name === 'Dark slate grey 🪨')
 );
 export let theme_preference: Writable<'light' | 'dark' | 'auto'> = writable<'light' | 'dark' | 'auto'>(
     browser && localStorage.theme_preference?
