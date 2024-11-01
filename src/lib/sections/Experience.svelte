@@ -5,7 +5,6 @@
     import CompanyList from '$lib/components/CompanyList.svelte';
     import { month_plus_year } from '$lib/utils/datetime';
     import Badge from '$lib/components/Badge.svelte';
-    import resume from '$lib/documents/Resume_Milo_Vermeulen.pdf'
     import Icon from '$lib/components/Icon.svelte';
 
     const open_to_work: boolean = false;
@@ -36,9 +35,6 @@
         truly impactful projects. Here is a short summary on my most recent
         positions.
     </p>
-    <div class='resume-download'>
-        <Badge><a href={resume} target='_blank'>View resume</a></Badge>
-    </div>
     <div class='job-list'>
         {#each sorted_jobs as job}
             {@const job_start_text = job.start_text? job.start_text: month_plus_year(job.start)}
@@ -97,12 +93,6 @@
     .description {
         max-width: 500px;
         margin: 0 auto;
-    }
-
-    .resume-download {
-        text-align: center;
-        margin: auto;
-        margin-bottom: 1em;
     }
 
     .job-list {
