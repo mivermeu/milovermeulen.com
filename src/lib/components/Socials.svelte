@@ -18,6 +18,7 @@
         display: flex;
         flex-direction: row;
         gap: 20px;
+        pointer-events: all;
     }
 
     .social-icon {
