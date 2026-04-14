@@ -84,7 +84,7 @@
     }
 </script>
 
-<canvas bind:this={canvas} />
+<canvas bind:this={canvas} ></canvas>
 
 <style lang='scss'>
     canvas {

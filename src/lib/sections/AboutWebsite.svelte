@@ -2,9 +2,6 @@
     import Card from '$lib/components/Card.svelte';
 </script>
 
-<!-- The regular h2 element for a section just to get the spacing right. -->
-<h2> </h2>
-
 <div class='about-card'>
     <Card>
         <div slot='content'>
@@ -19,5 +16,6 @@
     .about-card {
         max-width: 30em;
         margin: auto;
+        margin-top: 10rem;
     }
 </style>

@@ -173,7 +173,7 @@
     }
 </script>
 
-<canvas bind:this={canvas} height=100% width=100% />
+<canvas bind:this={canvas} height=100% width=100% ></canvas>
 
 <style lang="scss">
     canvas {

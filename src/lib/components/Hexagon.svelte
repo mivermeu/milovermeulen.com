@@ -34,7 +34,7 @@
         --raise-translation: {raise_translation * raised}px;'
     on:focus
     role='presentation'
-/>
+></div>
 
 <style lang='scss'>
     .hex {

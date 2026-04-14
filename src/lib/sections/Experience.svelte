@@ -53,11 +53,11 @@
                     <div class='job-timeline'>
                         <div class='job-timeline-body'>
                             <div class='stop-date'>
-                                <div class='timeline-ball' />
+                                <div class='timeline-ball' ></div>
                                 {job_stop_text}
                             </div>
                             <div class='start-date'>
-                                <div class='timeline-ball' />
+                                <div class='timeline-ball' ></div>
                                 {job_start_text}
                             </div>
                         </div>
