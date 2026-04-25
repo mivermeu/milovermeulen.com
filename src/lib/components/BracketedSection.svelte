@@ -42,7 +42,7 @@
   });
 </script>
 
-<section class="relative overflow-hidden w-full {className}">
+<div class="relative {className}">
 
   <div class="absolute inset-0 pointer-events-none z-0 {bracketColor}">
 
@@ -76,7 +76,7 @@
 
   </div>
 
-  <div class="relative z-10 mx-auto max-w-7xl px-6 py-12">
+  <div class="relative z-10 mx-auto p-6 h-full">
     {@render children()}
   </div>
-</section>
+</div>

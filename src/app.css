@@ -13,15 +13,15 @@
 }
 
 :root {
-	/* Colors */
-	--color-primary: #6366f1;
-	--color-accent: #f43f5e;
+    /* Colors */
+    --color-primary: #6366f1;
+    --color-accent: #f43f5e;
 
-	/* Typography */
-	--font-size-huge: 5rem;
-	--font-size-tiny: 0.75rem;
+    /* Typography */
+    --font-size-huge: 5rem;
+    --font-size-tiny: 0.75rem;
 
-	font-family: var(--font-uncut);
+    font-family: var(--font-uncut);
     font-weight: 300;
     font-synthesis: none;
 }
