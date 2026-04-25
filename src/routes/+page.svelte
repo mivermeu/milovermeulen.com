@@ -4,7 +4,9 @@
 
 </script>
 <div class="flex h-screen w-screen">
-    <BracketedSection className="w-1/3 h-screen border-r-4 border-black">
+    <BracketedSection className="w-1/3 h-screen border-r-3 border-black">
+        <div class="absolute inset-0 pointer-events-none z-20 shadow-[inset_-4px_0_1px_rgba(255,255,255,0.8)]"></div>
+        <div class="absolute inset-0 pointer-events-none z-20 shadow-[inset_-3px_0_1px_rgba(0,0,0,0.8)]"></div>
         <Noise />
         <div class="p-6 pl-12 h-full">
             <aside class="h-full flex flex-col justify-between">
