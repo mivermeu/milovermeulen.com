@@ -1,0 +1,27 @@
+@import 'tailwindcss';
+
+@theme {
+    --font-uncut: "AtkinsonHyperlegibleMono", ui-monospace, monospace;
+}
+
+@font-face {
+    font-family: 'AtkinsonHyperlegibleMono';
+    src: url('/fonts/AtkinsonHyperlegibleMono-VariableFont_wght.tff') format('tff');
+    font-weight: 200 800;
+    font-style: normal;
+    font-display: swap;
+}
+
+:root {
+	/* Colors */
+	--color-primary: #6366f1;
+	--color-accent: #f43f5e;
+
+	/* Typography */
+	--font-size-huge: 5rem;
+	--font-size-tiny: 0.75rem;
+
+	font-family: var(--font-uncut);
+    font-weight: 300;
+    font-synthesis: none;
+}

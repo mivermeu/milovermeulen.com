@@ -1,18 +1,28 @@
-# Milo's personal website
+# sv
 
-This is my personal website. I like to spend ~~too much~~ just enough time discovering and playing with new web tech, which at the moment is mostly Svelte. Feel free to copy / fork / get inspiration from my humble code.
+Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
 
-## What's inside?
+## Creating a project
 
-Aside from a summary of myself, I like to play with the creation of web-apps. One I keep coming back to is Webneut, an interactive [neutrino](https://en.wikipedia.org/wiki/Neutrino) oscillation simulator. This is the fifth(?) iteration of this tool and probably not the last.
+If you're seeing this, you've probably already done this step. Congrats!
+
+```sh
+# create a new project
+npx sv create my-app
+```
+
+To recreate this project with the same configuration:
+
+```sh
+# recreate this project
+bun x sv@0.15.1 create --template minimal --types ts --add prettier eslint tailwindcss="plugins:typography" sveltekit-adapter="adapter:static" mcp="ide:other+setup:local" vitest="usages:unit,component" playwright --install bun milovermeulen.com
+```
 
 ## Developing
 
-Install the dependencies with `npm install`, `yarn install` or equivalent for your setup.
+Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
 
-To start a development server:
-
-```bash
+```sh
 npm run dev
 
 # or start the server and open the app in a new browser tab
@@ -21,12 +31,12 @@ npm run dev -- --open
 
 ## Building
 
-To create a production version of the app:
+To create a production version of your app:
 
-```bash
+```sh
 npm run build
 ```
 
 You can preview the production build with `npm run preview`.
 
-> To deploy your app, you may need to install an [adapter](https://kit.svelte.dev/docs/adapters) for your target environment.
+> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
