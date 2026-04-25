@@ -19,7 +19,7 @@
     bracketThickness = 2,
     bracketSize = 32,
     bracketColor = "white",
-    bracketRounded = "sm",
+    bracketRounded = "lg",
     bracketOffset = 20
   }: Props = $props();
 
