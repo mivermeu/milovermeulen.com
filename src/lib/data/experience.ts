@@ -1,8 +1,7 @@
 // Work experience.
 
 import type { ExperienceEntry } from '$lib/utils/types';
-import { realself, nypc, stcorp } from '$lib/data/companies'
-
+import { realself, nypc, stcorp } from '$lib/data/companies';
 
 export const jobs = [
     {
@@ -12,7 +11,7 @@ export const jobs = [
         short_description: `
             test
         `,
-        details: "",
+        details: '',
         tags: ['React', 'TypeScript', 'FastAPI', 'AWS']
     },
     {
@@ -26,7 +25,7 @@ export const jobs = [
             clinical software and was involved in several research
             projects.
         `,
-        details: "",
+        details: '',
         tags: ['Python', 'Grafana', 'Raystation', 'Varian Eclipse']
     },
     {
@@ -39,9 +38,9 @@ export const jobs = [
             EarthCARE and Biomass, two ESA satellite missions that aim to
             measure and map changes in our planet's atmosphere and forests.
         `,
-        details: "",
+        details: '',
         tags: ['Django', 'Python', 'PostgreSQL', 'Docker', 'Grafana']
-    },
+    }
     // {
     //     companies: [nikhef, cern, uh],
     //     title: 'Particle Physics PhD Candidate',

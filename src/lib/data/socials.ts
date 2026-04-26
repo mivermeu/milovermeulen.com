@@ -18,4 +18,4 @@ export const socials: Social[] = [
         link: 'mailto:info@milovermeulen.com',
         icon: 'email'
     }
-]
+];

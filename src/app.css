@@ -1,7 +1,7 @@
 @import 'tailwindcss';
 
 @theme {
-    --font-uncut: "AtkinsonHyperlegibleMono", ui-monospace, monospace;
+    --font-uncut: 'AtkinsonHyperlegibleMono', ui-monospace, monospace;
 }
 
 @font-face {

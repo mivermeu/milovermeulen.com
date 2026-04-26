@@ -1,7 +1,7 @@
 // List of educations received.
 
-import type { EducationEntry } from "$lib/utils/types"
-import { nikhef, ru, goteborg, felix, cern, uh } from '$lib/data/companies'
+import type { EducationEntry } from '$lib/utils/types';
+import { nikhef, ru, goteborg, felix, cern, uh } from '$lib/data/companies';
 
 // import phd_thesis_cover from '$lib/images/covers/phd_thesis_cover.svg'
 // import master_thesis_cover from '$lib/images/covers/master_thesis_cover.svg'
@@ -22,15 +22,15 @@ export const phd: EducationEntry = {
         experiment. I also created low-level and performant data-acquisition code.
     `,
     thesis: {
-        name: 'A Blessing in Disguise - Characterisations of ProtoDUNE photon showers for neutrino measurements in DUNE',
+        name: 'A Blessing in Disguise - Characterisations of ProtoDUNE photon showers for neutrino measurements in DUNE'
         // link: phd_thesis,
         // image: phd_thesis_cover
     }
-}
+};
 
 export const master: EducationEntry = {
     companies: [ru],
-    name: 'Master\'s Physics and Astronomy',
+    name: "Master's Physics and Astronomy",
     start: new Date(2014, 8, 1),
     stop: new Date(2016, 8, 1),
     description: `
@@ -39,15 +39,15 @@ export const master: EducationEntry = {
         in resin affinity, crystallisation and electrophoresis.
     `,
     thesis: {
-        name: 'Calcium Enrichment for the Study of Neutrinoless Double Beta Decay',
+        name: 'Calcium Enrichment for the Study of Neutrinoless Double Beta Decay'
         // link: master_thesis,
         // image: master_thesis_cover
     }
-}
+};
 
 export const bachelor: EducationEntry = {
     companies: [ru, felix, goteborg],
-    name: 'Bachelor\'s Physics and Astronomy',
+    name: "Bachelor's Physics and Astronomy",
     start: new Date(2013, 8, 1),
     stop: new Date(2014, 8, 1),
     description: `
@@ -57,8 +57,8 @@ export const bachelor: EducationEntry = {
         a cross-functional team.
     `,
     thesis: {
-        name: 'The Scanning Problem of FLARE and THz Pulse Slicing',
+        name: 'The Scanning Problem of FLARE and THz Pulse Slicing'
         // link: bachelor_thesis,
         // image: bachelor_thesis_cover
     }
-}
+};

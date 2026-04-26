@@ -30,4 +30,4 @@ export const projects: Project[] = [
         source_code: '',
         tags: ['Physics', 'UI/UX', 'Web development']
     }
-]
+];
