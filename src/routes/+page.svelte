@@ -1,7 +1,6 @@
 <script>
     import BracketedSection from "$lib/components/BracketedSection.svelte";
     import Noise from "$lib/components/Noise.svelte";
-
 </script>
 <div class="flex h-screen w-screen">
     <BracketedSection className="w-1/3 h-screen border-r-3 border-black">
@@ -16,19 +15,15 @@
                 </div>
 
                 <nav class="mt-8">
-                    <ul class="space-y-4">
-                        <li>
-                            <a href="#about" class="transition-colors text-white/80 hover:text-white">About</a>
-                    </li>
-                    <li>
-                            <a href="#projects" class="transition-colors text-white/80 hover:text-white">Projects</a>
-                    </li>
-                    <li>
-                            <a href="#experience" class="transition-colors text-white/80 hover:text-white">Experience</a>
-                    </li>
-                    <li>
-                            <a href="#contact" class="transition-colors text-white/80 hover:text-white">Contact</a>
-                    </li>
+                    <ul class="space-y-6">
+                        {#each ['about', 'projects', 'experience', 'contact'] as section, index (index)}
+                            <li>
+                                <div class="flex items-center align-middle gap-4">
+                                    <div class="h-2 w-2 bg-black rounded-full"></div>
+                                    <a href="#{section}" class="transition-colors text-white/80 hover:text-white">{section}</a>
+                                </div>
+                            </li>
+                        {/each}
                     </ul>
                 </nav>
 
