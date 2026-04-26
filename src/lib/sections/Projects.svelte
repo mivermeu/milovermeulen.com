@@ -1,17 +1,17 @@
+<script>
+	import { projects } from "$lib/data/projects";
+
+</script>
 <section id="projects" class="mb-16">
-    <h2 class="mb-4 text-2xl font-medium text-white">Projects</h2>
+    <h2 class="mb-4 text-2xl font-medium text-white">projects</h2>
     <div class="space-y-6">
+        {#each projects as project, index (index)}
         <div class="rounded-lg border border-white/10 p-6">
-            <h3 class="mb-2 text-lg font-medium text-white">Project One</h3>
+            <h3 class="mb-2 text-lg font-medium text-white">{project.name.toLowerCase()}</h3>
             <p class="text-sm text-white/60">
-                Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident.
+                {project.description}
             </p>
         </div>
-        <div class="rounded-lg border border-white/10 p-6">
-            <h3 class="mb-2 text-lg font-medium text-white">Project Two</h3>
-            <p class="text-sm text-white/60">
-                Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam.
-            </p>
-        </div>
+        {/each}
     </div>
 </section>

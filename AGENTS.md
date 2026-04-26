@@ -56,3 +56,4 @@ Avoid the old `let` and `$: ` syntax. Use Svelte 5 runes:
 2. **Implement**: Create the logic using Svelte 5 runes.
 3. **Style**: Apply Tailwind classes to match the visual identity.
 4. **Verify**: Ensure the layout remains stable across different screen sizes.
+```
