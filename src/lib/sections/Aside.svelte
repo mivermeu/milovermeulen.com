@@ -1,22 +1,11 @@
 <script lang="ts">
     import Raised from '$lib/components/Raised.svelte';
 
-    interface Section {
-        id: string;
-        label: string;
-    }
-
-    let sections = $state<Section[]>([]);
+    let sections = $state<string[]>([]);
 
     $effect(() => {
         const elements = document.querySelectorAll('section[id]');
-        sections = Array.from(elements).map((el) => {
-            const h2 = el.querySelector('h2');
-            return {
-                id: el.id,
-                label: h2 ? h2.textContent?.trim().toLowerCase() : el.id
-            };
-        });
+        sections = Array.from(elements).map((el) => el.id);
     });
 </script>
 
@@ -28,14 +17,14 @@
 
     <nav class="mt-8">
         <ul class="space-y-4">
-            {#each sections as section (section.id)}
+            {#each sections as section (section)}
                 <li>
                     <Raised className="flex items-center gap-4 rounded-2xl px-4 py-2 align-middle">
                         <div class="relative h-2 w-2 rounded-full bg-black"></div>
                         <a
-                            href="#{section.id}"
+                            href="#{section}"
                             class="relative text-white/80 transition-colors hover:text-white"
-                            >{section.label}</a
+                            >{section}</a
                         >
                     </Raised>
                 </li>
