@@ -1,4 +1,6 @@
 <script lang="ts">
+    import Raised from '$lib/components/Raised.svelte';
+
     interface Section {
         id: string;
         label: string;
@@ -25,17 +27,17 @@
     </div>
 
     <nav class="mt-8">
-        <ul class="space-y-6">
+        <ul class="space-y-4">
             {#each sections as section (section.id)}
                 <li>
-                    <div class="flex items-center gap-4 align-middle">
-                        <div class="h-2 w-2 rounded-full bg-black"></div>
+                    <Raised className="flex items-center gap-4 rounded-2xl px-4 py-2 align-middle">
+                        <div class="relative h-2 w-2 rounded-full bg-black"></div>
                         <a
                             href="#{section.id}"
-                            class="text-white/80 transition-colors hover:text-white"
+                            class="relative text-white/80 transition-colors hover:text-white"
                             >{section.label}</a
                         >
-                    </div>
+                    </Raised>
                 </li>
             {/each}
         </ul>

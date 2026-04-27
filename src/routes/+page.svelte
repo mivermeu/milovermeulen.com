@@ -7,16 +7,12 @@
     import Contact from '$lib/sections/Contact.svelte';
     import Aside from '$lib/sections/Aside.svelte';
     import Education from '$lib/sections/Education.svelte';
+    import RaisedBorder from '$lib/components/RaisedBorder.svelte';
 </script>
 
 <div class="container mx-auto flex h-screen justify-center px-4 sm:px-6 lg:px-8">
     <BracketedSection className="w-1/3 h-screen">
-        <div
-            class="pointer-events-none absolute inset-0 z-20 shadow-[inset_-4px_0_1px_rgba(255,255,255,0.8)]"
-        ></div>
-        <div
-            class="pointer-events-none absolute inset-0 z-20 shadow-[inset_-3px_0_1px_rgba(0,0,0,1)]"
-        ></div>
+        <RaisedBorder />
         <div class="h-full p-6 pl-12">
             <Aside />
         </div>
@@ -24,12 +20,7 @@
 
     <main class="z-10 max-w-prose overflow-y-auto bg-[#222]">
         <div class="relative p-8">
-            <div
-                class="pointer-events-none absolute inset-0 z-20 shadow-[inset_-4px_0_1px_rgba(255,255,255,0.8)]"
-            ></div>
-            <div
-                class="pointer-events-none absolute inset-0 z-20 shadow-[inset_-3px_0_1px_rgba(0,0,0,1)]"
-            ></div>
+            <RaisedBorder />
             <Noise />
             <About />
             <Experience />
