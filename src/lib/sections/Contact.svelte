@@ -1,6 +1,13 @@
+<script>
+    import { socials } from '$lib/data/socials';
+</script>
+
 <section id="contact">
-    <h2 class="mb-4 text-2xl font-medium text-white">contact</h2>
-    <p class="text-red-600 hover:underline">
-        <a href="mailto:hello@example.com">hello@example.com</a>
-    </p>
+    <ul class="flex gap-4 text-orange-600">
+        {#each socials as social (social.name)}
+            <li>
+                <a href={social.link} rel="external" class="hover:underline">{social.name}</a>
+            </li>
+        {/each}
+    </ul>
 </section>
