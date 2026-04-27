@@ -12,6 +12,12 @@
     font-display: swap;
 }
 
+@layer base {
+    section {
+        @apply mt-28;
+    }
+}
+
 :root {
     /* Colors */
     --color-primary: #6366f1;

@@ -13,7 +13,7 @@
 <div class="container mx-auto flex h-screen justify-center px-4 sm:px-6 lg:px-8">
     <BracketedSection className="w-1/3 h-screen">
         <RaisedBorder />
-        <div class="h-full p-6 pl-12">
+        <div class="h-full p-8">
             <Aside />
         </div>
     </BracketedSection>
