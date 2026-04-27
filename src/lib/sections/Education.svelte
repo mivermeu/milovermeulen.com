@@ -4,7 +4,6 @@
 </script>
 
 <section id="education" class="mb-16">
-    <h2 class="mb-4 text-2xl font-medium text-white">education</h2>
     <div class="space-y-4">
         {#each [phd, master, bachelor] as education, index (index)}
             <div class="border-l-2 border-white/20 pl-4">
