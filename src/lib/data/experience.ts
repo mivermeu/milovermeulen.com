@@ -9,7 +9,9 @@ export const jobs = [
         title: 'Fullstack Software Engineer',
         start: new Date(2026, 0, 5),
         short_description: `
-            test
+            Increase critical page performance through simplification of frontend
+            and backend code. Ensure code quality with the introduction of industry
+            standard tools.
         `,
         details: '',
         tags: ['React', 'TypeScript', 'FastAPI', 'AWS']
@@ -20,10 +22,8 @@ export const jobs = [
         start: new Date(2024, 2, 11),
         stop: new Date(2026, 0, 2),
         short_description: `
-            As part of the physics group, I helped ensure that proton therapy
-            patients receive their planned care. I also managed the center's
-            clinical software and was involved in several research
-            projects.
+            Ensure that proton therapy patients receive their planned care.
+            Manage the center's clinical software and support research projects.
         `,
         details: '',
         tags: ['Python', 'Grafana', 'Raystation', 'Varian Eclipse']
@@ -34,9 +34,8 @@ export const jobs = [
         start: new Date(2021, 6, 1),
         stop: new Date(2023, 6, 1),
         short_description: `
-            I worked on a team to develop an interactive monitoring system for
-            EarthCARE and Biomass, two ESA satellite missions that aim to
-            measure and map changes in our planet's atmosphere and forests.
+            Develop an interactive monitoring system for two earth observation
+            satellite missions by the European Space Agency: EarthCARE and Biomass.
         `,
         details: '',
         tags: ['Django', 'Python', 'PostgreSQL', 'Docker', 'Grafana']
