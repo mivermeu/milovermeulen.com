@@ -1,4 +1,5 @@
 <script lang="ts">
+    import Indent from '$lib/components/Indent.svelte';
     import Raised from '$lib/components/Raised.svelte';
 
     let sections = $state<string[]>([]);
@@ -16,20 +17,24 @@
     </div>
 
     <nav class="mt-8">
-        <ul class="space-y-4">
-            {#each sections as section (section)}
-                <li>
-                    <Raised className="flex items-center gap-4 rounded-2xl px-4 py-2 align-middle">
-                        <div class="relative h-2 w-2 rounded-full bg-black"></div>
-                        <a
-                            href="#{section}"
-                            class="relative text-white/80 transition-colors hover:text-white"
-                            >{section}</a
+        <Indent className="p-2 rounded-3xl">
+            <ul class="space-y-4">
+                {#each sections as section (section)}
+                    <li>
+                        <Raised
+                            className="flex items-center gap-4 rounded-2xl px-4 py-2 align-middle"
                         >
-                    </Raised>
-                </li>
-            {/each}
-        </ul>
+                            <div class="relative h-2 w-2 rounded-full bg-black"></div>
+                            <a
+                                href="#{section}"
+                                class="relative text-white/80 transition-colors hover:text-white"
+                                >{section}</a
+                            >
+                        </Raised>
+                    </li>
+                {/each}
+            </ul>
+        </Indent>
     </nav>
 
     <div class="text-xs text-white/40">
