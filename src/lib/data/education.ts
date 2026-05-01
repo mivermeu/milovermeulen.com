@@ -13,7 +13,7 @@ import { nikhef, ru, goteborg, felix, cern, uh } from '$lib/data/companies';
 
 export const phd: EducationEntry = {
     companies: [nikhef, cern, uh],
-    name: 'PhD Particle Physics',
+    title: 'PhD Particle Physics',
     start: new Date(2016, 9, 1),
     stop: new Date(2021, 2, 1),
     description: `
@@ -30,7 +30,7 @@ export const phd: EducationEntry = {
 
 export const master: EducationEntry = {
     companies: [ru],
-    name: "Master's Physics and Astronomy",
+    title: "Master's Physics and Astronomy",
     start: new Date(2014, 8, 1),
     stop: new Date(2016, 8, 1),
     description: `
@@ -47,7 +47,7 @@ export const master: EducationEntry = {
 
 export const bachelor: EducationEntry = {
     companies: [ru, felix, goteborg],
-    name: "Bachelor's Physics and Astronomy",
+    title: "Bachelor's Physics and Astronomy",
     start: new Date(2013, 8, 1),
     stop: new Date(2014, 8, 1),
     description: `

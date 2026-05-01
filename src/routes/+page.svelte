@@ -6,7 +6,6 @@
     import Experience from '$lib/sections/Experience.svelte';
     import Contact from '$lib/sections/Contact.svelte';
     import Aside from '$lib/sections/Aside.svelte';
-    import Education from '$lib/sections/Education.svelte';
     import RaisedBorder from '$lib/components/RaisedBorder.svelte';
 </script>
 
@@ -24,7 +23,6 @@
             <Noise />
             <About />
             <Experience />
-            <Education />
             <Projects />
             <Contact />
         </div>

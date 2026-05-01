@@ -21,7 +21,7 @@ export type ExperienceEntry = {
     // Custom start/stop text that takes precedence over dates.
     start_text?: string;
     stop_text?: string;
-    short_description: string;
+    description: string;
     details?: string;
     href?: string;
     tags: string[];
@@ -35,7 +35,7 @@ export type Thesis = {
 
 export type EducationEntry = {
     companies: Company[];
-    name: string;
+    title: string;
     start: Date;
     stop: Date;
     description: string;

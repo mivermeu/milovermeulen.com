@@ -8,7 +8,7 @@ export const jobs = [
         companies: [realself],
         title: 'Fullstack Software Engineer',
         start: new Date(2026, 0, 5),
-        short_description: `
+        description: `
             Increase critical page performance through simplification of frontend
             and backend code. Ensure code quality with the introduction of industry
             standard tools.
@@ -21,7 +21,7 @@ export const jobs = [
         title: 'Clinical Software Engineer',
         start: new Date(2024, 2, 11),
         stop: new Date(2026, 0, 2),
-        short_description: `
+        description: `
             Ensure that proton therapy patients receive their planned care.
             Manage the center's clinical software and support research projects.
         `,
@@ -33,7 +33,7 @@ export const jobs = [
         title: 'Scientific Software Engineer',
         start: new Date(2021, 6, 1),
         stop: new Date(2023, 6, 1),
-        short_description: `
+        description: `
             Develop an interactive monitoring system for two earth observation
             satellite missions by the European Space Agency: EarthCARE and Biomass.
         `,
