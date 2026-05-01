@@ -10,7 +10,7 @@
 </script>
 
 <section id="experience" class="mb-16">
-    <div class="space-y-4">
+    <div class="space-y-10">
         {#each sorted_jobs as job, index (index)}
             <ExperienceItem {job} />
         {/each}

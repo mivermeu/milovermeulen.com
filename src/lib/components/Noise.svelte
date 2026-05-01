@@ -45,7 +45,7 @@
 </script>
 
 <div
-    class="pointer-events-none inset-0 z-1 transform-gpu bg-repeat mix-blend-screen select-none {isFixed
+    class="pointer-events-none inset-0 transform-gpu bg-repeat mix-blend-screen select-none {isFixed
         ? 'fixed'
         : 'absolute'} {className}"
     style:opacity

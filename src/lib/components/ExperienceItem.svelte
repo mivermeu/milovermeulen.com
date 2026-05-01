@@ -1,6 +1,7 @@
 <script lang="ts">
     import { month_plus_year } from '$lib/utils/datetime';
     import type { EducationEntry, ExperienceEntry } from '$lib/utils/types';
+    import InlineButton from './InlineButton.svelte';
 
     interface Props {
         className?: string;
@@ -13,10 +14,15 @@
     const job_stop_text = $derived(job.stop ? month_plus_year(job.stop) : 'Current');
 </script>
 
-<div class="border-l-2 border-white/20 pl-4 {className}">
+<div class="border-l border-white pl-4 {className}">
     <h3 class="text-lg font-medium text-white">{job.title.toLowerCase()}</h3>
-    <p class="text-sm text-white/50">
-        {job.companies.map((x) => x.name).join(' / ')} · {job_start_text} - {job_stop_text}
+    <p class="text-sm">
+        <span class="my-2 flex items-center gap-1">
+            {#each job.companies as company (company.name)}
+                <InlineButton title={company.name} href={company.website} />
+            {/each}
+            · {job_start_text} - {job_stop_text}
+        </span>
     </p>
-    <p class="mt-2 text-sm text-white/60">{job.description}</p>
+    <p>{job.description}</p>
 </div>

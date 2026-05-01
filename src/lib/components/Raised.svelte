@@ -7,6 +7,6 @@
     let { children, className = '' }: Props = $props();
 </script>
 
-<div class="border-2 border-black shadow-raised {className}">
+<span class="border-2 border-black shadow-raised {className}">
     {@render children?.()}
-</div>
+</span>
