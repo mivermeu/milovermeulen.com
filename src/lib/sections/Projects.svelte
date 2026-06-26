@@ -2,7 +2,7 @@
     import { projects } from '$lib/data/projects';
 </script>
 
-<section id="projects" class="mb-16">
+<section id="projects">
     <div class="space-y-6">
         {#each projects as project, index (index)}
             <div class="rounded-lg border border-white/10 p-6">

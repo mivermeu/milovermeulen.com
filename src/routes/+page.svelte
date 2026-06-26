@@ -4,12 +4,12 @@
     import About from '$lib/sections/About.svelte';
     import Projects from '$lib/sections/Projects.svelte';
     import Experience from '$lib/sections/Experience.svelte';
-    import Contact from '$lib/sections/Contact.svelte';
     import Aside from '$lib/sections/Aside.svelte';
     import RaisedBorder from '$lib/components/RaisedBorder.svelte';
 </script>
 
 <div class="container mx-auto flex h-screen justify-center px-4 sm:px-6 lg:px-8">
+    <Noise />
     <BracketedSection className="w-1/3 h-screen">
         <RaisedBorder />
         <div class="h-full p-8">
@@ -24,7 +24,6 @@
             <About />
             <Experience />
             <Projects />
-            <Contact />
         </div>
     </main>
 </div>

@@ -1,4 +1,4 @@
-<section id="about" class="mb-16">
+<section id="about">
     <p class="text-lg leading-relaxed">
         I like to work on meaningful challenges and have some fun along the way. In the past I've
         worked on particle detectors at CERN, ESA satellite missions, proton therapy machines in New

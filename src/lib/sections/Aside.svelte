@@ -1,13 +1,9 @@
 <script lang="ts">
     import Indent from '$lib/components/Indent.svelte';
     import Raised from '$lib/components/Raised.svelte';
+    import Contact from './Contact.svelte';
 
-    let sections = $state<string[]>([]);
-
-    $effect(() => {
-        const elements = document.querySelectorAll('section[id]');
-        sections = Array.from(elements).map((el) => el.id);
-    });
+    let sections = ['about', 'experience', 'projects'];
 </script>
 
 <aside class="flex h-full flex-col justify-between">
@@ -36,6 +32,8 @@
             </ul>
         </Indent>
     </nav>
+
+    <Contact />
 
     <div class="text-xs text-white/40">
         <p>© {new Date().getFullYear()} Milo Vermeulen</p>

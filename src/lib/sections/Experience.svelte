@@ -9,7 +9,7 @@
     });
 </script>
 
-<section id="experience" class="mb-16">
+<section id="experience">
     <div class="space-y-10">
         {#each sorted_jobs as job, index (index)}
             <ExperienceItem {job} />
@@ -17,7 +17,7 @@
     </div>
 </section>
 
-<section id="education" class="mb-16">
+<section id="education">
     <div class="space-y-4">
         {#each [phd] as education, index (index)}
             <ExperienceItem job={education} />

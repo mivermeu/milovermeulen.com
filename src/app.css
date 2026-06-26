@@ -18,6 +18,7 @@
 @layer base {
     section {
         @apply mt-28;
+        scroll-margin-top: 5rem;
     }
 
     p {
