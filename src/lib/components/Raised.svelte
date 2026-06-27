@@ -7,6 +7,8 @@
     let { children, className = '' }: Props = $props();
 </script>
 
-<span class="border-2 border-black shadow-raised {className}">
+<span
+    class="inline-flex items-center justify-center border-2 border-black shadow-raised {className}"
+>
     {@render children?.()}
 </span>

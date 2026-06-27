@@ -6,7 +6,7 @@ export const socials: Social[] = [
     {
         name: 'LinkedIn',
         link: 'https://www.linkedin.com/in/milo-vermeulen/',
-        icon: 'linkedin'
+        icon: 'linkedin_outline'
     },
     {
         name: 'GitHub',

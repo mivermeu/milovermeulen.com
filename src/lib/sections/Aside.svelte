@@ -1,5 +1,4 @@
 <script lang="ts">
-    import Indent from '$lib/components/Indent.svelte';
     import Raised from '$lib/components/Raised.svelte';
     import Contact from './Contact.svelte';
 
@@ -13,12 +12,12 @@
     </div>
 
     <nav class="mt-8">
-        <Indent className="p-2 rounded-3xl">
+        <div class="rounded-3xl p-2 shadow-indent">
             <ul class="space-y-4">
                 {#each sections as section (section)}
                     <li>
                         <Raised
-                            className="flex items-center gap-4 rounded-2xl px-4 py-2 align-middle"
+                            className="flex items-center gap-4 rounded-2xl px-4 py-2 align-middle w-full justify-start"
                         >
                             <div class="relative h-2 w-2 rounded-full bg-black"></div>
                             <a
@@ -30,7 +29,7 @@
                     </li>
                 {/each}
             </ul>
-        </Indent>
+        </div>
     </nav>
 
     <Contact />

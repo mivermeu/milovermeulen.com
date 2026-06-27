@@ -21,7 +21,8 @@
         scroll-margin-top: 5rem;
     }
 
-    p {
+    p,
+    li {
         @apply text-white/80;
     }
 }
