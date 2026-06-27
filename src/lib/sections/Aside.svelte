@@ -1,5 +1,6 @@
 <script lang="ts">
     import Raised from '$lib/components/Raised.svelte';
+    import Rotator from '$lib/components/Rotator.svelte';
     import Contact from './Contact.svelte';
 
     let sections = ['about', 'experience', 'projects'];
@@ -18,7 +19,7 @@
                     <li>
                         <a
                             href="#{section}"
-                            class="text-brand-text relative transition-colors hover:text-brand-text-highlight"
+                            class="relative text-brand-text transition-colors hover:text-brand-text-highlight"
                         >
                             <Raised
                                 className="flex items-center gap-4 rounded-2xl px-4 py-2 align-middle w-full justify-start"
@@ -32,6 +33,8 @@
             </ul>
         </div>
     </nav>
+
+    <Rotator />
 
     <Contact />
 

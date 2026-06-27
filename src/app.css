@@ -46,6 +46,10 @@
     li {
         @apply text-brand-text;
     }
+
+    main {
+        scroll-behavior: smooth;
+    }
 }
 
 :root {

@@ -9,7 +9,7 @@
                 <h3 class="mb-2 text-lg font-medium text-brand-text-highlight">
                     {project.name.toLowerCase()}
                 </h3>
-                <p class="text-brand-text text-sm">
+                <p class="text-sm text-brand-text">
                     {project.description}
                 </p>
             </div>

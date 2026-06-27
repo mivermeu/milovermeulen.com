@@ -6,6 +6,8 @@
     import Experience from '$lib/sections/Experience.svelte';
     import Aside from '$lib/sections/Aside.svelte';
     import RaisedBorder from '$lib/components/RaisedBorder.svelte';
+
+    import { pageState } from '$lib/state/page.svelte';
 </script>
 
 <div class="container mx-auto flex h-screen justify-center px-4 sm:px-6 lg:px-8">
@@ -17,7 +19,14 @@
         </div>
     </BracketedSection>
 
-    <main class="no-scrollbar z-10 max-w-prose overflow-y-auto scroll-smooth bg-brand-bg">
+    <main
+        class="z-10 h-screen max-w-prose overflow-y-auto bg-brand-bg"
+        onscroll={(e) => {
+            const target = e.currentTarget;
+            pageState.scrollY = target.scrollTop;
+            pageState.maxScrollY = target.scrollHeight - target.clientHeight;
+        }}
+    >
         <div class="relative p-8">
             <RaisedBorder />
             <Noise />
