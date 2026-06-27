@@ -20,7 +20,7 @@
         <span>{job_start_text}</span>
     </div>
     <div class="border-l border-white pl-4">
-        <h3 class="text-lg font-medium text-white">{job.title.toLowerCase()}</h3>
+        <h3 class="text-lg font-medium text-brand-text-highlight">{job.title.toLowerCase()}</h3>
         <p class="text-sm">
             <span class="my-2 flex items-center gap-1">
                 {#each job.companies as company (company.name)}

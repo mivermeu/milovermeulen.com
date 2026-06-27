@@ -7,8 +7,8 @@
 
 <aside class="flex h-full flex-col justify-between">
     <div class="mt-12">
-        <h1 class="text-4xl font-medium text-white">milo vermeulen</h1>
-        <p class="text-sm text-orange-500">μήλο / ميلو / ミロ / 밀로 / 美祿 / मिलो</p>
+        <h1 class="text-4xl font-medium text-brand-text-highlight">milo vermeulen</h1>
+        <p class="text-sm text-brand-text-accent">μήλο / ميلو / ミロ / 밀로 / 美祿 / मिलो</p>
     </div>
 
     <nav class="mt-8">
@@ -16,16 +16,17 @@
             <ul class="space-y-4">
                 {#each sections as section (section)}
                     <li>
-                        <Raised
-                            className="flex items-center gap-4 rounded-2xl px-4 py-2 align-middle w-full justify-start"
+                        <a
+                            href="#{section}"
+                            class="text-brand-text relative transition-colors hover:text-brand-text-highlight"
                         >
-                            <div class="relative h-2 w-2 rounded-full bg-black"></div>
-                            <a
-                                href="#{section}"
-                                class="relative text-white/80 transition-colors hover:text-white"
-                                >{section}</a
+                            <Raised
+                                className="flex items-center gap-4 rounded-2xl px-4 py-2 align-middle w-full justify-start"
                             >
-                        </Raised>
+                                <div class="relative h-2 w-2 rounded-full bg-black"></div>
+                                {section}
+                            </Raised>
+                        </a>
                     </li>
                 {/each}
             </ul>
@@ -34,7 +35,7 @@
 
     <Contact />
 
-    <div class="text-xs text-white/40">
+    <div class="text-xs text-brand-text-highlight/40">
         <p>© {new Date().getFullYear()} Milo Vermeulen</p>
     </div>
 </aside>

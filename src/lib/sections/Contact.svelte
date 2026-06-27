@@ -11,7 +11,10 @@
                 <li>
                     <a href={social.link} rel="external" aria-label="Visit {social.name}">
                         <Raised className="rounded-full p-4">
-                            <Icon icon_name={social.icon} class="h-5 w-5 fill-white stroke-white" />
+                            <Icon
+                                icon_name={social.icon}
+                                class="fill-brand-text stroke-brand-text h-5 w-5"
+                            />
                         </Raised>
                     </a>
                 </li>
