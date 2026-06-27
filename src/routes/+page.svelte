@@ -17,7 +17,7 @@
         </div>
     </BracketedSection>
 
-    <main class="z-10 max-w-prose overflow-y-auto scroll-smooth bg-brand-bg">
+    <main class="no-scrollbar z-10 max-w-prose overflow-y-auto scroll-smooth bg-brand-bg">
         <div class="relative p-8">
             <RaisedBorder />
             <Noise />
