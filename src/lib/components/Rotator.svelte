@@ -6,6 +6,9 @@
     const startAngle = 45;
     const angleRange = 90;
 
+    const tickStyle =
+        'absolute top-0 left-1/2 h-3 w-0.5 -translate-x-1/2 -translate-y-5 bg-brand-text';
+
     const fractionToRotation = (fraction: number): number => {
         const fractionAngle = startAngle + fraction * angleRange;
         return Math.min(startAngle + angleRange, Math.max(startAngle, fractionAngle));
@@ -46,7 +49,6 @@
             <Noise className="rounded-full" />
             <div class="absolute mt-2 h-5 w-0.5 bg-brand-text"></div>
             <div class="absolute bottom-0 mb-2 h-5 w-0.5 bg-brand-text"></div>
-            <p class="m-auto" style:transform="rotate(-90deg)">section</p>
         </div>
         <!-- Indicator ticks -->
         {#each Object.entries(fractions) as [id, fraction] (id)}
@@ -54,9 +56,7 @@
                 class="absolute top-0 left-0 h-full w-full"
                 style:transform="rotate({fractionToRotation(fraction)}deg)"
             >
-                <div
-                    class="absolute top-0 left-1/2 h-3 w-0.5 -translate-x-1/2 -translate-y-5 bg-brand-text"
-                ></div>
+                <div class={tickStyle}></div>
                 <a
                     class="absolute -top-7 left-1/2 origin-left -translate-y-3"
                     style:transform="rotate(-{fractionToRotation(fraction)}deg)"
@@ -67,5 +67,15 @@
                 </a>
             </div>
         {/each}
+        <!-- Total range indicator (only works for angleRange=90) -->
+        {#each [startAngle + 180, startAngle + angleRange + 180] as angle (angle)}
+            <div class="absolute top-0 left-0 h-full w-full" style:transform="rotate({angle}deg)">
+                <div class={tickStyle}></div>
+            </div>
+        {/each}
+        <div
+            class="absolute top-1/2 left-1/2 h-[calc(100%+2.5rem)] w-[calc(100%+2.5rem)] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-brand-text [clip-path:polygon(50%_0%,100%_0%,100%_50%,50%_50%)]"
+            style:transform="rotate({startAngle + 180}deg)"
+        ></div>
     </Raised>
 </div>
