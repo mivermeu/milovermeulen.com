@@ -5,20 +5,16 @@
 </script>
 
 <section id="contact">
-    <div class="w-fit rounded-full p-2 shadow-indent">
-        <ul class="flex justify-start gap-2">
-            {#each socials as social (social.name)}
-                <li>
-                    <a href={social.link} rel="external" aria-label="Visit {social.name}">
-                        <Raised className="rounded-full p-4">
-                            <Icon
-                                icon_name={social.icon}
-                                class="fill-brand-text stroke-brand-text h-5 w-5"
-                            />
-                        </Raised>
-                    </a>
-                </li>
-            {/each}
-        </ul>
+    <div class="flex w-fit gap-2 rounded-full p-2 shadow-indent">
+        {#each socials as social (social.name)}
+            <a href={social.link} rel="external" aria-label="Visit {social.name}">
+                <Raised className="rounded-full p-4">
+                    <Icon
+                        icon_name={social.icon}
+                        class="h-5 w-5 fill-brand-text stroke-brand-text"
+                    />
+                </Raised>
+            </a>
+        {/each}
     </div>
 </section>
