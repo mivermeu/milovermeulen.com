@@ -2,9 +2,17 @@
     import { pageState } from '$lib/state/page.svelte';
     import Raised from './Raised.svelte';
     import Noise from './Noise.svelte';
+    import Icon from './Icon.svelte';
+    import type { icons } from '$lib/data/icons';
 
     const startAngle = 45;
     const angleRange = 90;
+
+    const sectionIcons: Record<string, keyof typeof icons> = {
+        about: 'user',
+        experience: 'suitcase',
+        projects: 'lightbulb'
+    };
 
     const tickStyle =
         'absolute top-0 left-1/2 h-3 w-0.5 -translate-x-1/2 -translate-y-5 bg-brand-text';
@@ -58,12 +66,15 @@
             >
                 <div class={tickStyle}></div>
                 <a
-                    class="absolute -top-7 left-1/2 origin-left -translate-y-3"
+                    class="absolute -top-7 left-1/2 origin-center -translate-x-1/2 -translate-y-8"
                     style:transform="rotate(-{fractionToRotation(fraction)}deg)"
                     href={`#${id}`}
                     aria-label={id}
                 >
-                    {id}
+                    <Icon
+                        icon_name={sectionIcons[id]}
+                        class="h-7 w-7 fill-brand-text stroke-brand-text"
+                    />
                 </a>
             </div>
         {/each}
