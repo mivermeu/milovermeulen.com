@@ -8,6 +8,14 @@
     import RaisedBorder from '$lib/components/RaisedBorder.svelte';
 
     import { pageState } from '$lib/state/page.svelte';
+    import { onMount } from 'svelte';
+
+    onMount(() => {
+        const main = document.querySelector('main');
+        if (main) {
+            pageState.maxScrollY = main.scrollHeight - main.clientHeight;
+        }
+    });
 </script>
 
 <div class="container mx-auto flex h-screen justify-center px-4 sm:px-6 lg:px-8">
