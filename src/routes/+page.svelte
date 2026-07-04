@@ -18,7 +18,7 @@
     });
 </script>
 
-<div class="container mx-auto flex h-screen justify-center px-4 sm:px-6 lg:px-8">
+<div class="container mx-auto flex h-screen justify-center px-4 xl:px-8">
     <Noise />
     <BracketedSection className="w-1/3 h-screen">
         <RaisedBorder />

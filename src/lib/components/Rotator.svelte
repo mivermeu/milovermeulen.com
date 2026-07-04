@@ -47,8 +47,10 @@
     );
 </script>
 
-<div class="h-40 w-40 rounded-full p-0.5 shadow-indent">
-    <Raised className="h-full w-full rounded-full bg-brand-bg relative overflow-visible">
+<div class="mr-10 aspect-square w-full max-w-40 rounded-full shadow-indent">
+    <Raised
+        className="h-[calc(100%-0.25rem)] aspect-square m-0.5 rounded-full bg-brand-bg relative overflow-visible"
+    >
         <!-- Dial -->
         <div
             style:transform="rotate({dialRotation}deg)"
