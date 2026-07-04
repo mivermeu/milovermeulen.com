@@ -9,10 +9,8 @@
         <p class="text-sm text-brand-text-accent">μήλο / ميلو / ミロ / 밀로 / 美祿 / मिलो</p>
     </div>
 
-    <div class="flex flex-col items-center gap-15 xl:flex-row">
-        <Contact />
-        <Rotator />
-    </div>
+    <Contact />
+    <Rotator />
 
     <div class="mt-auto text-xs text-brand-text-highlight/40">
         <p>© {new Date().getFullYear()} Milo Vermeulen</p>

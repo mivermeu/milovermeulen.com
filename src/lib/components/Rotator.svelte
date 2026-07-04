@@ -5,8 +5,9 @@
     import Icon from './Icon.svelte';
     import type { icons } from '$lib/data/icons';
 
-    const startAngle = 45;
+    const startAngle = 0;
     const angleRange = 90;
+    const sweepStart = 135;
 
     const sectionIcons: Record<string, keyof typeof icons> = {
         about: 'user',
@@ -14,8 +15,9 @@
         projects: 'lightbulb'
     };
 
-    const tickStyle =
-        'absolute top-0 left-1/2 h-3 w-0.5 -translate-x-1/2 -translate-y-5 bg-brand-text';
+    const outerTickStyle =
+        'absolute top-0 left-1/2 h-3 w-0.5 -translate-x-1/2 -translate-y-6 bg-brand-text';
+    const innerTickStyle = 'absolute top-0 left-1/2 mt-2 h-3 w-0.5 -translate-x-1/2 bg-brand-text';
 
     const fractionToRotation = (fraction: number): number => {
         const fractionAngle = startAngle + fraction * angleRange;
@@ -47,48 +49,47 @@
     );
 </script>
 
-<div class="mr-10 aspect-square w-full max-w-40 rounded-full shadow-indent">
+<div class="aspect-square w-full rounded-full shadow-indent">
     <Raised
-        className="h-[calc(100%-0.25rem)] aspect-square m-0.5 rounded-full bg-brand-bg relative overflow-visible"
+        className="h-[calc(100%-0.5rem)] aspect-square m-1 rounded-full bg-brand-bg relative overflow-visible"
     >
         <!-- Dial -->
-        <div
-            style:transform="rotate({dialRotation}deg)"
-            class="flex h-full w-full items-start justify-center rounded-full"
-        >
+        <div style:transform="rotate({dialRotation}deg)" class="h-full w-full rounded-full">
             <Noise className="rounded-full" />
-            <div class="absolute mt-2 h-5 w-0.5 bg-brand-text"></div>
-            <div class="absolute bottom-0 mb-2 h-5 w-0.5 bg-brand-text"></div>
-        </div>
-        <!-- Indicator ticks -->
-        {#each Object.entries(fractions) as [id, fraction] (id)}
-            <div
-                class="absolute top-0 left-0 h-full w-full"
-                style:transform="rotate({fractionToRotation(fraction)}deg)"
-            >
-                <div class={tickStyle}></div>
-                <a
-                    class="absolute -top-7 left-1/2 origin-center -translate-x-1/2 -translate-y-8"
-                    style:transform="rotate(-{fractionToRotation(fraction)}deg)"
-                    href={`#${id}`}
-                    aria-label={id}
-                >
-                    <Icon
-                        icon_name={sectionIcons[id]}
-                        class="h-7 w-7 fill-brand-text stroke-brand-text"
-                    />
-                </a>
+            <div class="h-full w-full" style="transform: rotate({sweepStart}deg)">
+                <div class={innerTickStyle}></div>
             </div>
-        {/each}
+            <!-- Indicator ticks -->
+            {#each Object.entries(fractions) as [id, fraction] (id)}
+                <div
+                    class="absolute top-0 left-0 h-full w-full"
+                    style:transform="rotate(-{fractionToRotation(fraction)}deg)"
+                >
+                    <div class={innerTickStyle}></div>
+                    <a
+                        class="absolute top-7 left-1/2 origin-center -translate-x-1/2"
+                        href={`#${id}`}
+                        aria-label={id}
+                    >
+                        <Icon
+                            icon_name={sectionIcons[id]}
+                            class="h-7 w-7 fill-brand-text stroke-brand-text"
+                        />
+                    </a>
+                </div>
+            {/each}
+        </div>
+        <!-- Top tick -->
+        <div class={outerTickStyle}></div>
         <!-- Total range indicator (only works for angleRange=90) -->
-        {#each [startAngle + 180, startAngle + angleRange + 180] as angle (angle)}
+        {#each [startAngle + sweepStart, startAngle + angleRange + sweepStart] as angle (angle)}
             <div class="absolute top-0 left-0 h-full w-full" style:transform="rotate({angle}deg)">
-                <div class={tickStyle}></div>
+                <div class={outerTickStyle}></div>
             </div>
         {/each}
         <div
-            class="absolute top-1/2 left-1/2 h-[calc(100%+2.5rem)] w-[calc(100%+2.5rem)] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-brand-text [clip-path:polygon(50%_0%,100%_0%,100%_50%,50%_50%)]"
-            style:transform="rotate({startAngle + 180}deg)"
+            class="absolute top-1/2 left-1/2 h-[calc(100%+3rem)] w-[calc(100%+3rem)] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-brand-text [clip-path:polygon(50%_0%,100%_0%,100%_50%,50%_50%)]"
+            style:transform="rotate({startAngle + sweepStart}deg)"
         ></div>
     </Raised>
 </div>

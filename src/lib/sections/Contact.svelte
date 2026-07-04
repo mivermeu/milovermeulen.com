@@ -4,7 +4,7 @@
     import { socials } from '$lib/data/socials';
 </script>
 
-<div class="flex flex-row gap-2 rounded-full p-2 shadow-indent xl:flex-col">
+<div class="flex w-fit flex-row gap-2 rounded-full p-2 shadow-indent">
     {#each socials as social (social.name)}
         <a href={social.link} rel="external" aria-label="Visit {social.name}">
             <Raised className="rounded-full p-3 xl:p-4">
