@@ -23,16 +23,9 @@
         bracketOffset = 20
     }: Props = $props();
 
-    // Map the 'rounded' prop to real Tailwind rounded-corner classes
-    const roundingMap: Record<NonNullable<Props['bracketRounded']>, string> = {
-        none: 'rounded-none',
-        sm: 'rounded-br-sm',
-        md: 'rounded-br-md',
-        lg: 'rounded-br-lg',
-        full: 'rounded-br-full'
-    };
-
-    const roundedClass = $derived(roundingMap[bracketRounded]);
+    const roundedClass = $derived(
+        bracketRounded === 'none' ? 'rounded-none' : `rounded-br-${bracketRounded}`
+    );
 
     // Handle the bracket dimensions/positioning
     const sharedProps = $derived({

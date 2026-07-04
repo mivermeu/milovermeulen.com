@@ -1,8 +1,8 @@
 import type { EducationEntry } from '$lib/utils/types';
-import { nikhef, ru, goteborg, felix, cern, uh } from '$lib/data/companies';
+import { companies } from '$lib/data/companies';
 
 export const phd: EducationEntry = {
-    companies: [nikhef, cern, uh],
+    companies: [companies.nikhef, companies.cern, companies.uh],
     title: 'PhD Particle Physics',
     start: new Date(2016, 9, 1),
     stop: new Date(2021, 2, 1),
@@ -17,7 +17,7 @@ export const phd: EducationEntry = {
 };
 
 export const master: EducationEntry = {
-    companies: [ru],
+    companies: [companies.ru],
     title: "Master's Physics and Astronomy",
     start: new Date(2014, 8, 1),
     stop: new Date(2016, 8, 1),
@@ -32,7 +32,7 @@ export const master: EducationEntry = {
 };
 
 export const bachelor: EducationEntry = {
-    companies: [ru, felix, goteborg],
+    companies: [companies.ru, companies.felix, companies.goteborg],
     title: "Bachelor's Physics and Astronomy",
     start: new Date(2013, 8, 1),
     stop: new Date(2014, 8, 1),

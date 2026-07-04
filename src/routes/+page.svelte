@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
     import BracketedSection from '$lib/components/BracketedSection.svelte';
     import Noise from '$lib/components/Noise.svelte';
     import About from '$lib/sections/About.svelte';
@@ -8,9 +8,8 @@
     import RaisedBorder from '$lib/components/RaisedBorder.svelte';
 
     import { pageState } from '$lib/state/page.svelte';
-    import { onMount } from 'svelte';
 
-    onMount(() => {
+    $effect(() => {
         const main = document.querySelector('main');
         if (main) {
             pageState.maxScrollY = main.scrollHeight - main.clientHeight;

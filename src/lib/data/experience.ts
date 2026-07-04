@@ -1,11 +1,11 @@
 // Work experience.
 
 import type { ExperienceEntry } from '$lib/utils/types';
-import { realself, nypc, stcorp } from '$lib/data/companies';
+import { companies } from '$lib/data/companies';
 
 export const jobs = [
     {
-        companies: [realself],
+        companies: [companies.realself],
         title: 'Fullstack Software Engineer',
         start: new Date(2026, 0, 5),
         description: `
@@ -17,7 +17,7 @@ export const jobs = [
         tags: ['React', 'TypeScript', 'FastAPI', 'AWS']
     },
     {
-        companies: [nypc],
+        companies: [companies.nypc],
         title: 'Clinical Software Engineer',
         start: new Date(2024, 2, 11),
         stop: new Date(2026, 0, 2),
@@ -29,7 +29,7 @@ export const jobs = [
         tags: ['Python', 'Grafana', 'Raystation', 'Varian Eclipse']
     },
     {
-        companies: [stcorp],
+        companies: [companies.stcorp],
         title: 'Scientific Software Engineer',
         start: new Date(2021, 6, 1),
         stop: new Date(2023, 6, 1),
