@@ -66,16 +66,10 @@
                     style:transform="rotate(-{fractionToRotation(fraction)}deg)"
                 >
                     <div class={innerTickStyle}></div>
-                    <a
-                        class="absolute top-7 left-1/2 origin-center -translate-x-1/2"
-                        href={`#${id}`}
-                        aria-label={id}
-                    >
-                        <Icon
-                            icon_name={sectionIcons[id]}
-                            class="h-7 w-7 fill-brand-text stroke-brand-text"
-                        />
-                    </a>
+                    <Icon
+                        icon_name={sectionIcons[id]}
+                        class="absolute top-7 left-1/2 z-10 h-7 w-7 origin-center -translate-x-1/2 fill-brand-text stroke-brand-text"
+                    />
                 </div>
             {/each}
         </div>
