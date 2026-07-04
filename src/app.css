@@ -20,7 +20,7 @@
 
 @font-face {
     font-family: 'AtkinsonHyperlegibleMono';
-    src: url('/fonts/AtkinsonHyperlegibleMono-VariableFont_wght.tff') format('tff');
+    src: url('/fonts/AtkinsonHyperlegibleMono-VariableFont_wght.ttf') format('truetype');
     font-weight: 200 800;
     font-style: normal;
     font-display: swap;
@@ -38,7 +38,7 @@
 
 @layer base {
     section {
-        @apply mt-28;
+        @apply mt-40;
         scroll-margin-top: 5rem;
     }
 
@@ -53,10 +53,6 @@
 }
 
 :root {
-    /* Typography */
-    --font-size-huge: 5rem;
-    --font-size-tiny: 0.75rem;
-
     font-family: var(--font-uncut);
     font-weight: 300;
     font-synthesis: none;
