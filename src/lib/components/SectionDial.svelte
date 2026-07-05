@@ -57,7 +57,7 @@
 </script>
 
 <DragDial
-    class="aspect-square w-full shadow-indent"
+    class="aspect-square w-full max-w-60 shadow-indent"
     min={startAngle}
     max={startAngle + angleRange}
     {sensitivity}
