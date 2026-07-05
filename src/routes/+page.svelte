@@ -1,11 +1,11 @@
 <script lang="ts">
     import BracketedSection from '$lib/components/BracketedSection.svelte';
-    import Noise from '$lib/components/Noise.svelte';
+    import Noise from '$lib/components/elements/Noise.svelte';
     import About from '$lib/sections/About.svelte';
     import Projects from '$lib/sections/Projects.svelte';
     import Experience from '$lib/sections/Experience.svelte';
     import Aside from '$lib/sections/Aside.svelte';
-    import RaisedBorder from '$lib/components/RaisedBorder.svelte';
+    import RaisedBorder from '$lib/components/elements/RaisedBorder.svelte';
 
     import { pageState } from '$lib/state/page.svelte';
 

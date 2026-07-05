@@ -1,6 +1,6 @@
 <script lang="ts">
-    import Raised from '$lib/components/Raised.svelte';
-    import Icon from '$lib/components/Icon.svelte';
+    import Raised from '$lib/components/elements/Raised.svelte';
+    import Icon from '$lib/components/elements/Icon.svelte';
     import { socials } from '$lib/data/socials';
 </script>
 

@@ -1,6 +1,6 @@
 <script lang="ts">
-    import Rotator from '$lib/components/Rotator.svelte';
-    import Contact from './Contact.svelte';
+    import SectionDial from '$lib/components/SectionDial.svelte';
+    import Contact from '$lib/components/Contact.svelte';
 </script>
 
 <aside class="flex h-full flex-col justify-start gap-20">
@@ -10,7 +10,7 @@
     </div>
 
     <Contact />
-    <Rotator />
+    <SectionDial />
 
     <div class="mt-auto text-xs text-brand-text-highlight/40">
         <p>© {new Date().getFullYear()} Milo Vermeulen</p>

@@ -1,5 +1,5 @@
 <script lang="ts">
-    import Raised from './Raised.svelte';
+    import Raised from '$lib/components/elements/Raised.svelte';
 
     interface Props {
         title: string;

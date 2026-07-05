@@ -1,9 +1,9 @@
 <script lang="ts">
     import { pageState } from '$lib/state/page.svelte';
-    import DragDial from './DragDial.svelte';
-    import Raised from './Raised.svelte';
-    import Noise from './Noise.svelte';
-    import Icon from './Icon.svelte';
+    import DragDial from '$lib/components/elements/DragDial.svelte';
+    import Raised from '$lib/components/elements/Raised.svelte';
+    import Noise from '$lib/components/elements/Noise.svelte';
+    import Icon from '$lib/components/elements/Icon.svelte';
     import type { icons } from '$lib/data/icons';
 
     interface Props {
