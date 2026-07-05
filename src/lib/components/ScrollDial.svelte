@@ -4,8 +4,14 @@
     import Raised from '$lib/components/elements/Raised.svelte';
     import Noise from '$lib/components/elements/Noise.svelte';
 
+    interface Props {
+        class?: string;
+    }
+
+    let { class: className }: Props = $props();
+
     const startAngle = 0;
-    const angleRange = 1080;
+    const angleRange = 720;
 
     const dialRotation = $derived(
         pageState.maxScrollY > 0
@@ -15,7 +21,7 @@
 </script>
 
 <DragDial
-    class="aspect-square w-30 shadow-indent"
+    class="aspect-square w-full shadow-indent {className}"
     min={startAngle}
     max={startAngle + angleRange}
     aria-label="Fast scroll"

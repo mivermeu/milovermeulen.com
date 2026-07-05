@@ -7,10 +7,11 @@
     import type { icons } from '$lib/data/icons';
 
     interface Props {
+        class?: string;
         sensitivity?: number;
     }
 
-    let { sensitivity = 1 }: Props = $props();
+    let { class: className, sensitivity = 1 }: Props = $props();
 
     const startAngle = 0;
     const angleRange = 90;
@@ -24,7 +25,8 @@
 
     const outerTickStyle =
         'absolute top-0 left-1/2 h-3 w-0.5 -translate-x-1/2 -translate-y-6 bg-brand-text';
-    const innerTickStyle = 'absolute top-0 left-1/2 mt-2 h-3 w-0.5 -translate-x-1/2 bg-brand-text';
+    const innerTickStyle =
+        'absolute top-1/20 left-1/2 aspect-square rounded-full w-[0.2rem] -translate-x-1/2 bg-brand-text';
 
     const fractionToRotation = (fraction: number): number => {
         const fractionAngle = startAngle + fraction * angleRange;
@@ -57,7 +59,7 @@
 </script>
 
 <DragDial
-    class="aspect-square w-full max-w-60 shadow-indent"
+    class="aspect-square w-full shadow-indent {className}"
     min={startAngle}
     max={startAngle + angleRange}
     {sensitivity}
@@ -81,7 +83,7 @@
                     <div class={innerTickStyle}></div>
                     <Icon
                         icon_name={sectionIcons[id]}
-                        class="absolute top-7 left-1/2 z-10 h-7 w-7 origin-center -translate-x-1/2 fill-brand-text stroke-brand-text"
+                        class="absolute top-1/10 left-1/2 z-10 aspect-square h-1/6 origin-center -translate-x-1/2 fill-brand-text stroke-brand-text"
                     />
                 </div>
             {/each}

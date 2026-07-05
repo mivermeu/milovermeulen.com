@@ -10,11 +10,11 @@
         <p class="text-sm text-brand-text-accent">μήλο / ميلو / ミロ / 밀로 / 美祿 / मिलो</p>
     </div>
 
-    <SectionDial />
-    <div class="flex flex-col items-center gap-10 xl:flex-row-reverse">
-        <ScrollDial />
-        <Contact />
+    <div class="flex w-full flex-row items-center gap-3 xl:flex-row xl:gap-10">
+        <SectionDial class="max-w-40" />
+        <ScrollDial class="max-w-40" />
     </div>
+    <Contact />
 
     <div class="mt-auto text-xs text-brand-text-highlight/40">
         <p>© {new Date().getFullYear()} Milo Vermeulen</p>
