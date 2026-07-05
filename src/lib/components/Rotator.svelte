@@ -1,9 +1,16 @@
 <script lang="ts">
     import { pageState } from '$lib/state/page.svelte';
+    import DragDial from './DragDial.svelte';
     import Raised from './Raised.svelte';
     import Noise from './Noise.svelte';
     import Icon from './Icon.svelte';
     import type { icons } from '$lib/data/icons';
+
+    interface Props {
+        sensitivity?: number;
+    }
+
+    let { sensitivity = 1 }: Props = $props();
 
     const startAngle = 0;
     const angleRange = 90;
@@ -47,74 +54,14 @@
             ? fractionToRotation(pageState.scrollY / pageState.maxScrollY)
             : startAngle
     );
-
-    let dragging = $state(false);
-    let prevRawAngle = $state(0);
-    let dialElement: HTMLDivElement | undefined = $state();
-
-    function getAngleRad(clientX: number, clientY: number): number {
-        if (!dialElement) return 0;
-        const rect = dialElement.getBoundingClientRect();
-        const cx = rect.left + rect.width / 2;
-        const cy = rect.top + rect.height / 2;
-        return Math.atan2(clientX - cx, -(clientY - cy));
-    }
-
-    function currentDialAngle(): number {
-        return pageState.maxScrollY > 0
-            ? fractionToRotation(pageState.scrollY / pageState.maxScrollY)
-            : startAngle;
-    }
-
-    function setScrollFromDialAngle(dialAngle: number): void {
-        const fraction = (dialAngle - startAngle) / angleRange;
-        const scrollY = Math.round(fraction * pageState.maxScrollY);
-        const main = document.querySelector('main');
-        if (main) main.scrollTop = scrollY;
-        pageState.scrollY = scrollY;
-    }
-
-    function onPointerDown(e: PointerEvent): void {
-        e.preventDefault();
-        (e.target as HTMLElement).setPointerCapture(e.pointerId);
-        dragging = true;
-        prevRawAngle = getAngleRad(e.clientX, e.clientY);
-    }
-
-    function onPointerMove(e: PointerEvent): void {
-        if (!dragging) return;
-        const raw = getAngleRad(e.clientX, e.clientY);
-        let delta = raw - prevRawAngle;
-        if (delta > Math.PI) delta -= 2 * Math.PI;
-        if (delta < -Math.PI) delta += 2 * Math.PI;
-        prevRawAngle = raw;
-
-        const newAngle = Math.max(
-            startAngle,
-            Math.min(startAngle + angleRange, currentDialAngle() + (delta * 180) / Math.PI)
-        );
-        setScrollFromDialAngle(newAngle);
-    }
-
-    function onPointerUp(): void {
-        dragging = false;
-    }
 </script>
 
-<div
-    class="aspect-square w-full rounded-full shadow-indent select-none {dragging
-        ? 'cursor-grabbing'
-        : 'cursor-grab'}"
-    bind:this={dialElement}
-    onpointerdown={onPointerDown}
-    onpointermove={onPointerMove}
-    onpointerup={onPointerUp}
-    role="slider"
+<DragDial
+    class="aspect-square w-full shadow-indent"
+    min={startAngle}
+    max={startAngle + angleRange}
+    {sensitivity}
     aria-label="Scroll position"
-    aria-valuemin="0"
-    aria-valuemax={pageState.maxScrollY}
-    aria-valuenow={pageState.scrollY}
-    tabindex="0"
 >
     <Raised
         className="h-[calc(100%-0.5rem)] aspect-square m-1 rounded-full bg-brand-bg relative overflow-visible"
@@ -152,4 +99,4 @@
             style:transform="rotate({startAngle + sweepStart}deg)"
         ></div>
     </Raised>
-</div>
+</DragDial>
