@@ -5,7 +5,9 @@
     import Projects from '$lib/sections/Projects.svelte';
     import Experience from '$lib/sections/Experience.svelte';
     import Aside from '$lib/sections/Aside.svelte';
-    import RaisedBorder from '$lib/components/elements/RaisedBorder.svelte';
+    import SectionDial from '$lib/components/SectionDial.svelte';
+    import ScrollDial from '$lib/components/ScrollDial.svelte';
+    import Contact from '$lib/components/Contact.svelte';
 
     import { pageState } from '$lib/state/page.svelte';
 
@@ -17,17 +19,25 @@
     });
 </script>
 
-<div class="container mx-auto flex h-screen justify-center px-4 xl:px-8">
+<div
+    class="container mx-auto flex h-screen flex-col overflow-clip px-4 lg:flex-row lg:justify-center xl:px-8"
+>
     <Noise />
-    <BracketedSection className="w-1/3 h-screen">
-        <RaisedBorder />
+
+    <!-- Mobile header -->
+    <div class="shrink-0 py-4 lg:hidden">
+        <h1 class="text-4xl font-medium text-brand-text-highlight">milo vermeulen</h1>
+        <p class="text-sm text-brand-text-accent">μήλο / ميلو / ミロ / 밀로 / 美祿 / मिलो</p>
+    </div>
+
+    <BracketedSection className="hidden w-1/3 h-full lg:block">
         <div class="h-full p-8">
             <Aside />
         </div>
     </BracketedSection>
 
     <main
-        class="z-10 h-screen max-w-prose overflow-y-auto bg-brand-bg"
+        class="z-10 min-h-0 flex-1 overflow-y-auto rounded-md bg-brand-bg shadow-indent lg:max-w-prose lg:rounded-none"
         onscroll={(e) => {
             const target = e.currentTarget;
             pageState.scrollY = target.scrollTop;
@@ -35,11 +45,21 @@
         }}
     >
         <div class="relative p-8">
-            <RaisedBorder />
             <Noise />
             <About />
             <Experience />
             <Projects />
         </div>
     </main>
+
+    <!-- Mobile footer -->
+    <footer class="flex h-40 shrink-0 items-center justify-center gap-2 bg-brand-bg py-7 lg:hidden">
+        <div class="aspect-square h-full">
+            <SectionDial />
+        </div>
+        <Contact />
+        <div class="aspect-square h-full">
+            <ScrollDial />
+        </div>
+    </footer>
 </div>
