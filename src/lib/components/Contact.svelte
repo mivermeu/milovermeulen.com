@@ -24,7 +24,7 @@
             <Raised className="rounded-full p-3 xl:p-4">
                 <Icon
                     icon_name={social.icon}
-                    class="h-4 w-4 fill-brand-text stroke-brand-text xl:h-5 xl:w-5"
+                    class="aspect-square h-7 fill-brand-text stroke-brand-text"
                 />
             </Raised>
         </a>
