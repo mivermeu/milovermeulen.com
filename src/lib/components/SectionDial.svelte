@@ -7,11 +7,10 @@
     import type { icons } from '$lib/data/icons';
 
     interface Props {
-        class?: string;
         sensitivity?: number;
     }
 
-    let { class: className, sensitivity = 1 }: Props = $props();
+    let { sensitivity = 1 }: Props = $props();
 
     const startAngle = 0;
     const angleRange = 90;
@@ -59,7 +58,7 @@
 </script>
 
 <DragDial
-    class="aspect-square w-full shadow-indent {className}"
+    class="aspect-square w-full"
     min={startAngle}
     max={startAngle + angleRange}
     {sensitivity}
