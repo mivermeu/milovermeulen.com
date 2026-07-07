@@ -22,8 +22,6 @@
         projects: 'lightbulb'
     };
 
-    const outerTickStyle =
-        'absolute top-0 left-1/2 h-3 w-0.5 -translate-x-1/2 -translate-y-6 bg-brand-text';
     const innerTickStyle =
         'absolute top-1/20 left-1/2 aspect-square rounded-full w-[0.2rem] -translate-x-1/2 bg-brand-text';
 
@@ -88,15 +86,10 @@
             {/each}
         </div>
         <!-- Top tick -->
-        <div class={outerTickStyle}></div>
+        <div class="-translate-y-5 {innerTickStyle}"></div>
         <!-- Total range indicator (only works for angleRange=90) -->
-        {#each [startAngle + sweepStart, startAngle + angleRange + sweepStart] as angle (angle)}
-            <div class="absolute top-0 left-0 h-full w-full" style:transform="rotate({angle}deg)">
-                <div class={outerTickStyle}></div>
-            </div>
-        {/each}
         <div
-            class="absolute top-1/2 left-1/2 h-[calc(100%+3rem)] w-[calc(100%+3rem)] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-brand-text [clip-path:polygon(50%_0%,100%_0%,100%_50%,50%_50%)]"
+            class="absolute top-1/2 left-1/2 aspect-square h-[calc(100%+2rem)] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-brand-text [clip-path:polygon(50%_0%,100%_0%,100%_50%,50%_50%)]"
             style:transform="rotate({startAngle + sweepStart}deg)"
         ></div>
     </Raised>
