@@ -14,15 +14,15 @@
     const job_stop_text = $derived(job.stop ? month_plus_year(job.stop) : 'Current');
 </script>
 
-<div class="grid grid-cols-[auto_1fr] gap-4 {className}">
+<div class="grid grid-cols-[auto_1fr] gap-2 {className}">
     <div class="flex flex-col justify-between text-right text-xs whitespace-nowrap">
-        <span>{job_stop_text}</span>
-        <span>{job_start_text}</span>
+        <span class="rotate-180 [writing-mode:vertical-rl]">{job_stop_text}</span>
+        <span class="rotate-180 [writing-mode:vertical-rl]">{job_start_text}</span>
     </div>
     <div class="border-l border-white pl-4">
         <h3 class="text-lg font-medium text-brand-text-highlight">{job.title.toLowerCase()}</h3>
         <p class="text-sm">
-            <span class="my-2 flex items-center gap-1">
+            <span class="my-2 flex flex-wrap items-center gap-1">
                 {#each job.companies as company (company.name)}
                     <InlineButton title={company.name} href={company.website} />
                 {/each}

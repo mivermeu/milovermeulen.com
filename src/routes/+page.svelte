@@ -20,12 +20,12 @@
 </script>
 
 <div
-    class="container mx-auto flex h-screen flex-col overflow-clip px-4 lg:flex-row lg:justify-center xl:px-8"
+    class="container mx-auto flex h-screen flex-col overflow-clip px-0 lg:flex-row lg:justify-center xl:px-8"
 >
     <Noise />
 
     <!-- Mobile header -->
-    <div class="shrink-0 py-4 lg:hidden">
+    <div class="shrink-0 p-4 lg:hidden">
         <h1 class="text-4xl font-medium text-brand-text-highlight">milo vermeulen</h1>
         <p class="text-sm text-brand-text-accent">μήλο / ميلو / ミロ / 밀로 / 美祿 / मिलो</p>
     </div>
@@ -37,7 +37,7 @@
     </BracketedSection>
 
     <main
-        class="z-10 min-h-0 flex-1 overflow-y-auto rounded-md bg-brand-bg shadow-indent lg:max-w-prose lg:rounded-none"
+        class="z-10 min-h-0 flex-1 overflow-y-auto bg-brand-bg shadow-indent lg:max-w-prose"
         onscroll={(e) => {
             const target = e.currentTarget;
             pageState.scrollY = target.scrollTop;
