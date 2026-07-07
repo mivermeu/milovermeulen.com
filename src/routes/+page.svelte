@@ -54,11 +54,11 @@
 
     <!-- Mobile footer -->
     <footer class="flex h-40 shrink-0 items-center justify-center gap-2 bg-brand-bg py-7 lg:hidden">
-        <div class="aspect-square h-full">
+        <div class="aspect-square h-full rounded-full shadow-indent">
             <SectionDial />
         </div>
         <Contact />
-        <div class="aspect-square h-full">
+        <div class="aspect-square h-full rounded-full shadow-indent">
             <ScrollDial />
         </div>
     </footer>
