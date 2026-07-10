@@ -3,8 +3,10 @@
 @theme {
     --font-uncut: 'AtkinsonHyperlegibleMono', ui-monospace, monospace;
     --shadow-indent: inset -2px 1px 2px rgba(0, 0, 0, 0.8), -1px 0.5px 2px rgba(255, 255, 255, 0.8);
-    --shadow-raised:
+    --shadow-raised: inset -1px 0.5px 2px rgba(255, 255, 255, 0.8), -2px 1px 4px rgba(0, 0, 0, 0.8);
+    --shadow-hover:
         inset -1px 0.5px 2px rgba(255, 255, 255, 0.8), -1px 0.5px 2px rgba(0, 0, 0, 0.8);
+    --shadow-active: inset -0.5px 0.25px 1px rgba(255, 255, 255, 0.8);
 
     /* Brand Colors */
     --color-brand-bg: #222;

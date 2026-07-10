@@ -8,7 +8,7 @@
 </script>
 
 <span
-    class="inline-flex items-center justify-center border-2 border-black shadow-raised {className}"
+    class="inline-flex items-center justify-center border-2 border-black shadow-raised transition-shadow duration-200 hover:shadow-hover active:shadow-active {className}"
 >
     {@render children?.()}
 </span>
