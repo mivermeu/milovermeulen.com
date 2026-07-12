@@ -2,6 +2,8 @@ let _ctx: AudioContext | undefined;
 let _noiseBuffer: AudioBuffer | undefined;
 let _warm = false;
 
+const SCHEDULE_LOOKAHEAD = 0.003;
+
 function getCtx(): AudioContext {
     if (!_ctx) _ctx = new AudioContext({ latencyHint: 'interactive' });
     if (_ctx.state === 'suspended') {
@@ -16,6 +18,17 @@ function getCtx(): AudioContext {
         scheduleWarmUp();
     }
     return _ctx;
+}
+
+function getNoiseBuffer(ctx: AudioContext, minDuration: number): AudioBuffer {
+    if (_noiseBuffer && _noiseBuffer.duration >= minDuration) return _noiseBuffer;
+    const size = Math.max(ctx.sampleRate, Math.ceil(ctx.sampleRate * minDuration));
+    _noiseBuffer = ctx.createBuffer(1, size, ctx.sampleRate);
+    const data = _noiseBuffer.getChannelData(0);
+    for (let i = 0; i < size; i++) {
+        data[i] = Math.random() * 2 - 1;
+    }
+    return _noiseBuffer;
 }
 
 function scheduleWarmUp(): boolean {
@@ -54,16 +67,10 @@ export function playTick({ duration = 0.002, gain = 0.3, freq = 4200 }: TickOpti
     if (audioCtx.state !== 'running') return;
     if (!wasWarm && _warm) return;
 
-    if (!_noiseBuffer) {
-        _noiseBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate, audioCtx.sampleRate);
-        const data = _noiseBuffer.getChannelData(0);
-        for (let i = 0; i < data.length; i++) {
-            data[i] = Math.random() * 2 - 1;
-        }
-    }
+    const noiseBuffer = getNoiseBuffer(audioCtx, duration);
 
     const t = audioCtx.currentTime;
-    const offset = Math.random() * (_noiseBuffer.duration - duration);
+    const offset = Math.random() * (noiseBuffer.duration - duration);
 
     const g = audioCtx.createGain();
     g.gain.setValueAtTime(gain, t);
@@ -78,7 +85,7 @@ export function playTick({ duration = 0.002, gain = 0.3, freq = 4200 }: TickOpti
     osc.stop(t + duration);
 
     const noise = audioCtx.createBufferSource();
-    noise.buffer = _noiseBuffer;
+    noise.buffer = noiseBuffer;
 
     const filter = audioCtx.createBiquadFilter();
     filter.type = 'highpass';
@@ -113,4 +120,61 @@ export function playClick() {
 export function playChime() {
     playTone(1200, 0.08);
     playTone(1800, 0.08, 'sine', 0.06);
+}
+
+export interface ThockOptions {
+    duration?: number;
+    gain?: number;
+    pitchStart?: number;
+    pitchEnd?: number;
+    filterFrequency?: number;
+}
+
+export function playThock({
+    duration = 0.04,
+    gain = 0.4,
+    pitchStart = 600,
+    pitchEnd = 300,
+    filterFrequency = 3000
+}: ThockOptions = {}) {
+    const audioCtx = getCtx();
+    if (audioCtx.state !== 'running') return;
+
+    const noiseBuffer = getNoiseBuffer(audioCtx, duration);
+    const t = audioCtx.currentTime + SCHEDULE_LOOKAHEAD;
+
+    const osc = audioCtx.createOscillator();
+    const oscGain = audioCtx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(pitchStart, t);
+    osc.frequency.exponentialRampToValueAtTime(pitchEnd, t + duration * 0.4);
+
+    oscGain.gain.setValueAtTime(0.0001, t);
+    oscGain.gain.exponentialRampToValueAtTime(gain, t + 0.003);
+    oscGain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+
+    osc.connect(oscGain);
+    oscGain.connect(audioCtx.destination);
+
+    const noise = audioCtx.createBufferSource();
+    noise.buffer = noiseBuffer;
+
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = filterFrequency;
+    filter.Q.value = 0.7;
+
+    const noiseGain = audioCtx.createGain();
+    noiseGain.gain.setValueAtTime(0.0001, t);
+    noiseGain.gain.exponentialRampToValueAtTime(gain * 0.15, t + 0.002);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, t + duration * 0.3);
+
+    noise.connect(filter);
+    filter.connect(noiseGain);
+    noiseGain.connect(audioCtx.destination);
+
+    osc.start(t);
+    osc.stop(t + duration);
+    noise.start(t);
+    noise.stop(t + duration);
 }

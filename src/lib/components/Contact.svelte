@@ -2,6 +2,7 @@
     import Raised from '$lib/components/elements/Raised.svelte';
     import Icon from '$lib/components/elements/Icon.svelte';
     import { socials } from '$lib/data/socials';
+    import { playThock } from '$lib/audio/uiSound';
 
     interface Props {
         rotation?: number;
@@ -20,6 +21,7 @@
             rel="external"
             aria-label="Visit {social.name}"
             style="transform: rotate(-{rotation}deg);"
+            onclick={() => playThock()}
         >
             <Raised className="rounded-full p-1 lg:p-4">
                 <Icon
