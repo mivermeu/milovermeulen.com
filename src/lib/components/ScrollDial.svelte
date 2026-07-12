@@ -4,10 +4,6 @@
     import Raised from '$lib/components/elements/Raised.svelte';
     import Noise from '$lib/components/elements/Noise.svelte';
 
-    interface Props {}
-
-    let {}: Props = $props();
-
     const startAngle = 0;
     const angleRange = 720;
 

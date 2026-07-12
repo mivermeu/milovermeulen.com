@@ -10,12 +10,28 @@
     import Contact from '$lib/components/Contact.svelte';
 
     import { pageState } from '$lib/state/page.svelte';
+    import { playTick, attachAutoResume } from '$lib/audio/uiSound';
+
+    let _prevClick = 0;
+    const TOTAL_CLICKS = 8;
+
+function tick() {
+        if (pageState.maxScrollY <= 0) return;
+        const current = Math.round((pageState.scrollY / pageState.maxScrollY) * TOTAL_CLICKS);
+        if (current === _prevClick) return;
+        _prevClick = current;
+        playTick();
+    }
 
     $effect(() => {
         const main = document.querySelector('main');
         if (main) {
             pageState.maxScrollY = main.scrollHeight - main.clientHeight;
         }
+    });
+
+    $effect(() => {
+        return attachAutoResume();
     });
 </script>
 
@@ -42,6 +58,7 @@
             const target = e.currentTarget;
             pageState.scrollY = target.scrollTop;
             pageState.maxScrollY = target.scrollHeight - target.clientHeight;
+            tick();
         }}
     >
         <div class="relative p-8">
