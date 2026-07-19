@@ -8,13 +8,11 @@
         inset -1px 0.5px 2px rgba(255, 255, 255, 0.8), -1px 0.5px 2px rgba(0, 0, 0, 0.8);
     --shadow-active: inset -0.5px 0.25px 1px rgba(255, 255, 255, 0.8);
 
-    /* Brand Colors */
     --color-brand-bg: #222;
     --color-brand-primary: #6366f1;
     --color-brand-secondary: #333;
     --color-brand-accent: #f43f5e;
 
-    /* Text Colors */
     --color-brand-text: rgba(221, 221, 221, 0.8);
     --color-brand-text-highlight: #fff;
     --color-brand-text-accent: #ff6900;

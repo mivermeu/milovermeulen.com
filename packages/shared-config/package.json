@@ -1,0 +1,10 @@
+{
+    "name": "shared-config",
+    "private": true,
+    "exports": {
+        "./app.css": "./app.css"
+    },
+    "dependencies": {
+        "tailwindcss": "^4.2.2"
+    }
+}
