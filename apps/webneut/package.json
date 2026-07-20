@@ -8,7 +8,8 @@
         "build": "vite build",
         "preview": "vite preview --port 4174",
         "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-        "lint": "eslint ."
+        "lint": "eslint .",
+        "test": "vitest run"
     },
     "devDependencies": {
         "@sveltejs/adapter-static": "^3.0.10",
@@ -20,7 +21,8 @@
         "svelte-check": "^4.4.6",
         "tailwindcss": "^4.2.2",
         "typescript": "^6.0.2",
-        "vite": "^8.0.7"
+        "vite": "^8.0.7",
+        "vitest": "^4"
     },
     "dependencies": {
         "jszip": "^3.10.1",

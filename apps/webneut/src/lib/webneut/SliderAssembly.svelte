@@ -1,31 +1,20 @@
 <script lang="ts">
     import RangeSlider from '$lib/webneut/RangeSlider.svelte';
-    // import RangeSlider from 'svelte-range-slider-pips';
-    import { animating_parameter, oscillation_parameters } from '$lib/webneut/stores';
+    import { animatingParameter, makeRange as doMakeRange } from '$lib/webneut/state.svelte';
     import type { Parameter } from '$lib/webneut/types';
 
-    export let parameter: Parameter;
-    export let action_buttons: boolean = false;
+    let {
+        parameter = $bindable(),
+        action_buttons = false
+    }: { parameter: Parameter; action_buttons?: boolean } = $props();
 
-    function make_range(): void {
-        for (let osc_parameter of Object.values($oscillation_parameters)) {
-            if (osc_parameter.values.length > 1) {
-                osc_parameter.values = [osc_parameter.values[1]];
-            }
-        }
-        if (parameter.values[0] > 0) {
-            parameter.values = [0, parameter.values[0]];
-        } else {
-            parameter.values = [parameter.values[0], 0];
-        }
+    function make_range() {
+        doMakeRange(parameter);
     }
 
-    function toggle_animation(): void {
-        if ($animating_parameter === parameter) {
-            $animating_parameter = undefined;
-        } else {
-            $animating_parameter = parameter;
-        }
+    function toggle_animation() {
+        animatingParameter.current =
+            animatingParameter.current === parameter ? undefined : parameter;
     }
 </script>
 
@@ -35,14 +24,14 @@
             <button
                 class="slider-button"
                 disabled={parameter.values.length > 1}
-                on:click={toggle_animation}
+                onclick={toggle_animation}
             >
-                {$animating_parameter === parameter ? 'Stop' : 'Animate'}
+                {animatingParameter.current === parameter ? 'Stop' : 'Animate'}
             </button>
             <button
                 class="slider-button"
                 disabled={parameter.values.length > 1}
-                on:click={make_range}>Range</button
+                onclick={make_range}>Range</button
             >
         </div>
     {/if}
@@ -51,8 +40,8 @@
         <RangeSlider bind:parameter />
     </div>
     <div class="slider-inputs">
-        {#each parameter.values as value}
-            <input class="slider-input" bind:value type="number" />
+        {#each parameter.values as _, i}
+            <input class="slider-input" bind:value={parameter.values[i]} type="number" />
         {/each}
     </div>
 </div>

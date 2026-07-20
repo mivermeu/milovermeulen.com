@@ -1,113 +1,115 @@
 <script lang="ts">
     import Plot from 'svelte-plotly.js';
     import type { Layout, Data } from 'svelte-plotly.js';
-    import { oscillation_parameters, x_values, y_values } from '$lib/webneut/stores';
+    import { oscillationParameters, plotData } from '$lib/webneut/state.svelte';
     import { PlotType, type Parameter } from '$lib/webneut/types';
 
-    $: range_parameter = Object.values($oscillation_parameters).find(function (par: Parameter) {
-        return par.values.length > 1;
-    }) satisfies Parameter | undefined;
+    const rangeParameter = $derived(
+        Object.values(oscillationParameters).find((par: Parameter) => par.values.length > 1) as
+            Parameter | undefined
+    );
 
-    $: nustr = $oscillation_parameters.anti.values[0] > 0 ? '\u03BD' : '\u03BD&#773;' satisfies string;
-    $: fstr = $oscillation_parameters.nu.values[0] == 0 ? 'e' : $oscillation_parameters.nu.values[0] == 1 ? '\u03BC' : '\u03C4' satisfies string;
-
-    $: linear_layout = {
-        font: { family: 'serif', size: 16 },
-        xaxis: { title: { text: range_parameter ? range_parameter.label : '', standoff: 15 } },
-        title: {
-            text: 'P(' + nustr + '<sub>' + fstr + '</sub>' + '\u2192' + nustr + '<sub>x</sub>)',
-            x: 0,
-            xanchor: 'left',
-            yanchor: 'bottom',
-            xref: 'paper',
-            yref: 'paper'
-        },
-        showlegend: true,
-        legend: {
-            orientation: 'h',
-            x: 1,
-            y: 1,
-            xanchor: 'right',
-            yanchor: 'bottom',
-            font: { family: 'serif', size: 20 }
-        },
-        margin: {
-            b: 60,
-            t: 30,
-            l: 40,
-            r: 20,
-            pad: 5
-        }
-    } satisfies Partial<Layout>;
+    const nustr = $derived(oscillationParameters.anti.values[0] > 0 ? '\u03BD' : '\u03BD&#773;');
+    const fstr = $derived(
+        oscillationParameters.nu.values[0] == 0
+            ? 'e'
+            : oscillationParameters.nu.values[0] == 1
+              ? '\u03BC'
+              : '\u03C4'
+    );
 
     function makeTernAxis(title: string, tickangle: number) {
         return {
-            title: title,
+            title,
             titlefont: { size: 20 },
-            tickangle: tickangle,
+            tickangle,
             tickfont: { size: 15 },
-            tickcolor: "rgba(0,0,0,0)",
+            tickcolor: 'rgba(0,0,0,0)',
             ticklen: 5,
             showline: true,
-            showgrid: true,
+            showgrid: true
         };
     }
 
-    $: ternary_layout = {
-        ternary: {
-            sum: 1,
-            aaxis: makeTernAxis(nustr + "<sub>e</sub>", 0),
-            baxis: makeTernAxis(nustr + "<sub>\u03BC</sub>", 45),
-            caxis: makeTernAxis(nustr + "<sub>\u03C4</sub>", -45),
-        },
-        margin: {
-            l: 40,
-            r: 40,
-            b: 50,
-            t: 50,
-        },
-        font: {
-            family: "serif"
+    const isLinear = $derived(oscillationParameters.plot_type.values[0] === PlotType.Linear);
+
+    const data = $derived.by(() => {
+        if (!isLinear) {
+            return [
+                {
+                    type: 'scatterternary' as const,
+                    mode: 'lines' as const,
+                    a: plotData.y[0],
+                    b: plotData.y[1],
+                    c: plotData.y[2]
+                }
+            ] as Data[];
         }
-    } satisfies Partial<Layout>
 
-    $: linear_data = [
-        {
-            x: $x_values,
-            y: $y_values[0],
-            name: nustr + '<sub>e</sub>',
-            line: {
-                color: 'green'
+        return [
+            {
+                x: plotData.x,
+                y: plotData.y[0],
+                name: nustr + '<sub>e</sub>',
+                line: { color: 'green' }
+            },
+            {
+                x: plotData.x,
+                y: plotData.y[1],
+                name: nustr + '<sub>\u03BC</sub>',
+                line: { color: 'blue' }
+            },
+            {
+                x: plotData.x,
+                y: plotData.y[2],
+                name: nustr + '<sub>\u03C4</sub>',
+                line: { color: 'red' }
             }
-        },
-        {
-            x: $x_values,
-            y: $y_values[1],
-            name: nustr + '<sub>\u03BC</sub>',
-            line: {
-                color: 'blue'
-            }
-        },
-        {
-            x: $x_values,
-            y: $y_values[2],
-            name: nustr + '<sub>\u03C4</sub>',
-            line: {
-                color: 'red'
-            }
+        ] satisfies Data[];
+    });
+
+    const layout = $derived.by((): Partial<Layout> => {
+        if (!isLinear) {
+            return {
+                ternary: {
+                    sum: 1,
+                    aaxis: makeTernAxis(nustr + '<sub>e</sub>', 0),
+                    baxis: makeTernAxis(nustr + '<sub>\u03BC</sub>', 45),
+                    caxis: makeTernAxis(nustr + '<sub>\u03C4</sub>', -45)
+                },
+                margin: { l: 40, r: 40, b: 50, t: 50 },
+                font: { family: 'serif' }
+            };
         }
-    ] satisfies Data[];
 
-    $: ternary_data = [{
-        type: "scatterternary",
-        mode: "lines",
-        a: $y_values[0],
-        b: $y_values[1],
-        c: $y_values[2],
-    }] satisfies Data[];
-
-    $: data = $oscillation_parameters.plot_type.values[0] === PlotType.Linear? linear_data: ternary_data satisfies Data[];
-    $: layout = $oscillation_parameters.plot_type.values[0] === PlotType.Linear? linear_layout: ternary_layout;
+        return {
+            font: { family: 'serif', size: 16 },
+            xaxis: {
+                title: {
+                    text: rangeParameter ? rangeParameter.label : '',
+                    standoff: 15
+                }
+            },
+            title: {
+                text: 'P(' + nustr + '<sub>' + fstr + '</sub>' + '\u2192' + nustr + '<sub>x</sub>)',
+                x: 0,
+                xanchor: 'left',
+                yanchor: 'bottom',
+                xref: 'paper',
+                yref: 'paper'
+            },
+            showlegend: true,
+            legend: {
+                orientation: 'h',
+                x: 1,
+                y: 1,
+                xanchor: 'right',
+                yanchor: 'bottom',
+                font: { family: 'serif', size: 20 }
+            },
+            margin: { b: 60, t: 30, l: 40, r: 20, pad: 5 }
+        };
+    });
 </script>
 
 <Plot {data} {layout} fillParent />
