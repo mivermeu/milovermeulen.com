@@ -70,6 +70,13 @@ export const icons = {
             fill=none stroke-width="1.5" stroke-linejoin="round"
             />`
     },
+    up_right_arrow: {
+        box: 24,
+        svg_path: `<path
+            d="M6.00005 19L19 5.99996M19 5.99996V18.48M19 5.99996H6.52005"
+            stroke-width="1.5"
+            />`
+    },
     expand_arrow: {
         box: 24,
         svg_path: `<path
