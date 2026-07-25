@@ -20,7 +20,7 @@
                     href={project.link}
                     rel="external"
                     aria-label="Visit {project.name}"
-                    class="shrink-0"
+                    class="inline-block shrink-0"
                 >
                     <Raised className="rounded-full p-1">
                         <Icon
