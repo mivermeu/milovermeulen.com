@@ -1,1 +1,8 @@
 @import 'shared-config/app.css';
+
+html,
+body {
+    overscroll-behavior: none;
+    overflow: hidden;
+    height: 100%;
+}

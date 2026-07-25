@@ -15,7 +15,7 @@
     let _prevClick = 0;
     const TOTAL_CLICKS = 8;
 
-function tick() {
+    function tick() {
         if (pageState.maxScrollY <= 0) return;
         const current = Math.round((pageState.scrollY / pageState.maxScrollY) * TOTAL_CLICKS);
         if (current === _prevClick) return;
@@ -36,7 +36,7 @@ function tick() {
 </script>
 
 <div
-    class="container mx-auto flex h-screen flex-col overflow-clip px-0 lg:flex-row lg:justify-center xl:px-8"
+    class="container mx-auto flex h-dvh flex-col overflow-clip px-0 lg:flex-row lg:justify-center xl:px-8"
 >
     <Noise />
 
@@ -53,7 +53,7 @@ function tick() {
     </BracketedSection>
 
     <main
-        class="z-10 min-h-0 flex-1 overflow-y-auto bg-brand-bg shadow-indent lg:max-w-prose"
+        class="z-10 min-h-0 flex-1 overflow-y-auto overscroll-contain bg-brand-bg shadow-indent lg:max-w-prose"
         onscroll={(e) => {
             const target = e.currentTarget;
             pageState.scrollY = target.scrollTop;

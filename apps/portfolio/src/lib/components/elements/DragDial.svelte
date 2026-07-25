@@ -66,7 +66,7 @@
 </script>
 
 <div
-    class="rounded-full select-none {dragging ? 'cursor-grabbing' : 'cursor-grab'} {className}"
+    class="touch-none rounded-full select-none {dragging ? 'cursor-grabbing' : 'cursor-grab'} {className}"
     bind:this={el}
     onpointerdown={onPointerDown}
     onpointermove={onPointerMove}
