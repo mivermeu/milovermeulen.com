@@ -17,12 +17,12 @@
     }
 </script>
 
-<div class="radio-input-container">
+<div class="my-4">
     <div>
         Antineutrino
         <input type="checkbox" bind:checked={antiChecked} onchange={update} />
     </div>
-    <div class="radio-container">
+    <div>
         {#each nuOptions as nuOption, i}
             <input
                 type="radio"
@@ -31,17 +31,7 @@
                 value={i}
                 onchange={update}
             />
-            <label for="nu_options_{i}">{@html nuOption.label}</label>
+            <label class="font-serif" for="nu_options_{i}">{@html nuOption.label}</label>
         {/each}
     </div>
 </div>
-
-<style>
-    .radio-input-container {
-        margin: 1em 0;
-    }
-
-    .radio-container label {
-        font-family: serif;
-    }
-</style>

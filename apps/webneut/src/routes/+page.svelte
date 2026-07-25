@@ -9,34 +9,25 @@
     <meta name="WebNeut" content="Cool neutrino oscillator" />
 </svelte:head>
 
-<div class="webneut-tool">
-    <div class="header">
-        <h1>Webneut</h1>
+<div
+    class="webneut-tool grid h-screen w-screen grid-cols-[1fr_2fr] grid-rows-[auto_auto] [grid-template-areas:'header_header'_'controls_plot']"
+>
+    <div class="header flex justify-between bg-brand-secondary [grid-area:header]">
+        <h1 class="mx-4 my-2">Webneut</h1>
         <DownloadButton />
     </div>
 
-    <div class="plot">
+    <div class="plot [grid-area:plot]">
         <NeutrinoPlot />
     </div>
 
-    <div class="controls">
+    <div class="controls @container overflow-y-scroll [grid-area:controls]">
         <ControlPanel />
     </div>
 </div>
 
 <style>
-    .webneut-tool {
-        height: 100vh;
-        width: 100vw;
-        display: grid;
-        grid-template-columns: 1fr 2fr;
-        grid-template-rows: auto auto;
-        grid-template-areas:
-            'header header'
-            'controls plot';
-    }
-
-    @media screen and (orientation: portrait) {
+    @media (orientation: portrait) {
         .webneut-tool {
             display: flex;
             flex-direction: column;
@@ -47,30 +38,9 @@
         }
     }
 
-    .header {
-        grid-area: header;
-        display: flex;
-        justify-content: space-between;
-        background-color: #333;
-    }
-
-    .header h1 {
-        margin: 0.5em 1em;
-    }
-
-    @media screen and (max-height: 600px) {
+    @media (max-height: 600px) {
         .header h1 {
             font-size: 1.2em;
         }
-    }
-
-    .plot {
-        grid-area: plot;
-    }
-
-    .controls {
-        grid-area: controls;
-        overflow-y: scroll;
-        container-type: inline-size;
     }
 </style>

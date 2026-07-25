@@ -16,8 +16,8 @@
     }
 </script>
 
-<div class="picker">
-    <div class="picker-name">Plot type</div>
+<div class="my-4">
+    <div>Plot type</div>
     {#each plotTypes as [name, value], i}
         <input
             id="plot_selector_{i}"
@@ -30,9 +30,3 @@
         <label for="plot_selector_{i}">{name}</label>
     {/each}
 </div>
-
-<style>
-    .picker {
-        margin: 1em 0;
-    }
-</style>
