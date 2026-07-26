@@ -66,8 +66,9 @@
 
 <!-- Mobile footer -->
 <footer
-    class="fixed right-0 bottom-0 left-0 z-20 flex h-40 items-center justify-center gap-2 bg-brand-bg px-3 py-5 lg:hidden"
+    class="fixed -right-10 bottom-0 left-0 z-20 flex h-40 items-center justify-center gap-2 bg-brand-bg px-3 py-5 pr-10 shadow-raised lg:hidden"
 >
+    <Noise />
     <div class="aspect-square h-full rounded-full shadow-indent">
         <SectionDial />
     </div>
