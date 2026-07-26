@@ -48,16 +48,16 @@
     </BracketedSection>
 </div>
 
-<!-- Mobile header -->
-<header class="fixed top-0 right-0 left-0 z-20 bg-brand-bg p-4 lg:hidden">
-    <h1 class="text-4xl font-medium text-brand-text-highlight">milo vermeulen</h1>
-    <p class="text-sm text-brand-text-accent">μήλο / ميلو / ミロ / 밀로 / 美祿 / मिलो</p>
-</header>
-
 <!-- Scrollable content -->
-<main class="container mx-auto pt-30 pb-40 lg:ml-[33.333%] lg:max-w-prose lg:pt-0 lg:pb-8">
+<main class="container mx-auto pb-40 lg:ml-[33.333%] lg:max-w-prose lg:pb-8">
     <div class="relative bg-brand-bg p-8 pb-30 shadow-indent lg:min-h-screen">
         <Noise />
+
+        <!-- Mobile header -->
+        <div class="pb-8 lg:hidden">
+            <h1 class="text-4xl font-medium text-brand-text-highlight">milo vermeulen</h1>
+            <p class="text-sm text-brand-text-accent">μήλο / ميلو / ミロ / 밀로 / 美祿 / मिलो</p>
+        </div>
         <About />
         <Experience />
         <Projects />
