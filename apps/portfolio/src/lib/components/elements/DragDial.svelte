@@ -55,8 +55,7 @@
         const newValue = Math.max(min, Math.min(max, value + angleDelta));
         const newFraction = (newValue - min) / (max - min);
         const scrollY = Math.round(newFraction * pageState.maxScrollY);
-        const main = document.querySelector('main');
-        if (main) main.scrollTop = scrollY;
+        window.scrollTo({ top: scrollY, behavior: 'instant' as ScrollBehavior });
         pageState.scrollY = scrollY;
     }
 

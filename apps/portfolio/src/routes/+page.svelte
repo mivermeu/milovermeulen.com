@@ -23,62 +23,56 @@
         playTick();
     }
 
-    $effect(() => {
-        const main = document.querySelector('main');
-        if (main) {
-            pageState.maxScrollY = main.scrollHeight - main.clientHeight;
-        }
-    });
+    function handleScroll() {
+        pageState.scrollY = window.scrollY;
+        pageState.maxScrollY = document.documentElement.scrollHeight - window.innerHeight;
+        tick();
+    }
 
     $effect(() => {
+        pageState.maxScrollY = document.documentElement.scrollHeight - window.innerHeight;
         return attachAutoResume();
     });
 </script>
 
-<div
-    class="container mx-auto flex h-dvh flex-col overflow-clip px-0 lg:flex-row lg:justify-center xl:px-8"
->
-    <Noise />
+<svelte:window onscroll={handleScroll} />
 
-    <!-- Mobile header -->
-    <div class="shrink-0 p-4 lg:hidden">
-        <h1 class="text-4xl font-medium text-brand-text-highlight">milo vermeulen</h1>
-        <p class="text-sm text-brand-text-accent">μήλο / ميلو / ミロ / 밀로 / 美祿 / मिलो</p>
-    </div>
+<Noise isFixed={true} />
 
-    <BracketedSection className="hidden w-1/3 h-full lg:block">
+<!-- Desktop sidebar -->
+<div class="fixed top-0 left-0 z-20 hidden h-screen w-1/3 lg:block">
+    <BracketedSection className="h-full w-full">
         <div class="h-full p-8">
             <Aside />
         </div>
     </BracketedSection>
-
-    <main
-        class="z-10 min-h-0 flex-1 overflow-y-auto overscroll-contain bg-brand-bg shadow-indent lg:max-w-prose"
-        onscroll={(e) => {
-            const target = e.currentTarget;
-            pageState.scrollY = target.scrollTop;
-            pageState.maxScrollY = target.scrollHeight - target.clientHeight;
-            tick();
-        }}
-    >
-        <div class="relative p-8">
-            <Noise />
-            <About />
-            <Experience />
-            <Projects />
-        </div>
-    </main>
-
-    <!-- Mobile footer -->
-    <footer
-        class="flex h-40 shrink-0 items-center justify-center gap-2 bg-brand-bg px-3 py-5 lg:hidden"
-    >
-        <div class="aspect-square h-full rounded-full shadow-indent">
-            <SectionDial />
-        </div>
-        <Contact />
-        <div class="aspect-square h-full rounded-full shadow-indent">
-            <ScrollDial />
-        </div>
-    </footer>
 </div>
+
+<!-- Mobile header -->
+<header class="fixed top-0 right-0 left-0 z-20 bg-brand-bg p-4 lg:hidden">
+    <h1 class="text-4xl font-medium text-brand-text-highlight">milo vermeulen</h1>
+    <p class="text-sm text-brand-text-accent">μήλο / ميلو / ミロ / 밀로 / 美祿 / मिलो</p>
+</header>
+
+<!-- Scrollable content -->
+<main class="container mx-auto pt-30 pb-40 lg:ml-[33.333%] lg:max-w-prose lg:pt-0 lg:pb-8">
+    <div class="relative bg-brand-bg p-8 pb-30 shadow-indent lg:min-h-screen">
+        <Noise />
+        <About />
+        <Experience />
+        <Projects />
+    </div>
+</main>
+
+<!-- Mobile footer -->
+<footer
+    class="fixed right-0 bottom-0 left-0 z-20 flex h-40 items-center justify-center gap-2 bg-brand-bg px-3 py-5 lg:hidden"
+>
+    <div class="aspect-square h-full rounded-full shadow-indent">
+        <SectionDial />
+    </div>
+    <Contact />
+    <div class="aspect-square h-full rounded-full shadow-indent">
+        <ScrollDial />
+    </div>
+</footer>
