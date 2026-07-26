@@ -20,7 +20,7 @@
          transform: rotate({rotate});"
 >
     <div
-        class="relative h-full w-full border-current {rounding}"
+        class="relative h-full w-full border-brand-text-highlight {rounding}"
         style="
       border-top-width: 0;
       border-left-width: 0;

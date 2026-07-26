@@ -43,6 +43,7 @@
     }
 
     p,
+    span,
     li {
         @apply text-brand-text;
     }
