@@ -50,7 +50,7 @@
 
 <!-- Scrollable content -->
 <main class="container mx-auto pb-40 lg:ml-[33.333%] lg:max-w-prose lg:pb-8">
-    <div class="relative bg-brand-bg p-8 pb-30 shadow-indent lg:min-h-screen">
+    <div class="relative bg-brand-bg p-8 pb-30 lg:min-h-screen lg:shadow-indent">
         <Noise />
 
         <!-- Mobile header -->
