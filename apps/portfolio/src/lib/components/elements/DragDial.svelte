@@ -24,20 +24,8 @@
     let el: HTMLDivElement | undefined = $state();
     let dragValue = $state(0);
     let cachedMaxScrollY = $state(0);
-
-    $effect(() => {
-        const node = el;
-        if (!node) return;
-        function preventTouch(e: TouchEvent) {
-            e.preventDefault();
-        }
-        node.addEventListener('touchstart', preventTouch, { passive: false });
-        node.addEventListener('touchmove', preventTouch, { passive: false });
-        return () => {
-            node.removeEventListener('touchstart', preventTouch);
-            node.removeEventListener('touchmove', preventTouch);
-        };
-    });
+    let dialCx = 0;
+    let dialCy = 0;
 
     const fraction = $derived(
         pageState.maxScrollY > 0 ? pageState.scrollY / pageState.maxScrollY : 0
@@ -45,16 +33,20 @@
     const value = $derived(min + fraction * (max - min));
 
     function getAngleRad(clientX: number, clientY: number): number {
-        if (!el) return 0;
+        return Math.atan2(clientX - dialCx, -(clientY - dialCy));
+    }
+
+    function cacheCenter(): void {
+        if (!el) return;
         const rect = el.getBoundingClientRect();
-        const cx = rect.left + rect.width / 2;
-        const cy = rect.top + rect.height / 2;
-        return Math.atan2(clientX - cx, -(clientY - cy));
+        dialCx = rect.left + rect.width / 2;
+        dialCy = rect.top + rect.height / 2;
     }
 
     function onPointerDown(e: PointerEvent): void {
         e.preventDefault();
         (e.target as HTMLElement).setPointerCapture(e.pointerId);
+        cacheCenter();
         dragging = true;
         pageState.draggingDial = true;
         prevAngle = getAngleRad(e.clientX, e.clientY);
