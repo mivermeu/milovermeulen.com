@@ -26,6 +26,15 @@
     let cachedMaxScrollY = $state(0);
     let dialCx = 0;
     let dialCy = 0;
+    let pendingScrollY = 0;
+    let rafId = 0;
+
+    function applyScroll(): void {
+        rafId = 0;
+        if (!dragging) return;
+        pageState.scrollY = pendingScrollY;
+        window.scrollTo({ top: pendingScrollY, behavior: 'instant' as ScrollBehavior });
+    }
 
     const fraction = $derived(
         pageState.maxScrollY > 0 ? pageState.scrollY / pageState.maxScrollY : 0
@@ -66,18 +75,24 @@
         dragValue = Math.max(min, Math.min(max, dragValue + angleDelta));
         const newFraction = (dragValue - min) / (max - min);
         const scrollY = Math.round(newFraction * cachedMaxScrollY);
-        window.scrollTo({ top: scrollY, behavior: 'instant' as ScrollBehavior });
-        pageState.scrollY = scrollY;
+        pendingScrollY = scrollY;
+        if (!rafId) rafId = requestAnimationFrame(applyScroll);
     }
 
     function onPointerUp(): void {
+        if (rafId) {
+            cancelAnimationFrame(rafId);
+            rafId = 0;
+        }
+        window.scrollTo({ top: pendingScrollY, behavior: 'instant' as ScrollBehavior });
+        pageState.scrollY = pendingScrollY;
         dragging = false;
         pageState.draggingDial = false;
     }
 </script>
 
 <div
-    class="touch-none rounded-full select-none {dragging
+    class="drag-dial touch-none rounded-full select-none {dragging
         ? 'cursor-grabbing'
         : 'cursor-grab'} {className}"
     bind:this={el}
@@ -94,3 +109,9 @@
 >
     {@render children()}
 </div>
+
+<style>
+    :global(.drag-dial *) {
+        touch-action: none;
+    }
+</style>
