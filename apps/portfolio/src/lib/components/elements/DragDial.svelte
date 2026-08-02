@@ -28,12 +28,26 @@
     let dialCy = 0;
     let pendingScrollY = 0;
     let rafId = 0;
+    let lastScrollY = 0;
 
     function applyScroll(): void {
         rafId = 0;
         if (!dragging) return;
-        pageState.scrollY = pendingScrollY;
-        window.scrollTo({ top: pendingScrollY, behavior: 'instant' as ScrollBehavior });
+
+        const diff = pendingScrollY - lastScrollY;
+        if (Math.abs(diff) < 2) {
+            lastScrollY = pendingScrollY;
+            pageState.scrollY = pendingScrollY;
+            document.documentElement.scrollTop = pendingScrollY;
+            return;
+        }
+
+        // Cap per-frame delta so iOS compositor doesn't stall on large jumps
+        const maxStep = Math.max(80, cachedMaxScrollY / 8);
+        lastScrollY += Math.min(Math.abs(diff), maxStep) * Math.sign(diff);
+        pageState.scrollY = lastScrollY;
+        document.documentElement.scrollTop = lastScrollY;
+        rafId = requestAnimationFrame(applyScroll);
     }
 
     const fraction = $derived(
@@ -56,6 +70,7 @@
         e.preventDefault();
         (e.target as HTMLElement).setPointerCapture(e.pointerId);
         cacheCenter();
+        lastScrollY = pageState.scrollY;
         dragging = true;
         pageState.draggingDial = true;
         prevAngle = getAngleRad(e.clientX, e.clientY);
@@ -84,8 +99,8 @@
             cancelAnimationFrame(rafId);
             rafId = 0;
         }
-        window.scrollTo({ top: pendingScrollY, behavior: 'instant' as ScrollBehavior });
         pageState.scrollY = pendingScrollY;
+        document.documentElement.scrollTop = pendingScrollY;
         dragging = false;
         pageState.draggingDial = false;
     }
