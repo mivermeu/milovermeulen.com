@@ -24,6 +24,7 @@
     }
 
     function handleScroll() {
+        if (pageState.draggingDial) return;
         pageState.scrollY = window.scrollY;
         pageState.maxScrollY = document.documentElement.scrollHeight - window.innerHeight;
         tick();

@@ -22,6 +22,22 @@
     let dragging = $state(false);
     let prevAngle = $state(0);
     let el: HTMLDivElement | undefined = $state();
+    let dragValue = $state(0);
+    let cachedMaxScrollY = $state(0);
+
+    $effect(() => {
+        const node = el;
+        if (!node) return;
+        function preventTouch(e: TouchEvent) {
+            e.preventDefault();
+        }
+        node.addEventListener('touchstart', preventTouch, { passive: false });
+        node.addEventListener('touchmove', preventTouch, { passive: false });
+        return () => {
+            node.removeEventListener('touchstart', preventTouch);
+            node.removeEventListener('touchmove', preventTouch);
+        };
+    });
 
     const fraction = $derived(
         pageState.maxScrollY > 0 ? pageState.scrollY / pageState.maxScrollY : 0
@@ -40,7 +56,10 @@
         e.preventDefault();
         (e.target as HTMLElement).setPointerCapture(e.pointerId);
         dragging = true;
+        pageState.draggingDial = true;
         prevAngle = getAngleRad(e.clientX, e.clientY);
+        dragValue = value;
+        cachedMaxScrollY = pageState.maxScrollY;
     }
 
     function onPointerMove(e: PointerEvent): void {
@@ -52,24 +71,28 @@
         prevAngle = raw;
 
         const angleDelta = ((delta * 180) / Math.PI) * sensitivity;
-        const newValue = Math.max(min, Math.min(max, value + angleDelta));
-        const newFraction = (newValue - min) / (max - min);
-        const scrollY = Math.round(newFraction * pageState.maxScrollY);
+        dragValue = Math.max(min, Math.min(max, dragValue + angleDelta));
+        const newFraction = (dragValue - min) / (max - min);
+        const scrollY = Math.round(newFraction * cachedMaxScrollY);
         window.scrollTo({ top: scrollY, behavior: 'instant' as ScrollBehavior });
         pageState.scrollY = scrollY;
     }
 
     function onPointerUp(): void {
         dragging = false;
+        pageState.draggingDial = false;
     }
 </script>
 
 <div
-    class="touch-none rounded-full select-none {dragging ? 'cursor-grabbing' : 'cursor-grab'} {className}"
+    class="touch-none rounded-full select-none {dragging
+        ? 'cursor-grabbing'
+        : 'cursor-grab'} {className}"
     bind:this={el}
     onpointerdown={onPointerDown}
     onpointermove={onPointerMove}
     onpointerup={onPointerUp}
+    onpointercancel={onPointerUp}
     role="slider"
     aria-label={ariaLabel}
     aria-valuemin={min}
