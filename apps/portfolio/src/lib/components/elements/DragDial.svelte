@@ -26,6 +26,8 @@
     let cachedMaxScrollY = $state(0);
     let dialCx = 0;
     let dialCy = 0;
+    let dialScreenCx = 0;
+    let dialScreenCy = 0;
     let pendingScrollY = 0;
     let rafId = 0;
     let lastScrollY = 0;
@@ -38,7 +40,6 @@
         if (Math.abs(diff) < 2) {
             lastScrollY = pendingScrollY;
             pageState.scrollY = pendingScrollY;
-            document.documentElement.scrollTop = pendingScrollY;
             return;
         }
 
@@ -46,7 +47,6 @@
         const maxStep = Math.max(80, cachedMaxScrollY / 8);
         lastScrollY += Math.min(Math.abs(diff), maxStep) * Math.sign(diff);
         pageState.scrollY = lastScrollY;
-        document.documentElement.scrollTop = lastScrollY;
         rafId = requestAnimationFrame(applyScroll);
     }
 
@@ -55,8 +55,8 @@
     );
     const value = $derived(min + fraction * (max - min));
 
-    function getAngleRad(clientX: number, clientY: number): number {
-        return Math.atan2(clientX - dialCx, -(clientY - dialCy));
+    function getAngleRad(screenX: number, screenY: number): number {
+        return Math.atan2(screenX - dialScreenCx, -(screenY - dialScreenCy));
     }
 
     function cacheCenter(): void {
@@ -70,17 +70,19 @@
         e.preventDefault();
         (e.target as HTMLElement).setPointerCapture(e.pointerId);
         cacheCenter();
+        dialScreenCx = dialCx + (e.screenX - e.clientX);
+        dialScreenCy = dialCy + (e.screenY - e.clientY);
         lastScrollY = pageState.scrollY;
         dragging = true;
         pageState.draggingDial = true;
-        prevAngle = getAngleRad(e.clientX, e.clientY);
+        prevAngle = getAngleRad(e.screenX, e.screenY);
         dragValue = value;
         cachedMaxScrollY = pageState.maxScrollY;
     }
 
     function onPointerMove(e: PointerEvent): void {
         if (!dragging) return;
-        const raw = getAngleRad(e.clientX, e.clientY);
+        const raw = getAngleRad(e.screenX, e.screenY);
         let delta = raw - prevAngle;
         if (delta > Math.PI) delta -= 2 * Math.PI;
         if (delta < -Math.PI) delta += 2 * Math.PI;
@@ -100,7 +102,6 @@
             rafId = 0;
         }
         pageState.scrollY = pendingScrollY;
-        document.documentElement.scrollTop = pendingScrollY;
         dragging = false;
         pageState.draggingDial = false;
     }

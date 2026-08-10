@@ -15,6 +15,16 @@
     let _prevClick = 0;
     const TOTAL_CLICKS = 8;
 
+    let contentEl: HTMLDivElement | undefined = $state();
+    let viewportEl: HTMLDivElement | undefined = $state();
+    let touchStartY = 0;
+    let touchStartScrollY = 0;
+
+    function updateMaxScrollY() {
+        if (!contentEl || !viewportEl) return;
+        pageState.maxScrollY = Math.max(0, contentEl.scrollHeight - viewportEl.clientHeight);
+    }
+
     function tick() {
         if (pageState.maxScrollY <= 0) return;
         const current = Math.round((pageState.scrollY / pageState.maxScrollY) * TOTAL_CLICKS);
@@ -23,20 +33,42 @@
         playTick();
     }
 
-    function handleScroll() {
+    function onWheel(e: WheelEvent) {
         if (pageState.draggingDial) return;
-        pageState.scrollY = window.scrollY;
-        pageState.maxScrollY = document.documentElement.scrollHeight - window.innerHeight;
+        pageState.scrollY = Math.max(0, Math.min(pageState.maxScrollY, pageState.scrollY + e.deltaY));
+        tick();
+    }
+
+    function onTouchStart(e: TouchEvent) {
+        if (pageState.draggingDial) return;
+        touchStartY = e.touches[0].clientY;
+        touchStartScrollY = pageState.scrollY;
+    }
+
+    function onTouchMove(e: TouchEvent) {
+        if (pageState.draggingDial) return;
+        e.preventDefault();
+        const deltaY = touchStartY - e.touches[0].clientY;
+        pageState.scrollY = Math.max(0, Math.min(pageState.maxScrollY, touchStartScrollY + deltaY));
         tick();
     }
 
     $effect(() => {
-        pageState.maxScrollY = document.documentElement.scrollHeight - window.innerHeight;
-        return attachAutoResume();
+        updateMaxScrollY();
+        if (!contentEl) return;
+        const ro = new ResizeObserver(updateMaxScrollY);
+        ro.observe(contentEl);
+        viewportEl?.addEventListener('touchstart', onTouchStart, { passive: false });
+        viewportEl?.addEventListener('touchmove', onTouchMove, { passive: false });
+        const cleanup = attachAutoResume();
+        return () => {
+            ro.disconnect();
+            viewportEl?.removeEventListener('touchstart', onTouchStart);
+            viewportEl?.removeEventListener('touchmove', onTouchMove);
+            cleanup();
+        };
     });
 </script>
-
-<svelte:window onscroll={handleScroll} />
 
 <Noise isFixed={true} />
 
@@ -49,21 +81,30 @@
     </BracketedSection>
 </div>
 
-<!-- Scrollable content -->
-<main class="container mx-auto pb-40 lg:ml-[33.333%] lg:max-w-prose lg:pb-8">
-    <div class="relative bg-brand-bg p-8 pb-30 lg:min-h-screen lg:shadow-indent">
-        <Noise />
-
-        <!-- Mobile header -->
-        <div class="pb-8 lg:hidden">
-            <h1 class="text-4xl font-medium text-brand-text-highlight">milo vermeulen</h1>
-            <p class="text-sm text-brand-text-accent">μήλο / ميلو / ミロ / 밀로 / 美祿 / मिलो</p>
+<!-- Fake-scroll viewport -->
+<div
+    bind:this={viewportEl}
+    class="fixed top-0 right-0 bottom-0 z-10 w-full overflow-hidden lg:w-2/3"
+    onwheel={onWheel}
+>
+    <div
+        bind:this={contentEl}
+        class="container mx-auto pb-40 lg:max-w-prose lg:pb-8 will-change-transform"
+        style:transform="translate3d(0, {-pageState.scrollY}px, 0)"
+    >
+        <div class="relative bg-brand-bg p-8 pb-30 lg:min-h-screen lg:shadow-indent">
+            <Noise />
+            <!-- Mobile header -->
+            <div class="pb-8 lg:hidden">
+                <h1 class="text-4xl font-medium text-brand-text-highlight">milo vermeulen</h1>
+                <p class="text-sm text-brand-text-accent">μήλο / ميلو / ミロ / 밀로 / 美祿 / मिलो</p>
+            </div>
+            <About />
+            <Experience />
+            <Projects />
         </div>
-        <About />
-        <Experience />
-        <Projects />
     </div>
-</main>
+</div>
 
 <!-- Mobile footer -->
 <footer

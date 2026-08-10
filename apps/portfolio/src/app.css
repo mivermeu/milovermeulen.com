@@ -4,8 +4,10 @@ html,
 body {
     background-color: theme('colors.brand-bg');
     overscroll-behavior: none;
-    min-height: 100dvh;
-    min-width: 100dvw;
+    overflow: hidden;
+    position: fixed;
+    width: 100%;
+    height: 100dvh;
 }
 
 /* Global glow */
