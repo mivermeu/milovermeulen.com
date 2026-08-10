@@ -35,7 +35,10 @@
 
     function onWheel(e: WheelEvent) {
         if (pageState.draggingDial) return;
-        pageState.scrollY = Math.max(0, Math.min(pageState.maxScrollY, pageState.scrollY + e.deltaY));
+        pageState.scrollY = Math.max(
+            0,
+            Math.min(pageState.maxScrollY, pageState.scrollY + e.deltaY)
+        );
         tick();
     }
 
@@ -73,8 +76,8 @@
 <Noise isFixed={true} />
 
 <!-- Desktop sidebar -->
-<div class="fixed top-0 left-0 z-20 hidden h-screen w-1/3 lg:block">
-    <BracketedSection className="h-full w-full">
+<div class="fixed top-0 left-0 hidden h-screen w-1/2 lg:block">
+    <BracketedSection className="h-full max-w-140 ml-auto">
         <div class="h-full p-8">
             <Aside />
         </div>
@@ -84,20 +87,22 @@
 <!-- Fake-scroll viewport -->
 <div
     bind:this={viewportEl}
-    class="fixed top-0 right-0 bottom-0 z-10 w-full overflow-hidden lg:w-2/3"
+    class="fixed top-0 right-0 bottom-0 w-full overflow-hidden lg:w-1/2"
     onwheel={onWheel}
 >
     <div
         bind:this={contentEl}
-        class="container mx-auto pb-40 lg:max-w-prose lg:pb-8 will-change-transform"
+        class="container mr-auto will-change-transform lg:max-w-prose"
         style:transform="translate3d(0, {-pageState.scrollY}px, 0)"
     >
-        <div class="relative bg-brand-bg p-8 pb-30 lg:min-h-screen lg:shadow-indent">
+        <div class="relative bg-brand-bg p-8 pb-30 lg:ml-1 lg:min-h-screen lg:shadow-indent">
             <Noise />
             <!-- Mobile header -->
             <div class="pb-8 lg:hidden">
                 <h1 class="text-4xl font-medium text-brand-text-highlight">milo vermeulen</h1>
-                <p class="text-sm text-brand-text-accent">μήλο / ميلو / ミロ / 밀로 / 美祿 / मिलो</p>
+                <p class="text-sm text-brand-text-accent">
+                    μήλο / ميلو / ミロ / 밀로 / 美祿 / मिलो
+                </p>
             </div>
             <About />
             <Experience />
