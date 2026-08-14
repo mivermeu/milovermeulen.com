@@ -147,3 +147,27 @@ export function makeRange(param: import('./types').Parameter) {
     }
     param.values = param.values[0] > 0 ? [0, param.values[0]] : [param.values[0], 0];
 }
+
+$effect.root(() => {
+    $effect(recompute);
+
+    $effect(() => {
+        const param = animatingParameter.current;
+        if (!param) return;
+
+        const startValue = param.values[0];
+        const startTime = Date.now();
+        const period = oscillationParameters.animation_period.values[0];
+
+        const interval = setInterval(() => {
+            const progress = ((Date.now() - startTime) / (period * 1000)) % 1;
+            let newValue = startValue + progress * (param.limits[1] - param.limits[0]);
+            while (newValue > param.limits[1]) {
+                newValue -= param.limits[1] - param.limits[0];
+            }
+            param.values[0] = newValue;
+        });
+
+        return () => clearInterval(interval);
+    });
+});
