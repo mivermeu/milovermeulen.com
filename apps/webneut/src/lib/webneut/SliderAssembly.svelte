@@ -33,14 +33,14 @@
     {#if action_buttons}
         <div class="action-buttons flex flex-col gap-2 [grid-area:action-buttons]">
             <button
-                class="slider-button h-8 [grid-area:1/1/1/1]"
+                class="slider-button h-8 w-24 [grid-area:1/1/1/1]"
                 disabled={parameter.values.length > 1}
                 onclick={toggle_animation}
             >
                 {animatingParameter.current === parameter ? 'Stop' : 'Animate'}
             </button>
             <button
-                class="slider-button h-8 [grid-area:1/1/1/1]"
+                class="slider-button h-8 w-24 [grid-area:1/1/1/1]"
                 disabled={parameter.values.length > 1}
                 onclick={make_range}>Range</button
             >
