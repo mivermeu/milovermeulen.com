@@ -5,58 +5,36 @@
         children: import('svelte').Snippet;
         min: number;
         max: number;
-        sensitivity?: number;
         class?: string;
         'aria-label'?: string;
     }
 
+    // eslint-disable-next-line svelte/no-unused-props
     let {
         children,
         min,
         max,
-        sensitivity = 1,
         class: className = '',
         'aria-label': ariaLabel = 'Dial'
     }: Props = $props();
 
     let dragging = $state(false);
-    let prevAngle = $state(0);
     let el: HTMLDivElement | undefined = $state();
-    let dragValue = $state(0);
-    let cachedMaxScrollY = $state(0);
+    let prevAngle = 0;
+    let dragValue = 0;
     let dialCx = 0;
     let dialCy = 0;
-    let dialScreenCx = 0;
-    let dialScreenCy = 0;
-    let pendingScrollY = 0;
+    let targetScrollY = 0;
     let rafId = 0;
-    let lastScrollY = 0;
 
-    function applyScroll(): void {
-        rafId = 0;
-        if (!dragging) return;
-
-        const diff = pendingScrollY - lastScrollY;
-        if (Math.abs(diff) < 2) {
-            lastScrollY = pendingScrollY;
-            pageState.scrollY = pendingScrollY;
-            return;
-        }
-
-        // Cap per-frame delta so iOS compositor doesn't stall on large jumps
-        const maxStep = Math.max(80, cachedMaxScrollY / 8);
-        lastScrollY += Math.min(Math.abs(diff), maxStep) * Math.sign(diff);
-        pageState.scrollY = lastScrollY;
-        rafId = requestAnimationFrame(applyScroll);
-    }
-
-    const fraction = $derived(
-        pageState.maxScrollY > 0 ? pageState.scrollY / pageState.maxScrollY : 0
+    const value = $derived(
+        pageState.maxScrollY > 0
+            ? min + (pageState.scrollY / pageState.maxScrollY) * (max - min)
+            : min
     );
-    const value = $derived(min + fraction * (max - min));
 
-    function getAngleRad(screenX: number, screenY: number): number {
-        return Math.atan2(screenX - dialScreenCx, -(screenY - dialScreenCy));
+    function getAngle(clientX: number, clientY: number): number {
+        return Math.atan2(clientX - dialCx, -(clientY - dialCy));
     }
 
     function cacheCenter(): void {
@@ -70,30 +48,27 @@
         e.preventDefault();
         (e.target as HTMLElement).setPointerCapture(e.pointerId);
         cacheCenter();
-        dialScreenCx = dialCx + (e.screenX - e.clientX);
-        dialScreenCy = dialCy + (e.screenY - e.clientY);
-        lastScrollY = pageState.scrollY;
         dragging = true;
         pageState.draggingDial = true;
-        prevAngle = getAngleRad(e.screenX, e.screenY);
+        prevAngle = getAngle(e.clientX, e.clientY);
         dragValue = value;
-        cachedMaxScrollY = pageState.maxScrollY;
     }
 
     function onPointerMove(e: PointerEvent): void {
         if (!dragging) return;
-        const raw = getAngleRad(e.screenX, e.screenY);
+        const raw = getAngle(e.clientX, e.clientY);
         let delta = raw - prevAngle;
         if (delta > Math.PI) delta -= 2 * Math.PI;
         if (delta < -Math.PI) delta += 2 * Math.PI;
         prevAngle = raw;
 
-        const angleDelta = ((delta * 180) / Math.PI) * sensitivity;
-        dragValue = Math.max(min, Math.min(max, dragValue + angleDelta));
-        const newFraction = (dragValue - min) / (max - min);
-        const scrollY = Math.round(newFraction * cachedMaxScrollY);
-        pendingScrollY = scrollY;
-        if (!rafId) rafId = requestAnimationFrame(applyScroll);
+        dragValue = Math.max(min, Math.min(max, dragValue + (delta * 180) / Math.PI));
+        targetScrollY = Math.round(((dragValue - min) / (max - min)) * pageState.maxScrollY);
+        // ponytail: RAF coalesces pointermove into one update per frame
+        if (!rafId) rafId = requestAnimationFrame(() => {
+            rafId = 0;
+            pageState.scrollY = targetScrollY;
+        });
     }
 
     function onPointerUp(): void {
@@ -101,7 +76,7 @@
             cancelAnimationFrame(rafId);
             rafId = 0;
         }
-        pageState.scrollY = pendingScrollY;
+        pageState.scrollY = targetScrollY;
         dragging = false;
         pageState.draggingDial = false;
     }

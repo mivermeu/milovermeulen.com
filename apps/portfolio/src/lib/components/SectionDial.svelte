@@ -6,12 +6,6 @@
     import Icon from '$lib/components/elements/Icon.svelte';
     import type { icons } from '$lib/data/icons';
 
-    interface Props {
-        sensitivity?: number;
-    }
-
-    let { sensitivity = 1 }: Props = $props();
-
     const startAngle = 0;
     const angleRange = 90;
     const sweepStart = 135;
@@ -59,7 +53,6 @@
     class="aspect-square w-full"
     min={startAngle}
     max={startAngle + angleRange}
-    {sensitivity}
     aria-label="Scroll position"
 >
     <Raised
