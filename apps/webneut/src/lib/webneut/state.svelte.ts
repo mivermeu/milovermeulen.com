@@ -13,11 +13,11 @@ function defaultParameters(): OscillationParameters {
             animating: false
         },
         nsteps: {
-            values: [500],
+            values: [1000],
             label: 'Number of points',
             snaps: [],
             precision: 0,
-            limits: [1, 1000],
+            limits: [50, 2000],
             animating: false
         },
         animation_period: {
@@ -121,7 +121,9 @@ function defaultParameters(): OscillationParameters {
 
 export const oscillationParameters: OscillationParameters = $state(defaultParameters());
 export const plotData = $state({ x: [] as number[], y: [] as number[][] });
-export const animatingParameter = $state({ current: undefined as import('./types').Parameter | undefined });
+export const animatingParameter = $state({
+    current: undefined as import('./types').Parameter | undefined
+});
 
 const oscillator = new Oscillator(oscillationParameters);
 

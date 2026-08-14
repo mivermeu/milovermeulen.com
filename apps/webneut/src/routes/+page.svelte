@@ -12,8 +12,10 @@
 <div
     class="webneut-tool grid h-screen w-screen grid-cols-[1fr_2fr] grid-rows-[auto_auto] [grid-template-areas:'header_header'_'controls_plot']"
 >
-    <div class="header flex justify-between bg-brand-secondary [grid-area:header]">
-        <h1 class="mx-4 my-2">Webneut</h1>
+    <div
+        class="header flex items-center justify-between border-b border-brand-secondary bg-brand-bg px-4 py-3 [grid-area:header]"
+    >
+        <h1 class="text-xl font-semibold text-brand-text-highlight">Webneut</h1>
         <DownloadButton />
     </div>
 

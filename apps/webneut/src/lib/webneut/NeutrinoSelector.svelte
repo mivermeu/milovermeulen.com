@@ -17,21 +17,23 @@
     }
 </script>
 
-<div class="my-4">
-    <div>
+<div class="my-4 flex flex-col gap-2">
+    <label class="flex items-center gap-2">
         Antineutrino
         <input type="checkbox" bind:checked={antiChecked} onchange={update} />
-    </div>
-    <div>
+    </label>
+    <div class="flex flex-col gap-2">
         {#each nuOptions as nuOption, i}
-            <input
-                type="radio"
-                bind:group={nuSelected}
-                name="nu_value"
-                value={i}
-                onchange={update}
-            />
-            <label class="font-serif" for="nu_options_{i}">{@html nuOption.label}</label>
+            <label class="flex items-center gap-2">
+                <input
+                    type="radio"
+                    bind:group={nuSelected}
+                    name="nu_value"
+                    value={i}
+                    onchange={update}
+                />
+                <span class="font-serif">{@html nuOption.label}</span>
+            </label>
         {/each}
     </div>
 </div>

@@ -19,32 +19,32 @@
 </script>
 
 <div
-    class="slider-container @container-normal grid grid-cols-[auto_1fr_auto] items-center gap-1 [grid-template-areas:'action-buttons_slider-name_slider-inputs'_'action-buttons_slider_slider-inputs']"
+    class="slider-container @container-normal grid grid-cols-[auto_1fr_auto] items-center gap-4 [grid-template-areas:'action-buttons_slider-name_slider-inputs'_'action-buttons_slider_slider-inputs']"
 >
     {#if action_buttons}
         <div class="action-buttons flex flex-col gap-2 [grid-area:action-buttons]">
             <button
-                class="slider-button h-8 w-20 self-center [grid-area:1/1/1/1]"
+                class="slider-button h-8 [grid-area:1/1/1/1]"
                 disabled={parameter.values.length > 1}
                 onclick={toggle_animation}
             >
                 {animatingParameter.current === parameter ? 'Stop' : 'Animate'}
             </button>
             <button
-                class="slider-button h-8 w-20 self-center [grid-area:1/1/1/1]"
+                class="slider-button h-8 [grid-area:1/1/1/1]"
                 disabled={parameter.values.length > 1}
                 onclick={make_range}>Range</button
             >
         </div>
     {/if}
-    <div class="slider-name pl-4 [grid-area:slider-name]">{@html parameter.label}</div>
+    <div class="slider-name pl-2 [grid-area:slider-name]">{@html parameter.label}</div>
     <div class="slider [grid-area:slider]">
         <RangeSlider bind:parameter />
     </div>
-    <div class="slider-inputs flex flex-col justify-end gap-2 [grid-area:slider-inputs]">
+    <div class="slider-inputs flex h-full flex-col justify-end gap-2 [grid-area:slider-inputs]">
         {#each parameter.values as _, i}
             <input
-                class="slider-input h-8 w-20 rounded-[3px] border-0 p-[0.3em] text-[0.8em]"
+                class="slider-input h-8 w-20 rounded-md p-1"
                 bind:value={parameter.values[i]}
                 type="number"
             />

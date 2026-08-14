@@ -16,17 +16,18 @@
     }
 </script>
 
-<div class="my-4">
+<div class="my-4 flex flex-col gap-2">
     <div>Plot type</div>
     {#each plotTypes as [name, value], i}
-        <input
-            id="plot_selector_{i}"
-            type="radio"
-            bind:group={plotSelected}
-            {value}
-            name="plot_type"
-            onchange={update}
-        />
-        <label for="plot_selector_{i}">{name}</label>
+        <label class="flex items-center gap-2">
+            <input
+                type="radio"
+                bind:group={plotSelected}
+                {value}
+                name="plot_type"
+                onchange={update}
+            />
+            {name}
+        </label>
     {/each}
 </div>
