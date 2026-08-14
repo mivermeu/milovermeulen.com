@@ -17,11 +17,11 @@ body {
     }
 
     button {
-        @apply inline-flex cursor-pointer items-center justify-center rounded-lg border-0 bg-brand-primary px-3 py-2 font-medium whitespace-nowrap text-brand-text-highlight transition-[filter,transform] duration-150;
+        @apply inline-flex cursor-pointer items-center justify-center rounded-lg border border-brand-primary bg-transparent px-3 py-2 whitespace-nowrap text-brand-text transition-colors duration-150;
     }
 
     button:hover:not(:disabled) {
-        filter: brightness(1.15);
+        @apply bg-white/15;
     }
 
     button:active:not(:disabled) {
