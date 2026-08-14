@@ -16,6 +16,15 @@
         animatingParameter.current =
             animatingParameter.current === parameter ? undefined : parameter;
     }
+
+    let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+
+    function on_input(index: number, value: string) {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+            parameter.values[index] = Number(value);
+        }, 150);
+    }
 </script>
 
 <div
@@ -45,8 +54,9 @@
         {#each parameter.values as _, i}
             <input
                 class="slider-input h-8 w-20 rounded-md p-1"
-                bind:value={parameter.values[i]}
+                value={parameter.values[i]}
                 type="number"
+                oninput={(e) => on_input(i, (e.currentTarget as HTMLInputElement).value)}
             />
         {/each}
     </div>

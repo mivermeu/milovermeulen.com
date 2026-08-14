@@ -1,9 +1,5 @@
 <script lang="ts">
-    interface Parameter {
-        values: number[];
-        limits: [number, number];
-        precision: number;
-    }
+    import type { Parameter } from './types';
 
     let { parameter = $bindable() }: { parameter: Parameter } = $props();
 

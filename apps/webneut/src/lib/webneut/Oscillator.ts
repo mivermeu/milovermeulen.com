@@ -28,18 +28,7 @@ export class Oscillator {
     private edcp: Complex;
     private emdcp: Complex;
 
-    parameter_to_update_function: Map<string, (newval: number) => void> = new Map([
-        ['L', this.update_L],
-        ['E', this.update_E],
-        ['th12', this.update_th12],
-        ['th23', this.update_th23],
-        ['th13', this.update_th13],
-        ['Dm21sq', this.update_Dm21sq],
-        ['Dm31sq', this.update_Dm31sq],
-        ['anti', this.update_anti],
-        ['dCP', this.update_dCP],
-        ['rho', this.update_rho],
-    ]);
+    parameter_to_update_function: Map<string, (newval: number) => void>;
 
     // When set to true, the much more expensive Padé approximation to the
     // matrix exponential is used in the oscillation calculation.
@@ -47,6 +36,19 @@ export class Oscillator {
     use_exp: boolean = false;
 
     constructor(parameters: OscillationParameters) {
+        this.parameter_to_update_function = new Map([
+            ['L', this.update_L.bind(this)],
+            ['E', this.update_E.bind(this)],
+            ['th12', this.update_th12.bind(this)],
+            ['th23', this.update_th23.bind(this)],
+            ['th13', this.update_th13.bind(this)],
+            ['Dm21sq', this.update_Dm21sq.bind(this)],
+            ['Dm31sq', this.update_Dm31sq.bind(this)],
+            ['anti', this.update_anti.bind(this)],
+            ['dCP', this.update_dCP.bind(this)],
+            ['rho', this.update_rho.bind(this)],
+        ]);
+
         // Save a copy of the parameter set and determine matrices for the first point in the simulation.
         this.parameters = parameters;
 
@@ -107,7 +109,7 @@ export class Oscillator {
     }
 
     update(key: string, newval: number): void {
-        const update_function: ((newval: number) => void) | undefined = this.parameter_to_update_function.get(key)?.bind(this);
+        const update_function: ((newval: number) => void) | undefined = this.parameter_to_update_function.get(key);
         if(update_function) {
             update_function(newval);
         }
@@ -164,15 +166,15 @@ export class Oscillator {
     }
 
     update_Dm21sq(newval: number): void {
-        this.H.set([1, 1], this.parameters.Dm21sq.values[0] * 1e-5);
+        this.H.set([1, 1], newval * 1e-5);
         this.Hexp.set([1, 1],
-            exp(complex(0, (-this.parameters.Dm21sq.values[0] * 1e-5 * conv * this.parameters.L.values[0]) / this.parameters.E.values[0])));
+            exp(complex(0, (-newval * 1e-5 * conv * this.parameters.L.values[0]) / this.parameters.E.values[0])));
     }
 
     update_Dm31sq(newval: number): void {
-        this.H.set([2, 2], this.parameters.Dm31sq.values[0] * 1e-3);
+        this.H.set([2, 2], newval * 1e-3);
         this.Hexp.set([2, 2],
-            exp(complex(0, (-this.parameters.Dm31sq.values[0] * 1e-3 * conv * this.parameters.L.values[0]) / this.parameters.E.values[0])));
+            exp(complex(0, (-newval * 1e-3 * conv * this.parameters.L.values[0]) / this.parameters.E.values[0])));
     }
 
     update_anti(newval: number): void {
@@ -204,7 +206,7 @@ export class Oscillator {
         if(new_parameters) {
             for(let [key, par] of Object.entries(new_parameters)) {
                 if(this.parameters[key].values[0] != par.values[0] && this.parameters[key].values.length == 1) {
-                    const update_function: ((newval: number) => void) | undefined = this.parameter_to_update_function.get(key)?.bind(this);
+                    const update_function: ((newval: number) => void) | undefined = this.parameter_to_update_function.get(key);
                     if(update_function) {
                         update_function(par.values[0]);
                     }
@@ -240,7 +242,7 @@ export class Oscillator {
         }
 
         // Determine the update function to be called for the range calculation.
-        const range_update_function: ((newval: number) => void) | undefined = this.parameter_to_update_function.get(range_key)?.bind(this);
+        const range_update_function: ((newval: number) => void) | undefined = this.parameter_to_update_function.get(range_key);
         if(!range_update_function) {
             throw new Error(`Could not find key ${range_key} in update function map.`)
         }
