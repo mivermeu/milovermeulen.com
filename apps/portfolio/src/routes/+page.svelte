@@ -25,13 +25,13 @@
         pageState.maxScrollY = Math.max(0, contentEl.scrollHeight - viewportEl.clientHeight);
     }
 
-    function tick() {
+    $effect(() => {
         if (pageState.maxScrollY <= 0) return;
         const current = Math.round((pageState.scrollY / pageState.maxScrollY) * TOTAL_CLICKS);
         if (current === _prevClick) return;
         _prevClick = current;
         playTick();
-    }
+    });
 
     function onWheel(e: WheelEvent) {
         if (pageState.draggingDial) return;
@@ -39,7 +39,6 @@
             0,
             Math.min(pageState.maxScrollY, pageState.scrollY + e.deltaY)
         );
-        tick();
     }
 
     function onTouchStart(e: TouchEvent) {
@@ -53,7 +52,6 @@
         e.preventDefault();
         const deltaY = touchStartY - e.touches[0].clientY;
         pageState.scrollY = Math.max(0, Math.min(pageState.maxScrollY, touchStartScrollY + deltaY));
-        tick();
     }
 
     $effect(() => {
