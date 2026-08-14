@@ -6,11 +6,26 @@
     const min = parameter.limits[0];
     const max = parameter.limits[1];
     const step = Math.pow(10, -1 * parameter.precision);
+    const snapThreshold = (max - min) * 0.015;
 
     let pctLeft = $derived(((parameter.values[0] - min) / (max - min)) * 100);
     let pctRight = $derived(
         parameter.values.length > 1 ? ((parameter.values[1] - min) / (max - min)) * 100 : 100
     );
+
+    function snap(value: number): number {
+        for (const s of parameter.snaps) {
+            if (Math.abs(value - s) <= snapThreshold) return s;
+        }
+        return value;
+    }
+
+    function onInput(index: number, e: Event) {
+        const input = e.currentTarget as HTMLInputElement;
+        const snapped = snap(Number(input.value));
+        input.value = String(snapped);
+        parameter.values[index] = snapped;
+    }
 
     $effect(() => {
         if (parameter.values.length > 1 && parameter.values[0] > parameter.values[1]) {
@@ -40,7 +55,8 @@
             {min}
             {max}
             {step}
-            bind:value={parameter.values[0]}
+            value={parameter.values[0]}
+            oninput={(e) => onInput(0, e)}
             class="thumb-input pointer-events-none absolute top-0 left-0 m-0 h-1.5 w-full appearance-none bg-transparent"
         />
 
@@ -50,7 +66,8 @@
                 {min}
                 {max}
                 {step}
-                bind:value={parameter.values[1]}
+                value={parameter.values[1]}
+                oninput={(e) => onInput(1, e)}
                 class="thumb-input pointer-events-none absolute top-0 left-0 m-0 h-1.5 w-full appearance-none bg-transparent"
             />
         {/if}
