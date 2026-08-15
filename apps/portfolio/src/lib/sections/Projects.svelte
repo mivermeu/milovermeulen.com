@@ -32,12 +32,18 @@
             </div>
         {/each}
     </div>
-    <div class="hidden items-stretch gap-6 md:flex">
+    <div class="hidden gap-x-6 gap-y-6 md:grid md:grid-cols-[auto_1fr]">
         <div
-            class="flex shrink-0 flex-col justify-center gap-1 rounded-full p-1 shadow-indent lg:gap-2 lg:p-2"
+            class="grid grid-rows-subgrid rounded-full p-1 shadow-indent lg:p-2"
+            style:grid-row="1 / span {projects.length}"
         >
             {#each projects as project, index (index)}
-                <a href={project.link} rel="external" aria-label="Visit {project.name}">
+                <a
+                    href={project.link}
+                    rel="external"
+                    aria-label="Visit {project.name}"
+                    class="flex items-center justify-center"
+                >
                     <Raised className="rounded-full p-1 lg:p-4">
                         <Icon
                             icon_name="up_right_arrow"
@@ -47,17 +53,15 @@
                 </a>
             {/each}
         </div>
-        <div class="flex-1 space-y-6">
-            {#each projects as project, index (index)}
-                <div>
-                    <h3 class="text-lg font-medium text-brand-text-highlight">
-                        {project.name.toLowerCase()}
-                    </h3>
-                    <p class="mt-1 text-sm text-brand-text">
-                        {project.description}
-                    </p>
-                </div>
-            {/each}
-        </div>
+        {#each projects as project, index (index)}
+            <div>
+                <h3 class="text-lg font-medium text-brand-text-highlight">
+                    {project.name.toLowerCase()}
+                </h3>
+                <p class="mt-1 text-sm text-brand-text">
+                    {project.description}
+                </p>
+            </div>
+        {/each}
     </div>
 </section>
