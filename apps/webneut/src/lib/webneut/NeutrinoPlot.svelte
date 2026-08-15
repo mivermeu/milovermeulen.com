@@ -38,6 +38,7 @@
     const darkPlot = {
         paper_bgcolor: '#222',
         plot_bgcolor: '#222',
+        uirevision: '1',
         font: {
             family: '"AtkinsonHyperlegibleMono", ui-monospace, monospace',
             color: 'rgba(221, 221, 221, 0.8)',
@@ -106,6 +107,7 @@
                 linecolor: 'rgba(221, 221, 221, 0.3)'
             },
             yaxis: {
+                range: [0, 1],
                 gridcolor: 'rgba(221, 221, 221, 0.15)',
                 linecolor: 'rgba(221, 221, 221, 0.3)'
             },
