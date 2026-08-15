@@ -20,10 +20,13 @@
 
     function makeTernAxis(title: string, tickangle: number) {
         return {
-            title: { text: title, font: { size: 20 } },
+            title: { text: title, font: { size: 16 } },
             tickangle,
-            tickfont: { size: 15 },
-            tickcolor: 'rgba(0,0,0,0)',
+            tickfont: { size: 13 },
+            tickcolor: 'rgba(221, 221, 221, 0.3)',
+            gridcolor: 'rgba(221, 221, 221, 0.1)',
+            linecolor: 'rgba(221, 221, 221, 0.3)',
+            color: 'rgba(221, 221, 221, 0.8)',
             ticklen: 5,
             showline: true,
             showgrid: true
@@ -31,6 +34,16 @@
     }
 
     const isLinear = $derived(oscillationParameters.plot_type.values[0] === PlotType.Linear);
+
+    const darkPlot = {
+        paper_bgcolor: '#222',
+        plot_bgcolor: '#222',
+        font: {
+            family: '"AtkinsonHyperlegibleMono", ui-monospace, monospace',
+            color: 'rgba(221, 221, 221, 0.8)',
+            size: 14
+        }
+    };
 
     const data = $derived.by(() => {
         if (!isLinear) {
@@ -50,19 +63,19 @@
                 x: plotData.x,
                 y: plotData.y[0],
                 name: nustr + '<sub>e</sub>',
-                line: { color: 'green' }
+                line: { color: '#4ade80' }
             },
             {
                 x: plotData.x,
                 y: plotData.y[1],
                 name: nustr + '<sub>\u03BC</sub>',
-                line: { color: 'blue' }
+                line: { color: '#60a5fa' }
             },
             {
                 x: plotData.x,
                 y: plotData.y[2],
                 name: nustr + '<sub>\u03C4</sub>',
-                line: { color: 'red' }
+                line: { color: '#f87171' }
             }
         ] satisfies Data[];
     });
@@ -70,24 +83,31 @@
     const layout = $derived.by((): Partial<Layout> => {
         if (!isLinear) {
             return {
+                ...darkPlot,
                 ternary: {
                     sum: 1,
+                    bgcolor: '#222',
                     aaxis: makeTernAxis(nustr + '<sub>e</sub>', 0),
                     baxis: makeTernAxis(nustr + '<sub>\u03BC</sub>', 45),
                     caxis: makeTernAxis(nustr + '<sub>\u03C4</sub>', -45)
                 },
-                margin: { l: 40, r: 40, b: 50, t: 50 },
-                font: { family: 'serif' }
+                margin: { l: 40, r: 40, b: 50, t: 50 }
             };
         }
 
         return {
-            font: { family: 'serif', size: 16 },
+            ...darkPlot,
             xaxis: {
                 title: {
                     text: rangeParameter ? rangeParameter.label : '',
                     standoff: 15
-                }
+                },
+                gridcolor: 'rgba(221, 221, 221, 0.15)',
+                linecolor: 'rgba(221, 221, 221, 0.3)'
+            },
+            yaxis: {
+                gridcolor: 'rgba(221, 221, 221, 0.15)',
+                linecolor: 'rgba(221, 221, 221, 0.3)'
             },
             title: {
                 text: 'P(' + nustr + '<sub>' + fstr + '</sub>' + '\u2192' + nustr + '<sub>x</sub>)',
@@ -104,7 +124,8 @@
                 y: 1,
                 xanchor: 'right',
                 yanchor: 'bottom',
-                font: { family: 'serif', size: 20 }
+                bgcolor: 'rgba(0, 0, 0, 0)',
+                font: { color: 'rgba(221, 221, 221, 0.8)', size: 12 }
             },
             margin: { b: 60, t: 30, l: 40, r: 20, pad: 5 }
         };
