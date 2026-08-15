@@ -12,7 +12,7 @@
 </script>
 
 <div
-    class="flex h-fit w-fit flex-row gap-2 rounded-full p-2 shadow-indent"
+    class="flex h-fit w-fit flex-row gap-1 rounded-full p-1 shadow-indent lg:gap-2 lg:p-2"
     style="transform: rotate({rotation}deg);"
 >
     {#each socials as social (social.name)}
@@ -23,10 +23,10 @@
             style="transform: rotate(-{rotation}deg);"
             onclick={() => playThock()}
         >
-            <Raised className="rounded-full p-2 lg:p-4">
+            <Raised className="rounded-full p-1 lg:p-4">
                 <Icon
                     icon_name={social.icon}
-                    class="aspect-square h-7 fill-brand-text stroke-brand-text"
+                    class="aspect-square h-5 fill-brand-text stroke-brand-text lg:h-7"
                 />
             </Raised>
         </a>

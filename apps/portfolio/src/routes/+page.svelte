@@ -5,6 +5,7 @@
     import Projects from '$lib/sections/Projects.svelte';
     import Experience from '$lib/sections/Experience.svelte';
     import Aside from '$lib/sections/Aside.svelte';
+    import SectionDial from '$lib/components/SectionDial.svelte';
     import ScrollDial from '$lib/components/ScrollDial.svelte';
     import Contact from '$lib/components/Contact.svelte';
 
@@ -50,16 +51,13 @@
 </div>
 
 <!-- Fake-scroll viewport -->
-<div
-    bind:this={viewportEl}
-    class="fixed top-0 right-0 bottom-0 w-full overflow-hidden lg:w-1/2"
->
+<div bind:this={viewportEl} class="fixed top-0 right-0 bottom-0 w-full overflow-hidden lg:w-1/2">
     <div
         bind:this={contentEl}
         class="container mr-auto will-change-transform lg:max-w-prose"
         style:transform="translate3d(0, {-pageState.scrollY}px, 0)"
     >
-        <div class="relative bg-brand-bg p-8 pb-30 lg:ml-1 lg:min-h-screen lg:shadow-indent">
+        <div class="relative bg-brand-bg p-8 pb-60 lg:ml-1 lg:min-h-screen lg:shadow-indent">
             <Noise />
             <!-- Mobile header -->
             <div class="pb-8 lg:hidden">
@@ -77,9 +75,12 @@
 
 <!-- Mobile footer -->
 <footer
-    class="fixed -right-10 bottom-0 left-0 z-20 flex h-40 items-center justify-around gap-4 bg-brand-bg py-5 pl-6 pr-16 shadow-raised lg:hidden"
+    class="fixed -right-10 bottom-0 left-0 z-20 flex h-40 items-center justify-around gap-2 bg-brand-bg px-3 py-5 pr-10 shadow-raised lg:hidden"
 >
     <Noise />
+    <div class="aspect-square h-full rounded-full shadow-indent">
+        <SectionDial />
+    </div>
     <Contact />
     <div class="aspect-square h-full rounded-full shadow-indent">
         <ScrollDial />
