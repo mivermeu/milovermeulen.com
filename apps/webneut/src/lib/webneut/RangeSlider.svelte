@@ -35,7 +35,7 @@
 </script>
 
 <div class="w-full py-2.5">
-    <div class="relative h-1.5 w-full rounded bg-slate-200">
+    <div class="relative h-1.5 w-full rounded bg-brand-text">
         {#if parameter.values.length > 1}
             <div
                 class="absolute h-full rounded bg-blue-500"
@@ -81,21 +81,33 @@
         width: 16px;
         height: 16px;
         border-radius: 50%;
-        background: #ffffff;
-        border: 2px solid #3b82f6;
+        background: var(--color-brand-secondary);
+        border: 2px solid var(--color-brand-primary);
         cursor: pointer;
         pointer-events: auto;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+        transition: background-color 0.15s, border-color 0.15s;
+    }
+
+    .thumb-input:hover::-webkit-slider-thumb,
+    .thumb-input:active::-webkit-slider-thumb {
+        background: color-mix(in srgb, var(--color-brand-secondary) 85%, white 15%);
     }
 
     .thumb-input::-moz-range-thumb {
         width: 16px;
         height: 16px;
         border-radius: 50%;
-        background: #ffffff;
-        border: 2px solid #3b82f6;
+        background: var(--color-brand-secondary);
+        border: 2px solid var(--color-brand-primary);
         cursor: pointer;
         pointer-events: auto;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+        transition: background-color 0.15s, border-color 0.15s;
+    }
+
+    .thumb-input:hover::-moz-range-thumb,
+    .thumb-input:active::-moz-range-thumb {
+        background: color-mix(in srgb, var(--color-brand-secondary) 85%, white 15%);
     }
 </style>
