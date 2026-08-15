@@ -8,9 +8,14 @@
     const step = Math.pow(10, -1 * parameter.precision);
     const snapThreshold = (max - min) * 0.015;
 
-    let pctLeft = $derived(((parameter.values[0] - min) / (max - min)) * 100);
+    let pctLeft = $derived(
+        Math.min(100, Math.max(0, ((parameter.values[0] - min) / (max - min)) * 100))
+    );
     let pctRight = $derived(
-        parameter.values.length > 1 ? ((parameter.values[1] - min) / (max - min)) * 100 : 100
+        Math.min(
+            100,
+            Math.max(0, parameter.values.length > 1 ? ((parameter.values[1] - min) / (max - min)) * 100 : 100)
+        )
     );
 
     function snap(value: number): number {
