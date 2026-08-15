@@ -4,29 +4,36 @@
     "version": "0.0.1",
     "type": "module",
     "scripts": {
-        "dev": "vite dev --port 5174",
-        "build": "vite build",
+        "dev": "bun run build:wasm && vite dev --port 5174",
+        "build": "bun run build:wasm && vite build",
+        "build:wasm": "wasm-pack build oscillator-rs --target web --out-dir ../src/lib/wasm/pkg",
         "preview": "vite preview --port 4174",
-        "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+        "check": "bun run build:wasm && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
         "lint": "eslint .",
         "test": "vitest run"
     },
     "devDependencies": {
+        "@eslint/compat": "^2.0.4",
+        "@eslint/js": "^10.0.1",
         "@sveltejs/adapter-static": "^3.0.10",
         "@sveltejs/kit": "^2.57.0",
         "@sveltejs/vite-plugin-svelte": "^7.0.0",
         "@tailwindcss/vite": "^4.2.2",
+        "eslint": "^10.2.0",
+        "eslint-config-prettier": "^10.1.8",
+        "eslint-plugin-svelte": "^3.17.0",
+        "globals": "^17.4.0",
         "shared-config": "workspace:*",
         "svelte": "^5.55.2",
         "svelte-check": "^4.4.6",
         "tailwindcss": "^4.2.2",
         "typescript": "^6.0.2",
+        "typescript-eslint": "^8.58.1",
         "vite": "^8.0.7",
         "vitest": "^4"
     },
     "dependencies": {
         "jszip": "^3.10.1",
-        "mathjs": "^15",
         "svelte-plotly.js": "^2.0.0"
     }
 }

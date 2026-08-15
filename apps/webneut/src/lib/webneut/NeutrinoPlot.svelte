@@ -55,7 +55,7 @@
                     b: plotData.y[1],
                     c: plotData.y[2]
                 }
-            ] as Data[];
+            ] as unknown as Data[];
         }
 
         return [

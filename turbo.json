@@ -3,7 +3,7 @@
     "tasks": {
         "build": {
             "dependsOn": ["^build"],
-            "outputs": ["build/**"],
+            "outputs": ["build/**", "src/lib/wasm/pkg/**"],
             "env": ["PUBLIC_*"]
         },
         "dev": {

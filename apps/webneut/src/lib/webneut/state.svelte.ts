@@ -1,6 +1,7 @@
-import { pi } from 'mathjs';
+const pi = Math.PI;
 import { PlotType, type OscillationParameters } from './types';
-import { Oscillator } from './Oscillator';
+import { browser } from '$app/environment';
+import { initWasm, oscillate } from '../wasm/oscillator';
 
 function defaultParameters(): OscillationParameters {
     return {
@@ -111,7 +112,21 @@ export const animatingParameter = $state({
     current: undefined as import('./types').Parameter | undefined
 });
 
-const oscillator = new Oscillator(oscillationParameters);
+let ready = false;
+let pending: OscillationParameters | undefined;
+
+if (browser) {
+    initWasm().then(() => {
+        ready = true;
+        if (pending) run(pending);
+    });
+}
+
+function run(params: OscillationParameters) {
+    const [x, y] = oscillate(params);
+    plotData.x = x;
+    plotData.y = y;
+}
 
 export function recompute() {
     for (const p of Object.values(oscillationParameters)) {
@@ -120,9 +135,11 @@ export function recompute() {
         if (p.values.length > 1) void p.values[1];
     }
     const params = $state.snapshot(oscillationParameters);
-    const [x, y] = oscillator.oscillate(params);
-    plotData.x = x;
-    plotData.y = y;
+    if (!ready) {
+        pending = params;
+        return;
+    }
+    run(params);
 }
 
 export function makeRange(param: import('./types').Parameter) {
