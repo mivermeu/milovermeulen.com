@@ -6,7 +6,7 @@
 </script>
 
 <svelte:head>
-    <title>Milo Vermeulen — Software Engineer</title>
+    <title>Milo Vermeulen</title>
     <meta name="description" content="Full-stack engineer. Particle physics PhD. CERN, ESA, proton therapy, web." />
     <link rel="icon" href={favicon} />
 </svelte:head>
