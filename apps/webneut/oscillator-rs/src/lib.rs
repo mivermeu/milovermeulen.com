@@ -5,9 +5,9 @@ use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
 
 const SQRT2: f64 = std::f64::consts::SQRT_2;
-const LIGHT_SPEED: f64 = 299792458.0; // m/s
-const HBAR: f64 = 1.0545718e-34; // Js
-const REDUCED_FERMI_CONSTANT: f64 = 4.5437957e14; // J^-2
+const LIGHT_SPEED: f64 = 299_792_458.0; // m/s
+const HBAR: f64 = 1.054_571_8e-34; // Js
+const REDUCED_FERMI_CONSTANT: f64 = 4.543_795_7e14; // J^-2
 const ELECTRON_CHARGE: f64 = 1.602e-19; // C
 const NUCLEON_MASS: f64 = 1.6726e-27; // kg
 
@@ -50,6 +50,7 @@ struct Oscillator {
 }
 
 impl Oscillator {
+    #[allow(clippy::similar_names, clippy::many_single_char_names)]
     fn build(current: HashMap<String, f64>) -> Self {
         let th12 = current["th12"];
         let th23 = current["th23"];
@@ -261,10 +262,10 @@ impl Oscillator {
 
         let mut hexp = Matrix3::identity();
         for j in 1..3 {
-            hexp[(j, j)] = iexp(-self.h[(j, j)].re * conv() * l / e / N as f64);
+            hexp[(j, j)] = iexp(-self.h[(j, j)].re * conv() * l / e / f64::from(N));
         }
         let mut vexp = Matrix3::identity();
-        vexp[(0, 0)] = iexp(-self.v[(0, 0)].re * l / N as f64);
+        vexp[(0, 0)] = iexp(-self.v[(0, 0)].re * l / f64::from(N));
 
         let hudvupow = mat_pow(hexp * self.ud * vexp * self.u, N);
 
@@ -279,7 +280,7 @@ fn mat_pow(mut base: Matrix3<Complex64>, mut exp: u32) -> Matrix3<Complex64> {
     let mut result = Matrix3::identity();
     while exp > 0 {
         if exp & 1 == 1 {
-            result = result * base;
+            result *= base;
         }
         base = base * base;
         exp >>= 1;
@@ -287,7 +288,8 @@ fn mat_pow(mut base: Matrix3<Complex64>, mut exp: u32) -> Matrix3<Complex64> {
     result
 }
 
-fn run(params: Params) -> (Vec<f64>, [Vec<f64>; 3]) {
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)]
+fn run(params: &Params) -> (Vec<f64>, [Vec<f64>; 3]) {
     let mut current: HashMap<String, f64> = HashMap::new();
     for (k, p) in &params.map {
         current.insert(k.clone(), p.values[0]);
@@ -310,8 +312,7 @@ fn run(params: Params) -> (Vec<f64>, [Vec<f64>; 3]) {
     let use_matter = params
         .map
         .get("rho")
-        .map(|p| p.values.len() > 1)
-        .unwrap_or(false)
+        .is_some_and(|p| p.values.len() > 1)
         || rho != 0.0;
 
     let mut osc = Oscillator::build(current);
@@ -338,10 +339,16 @@ fn run(params: Params) -> (Vec<f64>, [Vec<f64>; 3]) {
     (x, [pe, pmu, ptau])
 }
 
+/// Computes oscillation probabilities from a JSON-encoded parameter set.
+///
+/// # Panics
+///
+/// Panics if `json_params` is not valid JSON or does not contain a range parameter.
 #[wasm_bindgen]
+#[must_use]
 pub fn oscillate(json_params: &str) -> String {
     let params: Params = serde_json::from_str(json_params).expect("failed to parse params");
-    let result = run(params);
+    let result = run(&params);
     serde_json::to_string(&result).expect("failed to serialize result")
 }
 
@@ -371,11 +378,12 @@ mod tests {
 
     #[test]
     fn probabilities_sum_to_one() {
-        let (x, y) = run(serde_json::from_str(&sample_params()).unwrap());
+        let params: Params = serde_json::from_str(&sample_params()).unwrap();
+        let (x, y) = run(&params);
         assert_eq!(x.len(), 201);
         assert_eq!(y[0].len(), x.len());
-        for i in 0..x.len() {
-            let sum = y[0][i] + y[1][i] + y[2][i];
+        for (i, ((pe, pmu), ptau)) in y[0].iter().zip(&y[1]).zip(&y[2]).enumerate() {
+            let sum = pe + pmu + ptau;
             assert!((sum - 1.0).abs() < 1e-5, "sum = {sum} at {i}");
         }
     }
@@ -384,8 +392,9 @@ mod tests {
     fn matter_changes_probabilities() {
         let mut matter: Params = serde_json::from_str(&sample_params()).unwrap();
         matter.map.get_mut("rho").unwrap().values = vec![2600.0];
-        let (_, y_vac) = run(serde_json::from_str(&sample_params()).unwrap());
-        let (_, y_mat) = run(matter);
+        let vac: Params = serde_json::from_str(&sample_params()).unwrap();
+        let (_, y_vac) = run(&vac);
+        let (_, y_mat) = run(&matter);
         let any_diff = y_vac
             .iter()
             .zip(y_mat.iter())
