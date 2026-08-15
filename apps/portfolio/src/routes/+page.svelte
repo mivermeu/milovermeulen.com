@@ -81,15 +81,13 @@
 <!-- Content (scrolls natively via the document body) -->
 <div bind:this={contentEl} class="lg:ml-[50%]">
     <div
-        class="relative bg-brand-bg p-8 pb-30 lg:mr-auto lg:ml-1 lg:max-w-prose lg:min-h-screen lg:shadow-indent"
+        class="relative bg-brand-bg p-8 pb-30 lg:mr-auto lg:ml-1 lg:min-h-screen lg:max-w-prose lg:shadow-indent"
     >
         <Noise />
         <!-- Mobile header -->
         <div class="pb-8 lg:hidden">
             <h1 class="text-4xl font-medium text-brand-text-highlight">milo vermeulen</h1>
-            <p class="text-sm text-brand-text-accent">
-                μήλο / ميلو / ミロ / 밀로 / 美祿 / मिलो
-            </p>
+            <p class="text-sm text-brand-text-accent">μήλο / ميلو / ミロ / 밀로 / 美祿 / मिलो</p>
         </div>
         <About />
         <Experience />
@@ -99,7 +97,7 @@
 
 <!-- Mobile footer -->
 <footer
-    class="fixed -right-10 bottom-0 left-0 z-20 flex h-40 items-center justify-between gap-4 bg-brand-bg py-5 pl-6 pr-16 shadow-raised lg:hidden"
+    class="fixed -right-10 bottom-0 left-0 z-20 flex h-40 items-center justify-around gap-4 bg-brand-bg py-5 pr-16 pl-6 shadow-raised lg:hidden"
 >
     <Noise />
     <Contact />
