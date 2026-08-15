@@ -17,6 +17,7 @@ All apps are built with **SvelteKit**, **Svelte 5**, and **Tailwind CSS v4**. Th
 apps/                     # independent SvelteKit apps
   portfolio/              # base path /
   webneut/                # base path /webneut
+    oscillator-rs/        # Rust/WASM oscillation engine
 packages/
   shared-config/          # shared Tailwind theme, fonts, and utility CSS
 ```
@@ -33,7 +34,10 @@ bun dev              # start all dev servers via Turborepo
 bun build            # production builds for all apps
 bun lint             # lint all apps
 bun format           # run Prettier across the repo
+bun run build:wasm   # (webneut) compile the Rust crate to WASM
 ```
+
+The webneut app's `dev`, `build`, and `check` scripts run `build:wasm` automatically, so no manual step is needed in normal workflows. Building webneut requires the Rust toolchain: the `wasm32-unknown-unknown` target and `wasm-pack` (`rustup target add wasm32-unknown-unknown && cargo install wasm-pack`).
 
 ## Tech Stack
 - **Framework**: SvelteKit
@@ -43,6 +47,8 @@ bun format           # run Prettier across the repo
 - **Deployment**: Static Adapter (`@sveltejs/adapter-static`)
 - **Package Manager**: bun
 - **Build Orchestrator**: Turborepo
+- **Compute Offload**: Rust → WASM (webneut, via `wasm-pack`)
+- **Math**: `nalgebra` (Rust crate, 3×3 complex matrix operations for neutrino oscillation)
 
 ## Adding a New App
 
@@ -89,6 +95,15 @@ Avoid the old `let` and `$: ` syntax. Use Svelte 5 runes:
 - `src/lib/state/`: Shared reactive state.
 - `src/lib/audio/`: Web Audio API sound effects.
 - `src/app.css`: App-specific CSS overrides (imports shared-config).
+
+## Webneut App Architecture
+
+- `oscillator-rs/`: Rust crate (`nalgebra`) compiled to WASM via `wasm-pack`. Exposes a single JSON-in/JSON-out `oscillate(json) -> json` function. Run its native tests with `cargo test --lib` (in the crate dir).
+- `src/lib/wasm/`: JS bridge (`oscillator.ts`) that eager-inits the WASM module on page load and exposes a synchronous `oscillate(params)`; `pkg/` is generated output (gitignored).
+- `src/lib/webneut/`: `state.svelte.ts` (reactive state + `recompute()` that calls the WASM bridge), components, `types.ts`, and data.
+- `src/lib/wasm/oscillator.test.ts`: vitest coverage.
+
+The `oscillate` computation is fully offloaded to WASM — there is no JS fallback path. Numerical parity between WASM and the original mathjs implementation was verified before removing it; physics correctness is asserted by `cargo test --lib` and the WASM smoke test (probabilities sum to 1).
 
 ## Component Guidelines
 - **Consistency**: New components should follow the design language of existing ones (e.g., using the `BracketedSection` wrapper where appropriate).

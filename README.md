@@ -7,7 +7,7 @@ Personal portfolio and project hub, built with **SvelteKit**, **Svelte 5**, and 
 | Path | App | Description |
 |------|-----|-------------|
 | `/` | [portfolio](./apps/portfolio) | Personal portfolio and resume |
-| `/webneut` | [webneut](./apps/webneut) | Neutrino oscillation visualizer (WIP) |
+| `/webneut` | [webneut](./apps/webneut) | Neutrino oscillation visualizer |
 | `/tracker` | tracker | Satellite tracker (planned) |
 | `/builder` | builder | Cat tree builder (planned) |
 
@@ -22,12 +22,19 @@ bun lint     # lint all apps
 
 Each dev server runs on its own port. See individual app `package.json` for ports.
 
+> **webneut requires Rust.** Its `dev`/`build`/`check` scripts compile `apps/webneut/oscillator-rs` to WASM automatically. Install the `wasm32-unknown-unknown` target and `wasm-pack` first:
+> ```bash
+> rustup target add wasm32-unknown-unknown
+> cargo install wasm-pack
+> ```
+
 ## Structure
 
 ```
 ├── apps/
 │   ├── portfolio/       # SvelteKit + static adapter, base path /
 │   ├── webneut/         # SvelteKit + static adapter, base path /webneut
+│   │   └── oscillator-rs/  # Rust/WASM neutrino oscillation engine
 │   ├── tracker/         # planned
 │   └── builder/         # planned
 ├── packages/
@@ -44,3 +51,4 @@ Each dev server runs on its own port. See individual app `package.json` for port
 - **Language**: TypeScript
 - **Package manager**: bun
 - **Build orchestrator**: Turborepo
+- **Compute offload**: Rust → WASM (`nalgebra`, via `wasm-pack`) for the webneut neutrino oscillation engine
