@@ -11,6 +11,7 @@ export const phd: EducationEntry = {
         genuine neutrino interactions in the DUNE experiment. Authored
         low-level, performant data-acquisition firmware.
     `,
+    tags: ['C++', 'Python', 'Data acquisition', 'Neutrino physics'],
     thesis: {
         name: 'A Blessing in Disguise - Characterisations of ProtoDUNE photon showers for neutrino measurements in DUNE'
     }

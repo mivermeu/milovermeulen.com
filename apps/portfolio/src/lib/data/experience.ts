@@ -29,7 +29,7 @@ export const jobs = [
         tags: ['Python', 'Grafana', 'Raystation', 'Varian Eclipse']
     },
     {
-        companies: [companies.stcorp],
+        companies: [companies.stcorp, companies.esa],
         title: 'Scientific Software Engineer',
         start: new Date(2021, 6, 1),
         stop: new Date(2023, 6, 1),

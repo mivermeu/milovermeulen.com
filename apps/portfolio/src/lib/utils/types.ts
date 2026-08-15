@@ -40,6 +40,7 @@ export type EducationEntry = {
     stop: Date;
     description: string;
     thesis: Thesis;
+    tags?: string[];
 };
 
 export type Project = {

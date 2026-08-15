@@ -29,5 +29,8 @@
             </span>
         </p>
         <p>{job.description}</p>
+        {#if job.tags?.length}
+            <p class="mt-2 text-xs text-brand-text-accent">{job.tags.join(' / ').toLowerCase()}</p>
+        {/if}
     </div>
 </div>

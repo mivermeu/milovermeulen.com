@@ -38,6 +38,12 @@ const stcorp: Company = {
     website: 'https://www.stcorp.nl'
 };
 
+const esa: Company = {
+    name: 'ESA',
+    location: { city: 'Paris', country: 'France' },
+    website: 'https://www.esa.int/'
+};
+
 const nikhef: Company = {
     name: 'Nikhef',
     location: { city: 'Amsterdam', country: 'Netherlands' },
@@ -56,4 +62,4 @@ const uh: Company = {
     website: 'https://www.uh.edu'
 };
 
-export const companies = { realself, nypc, ru, felix, goteborg, stcorp, nikhef, cern, uh } as const;
+export const companies = { realself, nypc, ru, felix, goteborg, stcorp, esa, nikhef, cern, uh } as const;
