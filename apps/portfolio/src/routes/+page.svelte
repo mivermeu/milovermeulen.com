@@ -10,18 +10,13 @@
 
     import { pageState } from '$lib/state/page.svelte';
     import { playTick, attachAutoResume } from '$lib/audio/uiSound';
+    import { attachFakeScroll, cancelFakeScrollMomentum } from '$lib/utils/fakeScroll';
 
     let _prevClick = 0;
     const TOTAL_CLICKS = 8;
 
     let contentEl: HTMLDivElement | undefined = $state();
-
-    function updateMaxScrollY() {
-        pageState.maxScrollY = Math.max(
-            0,
-            document.documentElement.scrollHeight - window.innerHeight
-        );
-    }
+    let viewportEl: HTMLDivElement | undefined = $state();
 
     $effect(() => {
         if (pageState.maxScrollY <= 0) return;
@@ -31,40 +26,16 @@
         playTick();
     });
 
-    // Drive native scroll from the dial while dragging (no body lock, so the
-    // address bar stays put). touch-action:none + pointer capture keep the
-    // browser from scrolling on its own during the drag.
     $effect(() => {
-        if (pageState.draggingDial) {
-            window.scrollTo(0, pageState.scrollY);
-        }
+        if (pageState.draggingDial) cancelFakeScrollMomentum();
     });
 
     $effect(() => {
-        updateMaxScrollY();
-
-        function onScroll() {
-            if (!pageState.draggingDial) pageState.scrollY = window.scrollY;
-        }
-
-        window.addEventListener('scroll', onScroll, { passive: true });
-        window.addEventListener('resize', updateMaxScrollY);
-
-        let ro: ResizeObserver | undefined;
-        if (contentEl) {
-            ro = new ResizeObserver(updateMaxScrollY);
-            ro.observe(contentEl);
-        }
-
-        const cleanup = attachAutoResume();
-
-        return () => {
-            window.removeEventListener('scroll', onScroll);
-            window.removeEventListener('resize', updateMaxScrollY);
-            ro?.disconnect();
-            cleanup();
-        };
+        if (!viewportEl || !contentEl) return;
+        return attachFakeScroll(viewportEl, contentEl);
     });
+
+    $effect(() => attachAutoResume());
 </script>
 
 <Noise isFixed={true} />
@@ -78,31 +49,39 @@
     </BracketedSection>
 </div>
 
-<!-- Content (scrolls natively via the document body) -->
-<div bind:this={contentEl} class="lg:ml-[50%]">
+<!-- Fake-scroll viewport -->
+<div
+    bind:this={viewportEl}
+    class="fixed top-0 right-0 bottom-0 w-full overflow-hidden lg:w-1/2"
+>
     <div
-        class="relative bg-brand-bg px-8 pt-8 pb-[calc(15rem+env(safe-area-inset-bottom,0px))] lg:mr-auto lg:ml-1 lg:min-h-screen lg:max-w-prose lg:pb-30 lg:shadow-indent"
+        bind:this={contentEl}
+        class="container mr-auto will-change-transform lg:max-w-prose"
+        style:transform="translate3d(0, {-pageState.scrollY}px, 0)"
     >
-        <Noise />
-        <!-- Mobile header -->
-        <div class="pb-8 lg:hidden">
-            <h1 class="text-4xl font-medium text-brand-text-highlight">milo vermeulen</h1>
-            <p class="text-sm text-brand-text-accent">μήλο / ميلو / ミロ / 밀로 / 美祿 / मिलो</p>
+        <div class="relative bg-brand-bg p-8 pb-30 lg:ml-1 lg:min-h-screen lg:shadow-indent">
+            <Noise />
+            <!-- Mobile header -->
+            <div class="pb-8 lg:hidden">
+                <h1 class="text-4xl font-medium text-brand-text-highlight">milo vermeulen</h1>
+                <p class="text-sm text-brand-text-accent">
+                    μήλο / ميلو / ミロ / 밀로 / 美祿 / मिलो
+                </p>
+            </div>
+            <About />
+            <Experience />
+            <Projects />
         </div>
-        <About />
-        <Experience />
-        <Projects />
     </div>
 </div>
 
 <!-- Mobile footer -->
-<footer class="fixed -right-10 bottom-0 left-0 z-20 bg-brand-bg shadow-raised lg:hidden">
+<footer
+    class="fixed -right-10 bottom-0 left-0 z-20 flex h-40 items-center justify-around gap-4 bg-brand-bg py-5 pl-6 pr-16 shadow-raised lg:hidden"
+>
     <Noise />
-    <div class="flex h-40 items-center justify-around gap-4 py-5 pr-16 pl-6">
-        <Contact />
-        <div class="aspect-square h-full rounded-full shadow-indent">
-            <ScrollDial />
-        </div>
+    <Contact />
+    <div class="aspect-square h-full rounded-full shadow-indent">
+        <ScrollDial />
     </div>
-    <div class="h-[env(safe-area-inset-bottom,0px)]"></div>
 </footer>
