@@ -11,7 +11,7 @@
     let { className = '', job }: Props = $props();
 
     const job_start_text = $derived(month_plus_year(job.start));
-    const job_stop_text = $derived(job.stop ? month_plus_year(job.stop) : 'Current');
+    const job_stop_text = $derived(job.stop ? month_plus_year(job.stop) : 'Present');
 </script>
 
 <div class="grid grid-cols-[auto_1fr] gap-2 {className}">

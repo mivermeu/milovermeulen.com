@@ -9,12 +9,11 @@ export const jobs = [
         title: 'Fullstack Software Engineer',
         start: new Date(2026, 0, 5),
         description: `
-            Increase critical page performance through simplification of frontend
-            and backend code. Ensure code quality with the introduction of industry
-            standard tools.
+            Full-stack ownership across feature delivery, performance
+            optimization, and infrastructure maintenance.
         `,
         details: '',
-        tags: ['React', 'TypeScript', 'FastAPI', 'AWS']
+        tags: ['React', 'TypeScript', 'FastAPI', 'AWS', 'Terraform']
     },
     {
         companies: [companies.nypc],
@@ -22,8 +21,9 @@ export const jobs = [
         start: new Date(2024, 2, 11),
         stop: new Date(2026, 0, 2),
         description: `
-            Ensure that proton therapy patients receive their planned care.
-            Manage the center's clinical software and support research projects.
+            Maintained clinical software systems ensuring continuity of proton
+            therapy delivery. Supported research initiatives across the
+            treatment center.
         `,
         details: '',
         tags: ['Python', 'Grafana', 'Raystation', 'Varian Eclipse']
@@ -34,8 +34,8 @@ export const jobs = [
         start: new Date(2021, 6, 1),
         stop: new Date(2023, 6, 1),
         description: `
-            Develop an interactive monitoring system for two earth observation
-            satellite missions by the European Space Agency: EarthCARE and Biomass.
+            Engineered an interactive telemetry monitoring platform for two ESA
+            earth-observation missions: EarthCARE and Biomass.
         `,
         details: '',
         tags: ['Django', 'Python', 'PostgreSQL', 'Docker', 'Grafana']

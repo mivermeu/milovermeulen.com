@@ -7,9 +7,9 @@ export const phd: EducationEntry = {
     start: new Date(2016, 9, 1),
     stop: new Date(2021, 2, 1),
     description: `
-        During my doctoral research, I found a way to unmask impostor particles that act
-        like the particle we were actually after in our large-scale neutrino
-        experiment. I also created low-level and performant data-acquisition code.
+        Developed a method to discriminate impostor particle signatures from
+        genuine neutrino interactions in the DUNE experiment. Authored
+        low-level, performant data-acquisition firmware.
     `,
     thesis: {
         name: 'A Blessing in Disguise - Characterisations of ProtoDUNE photon showers for neutrino measurements in DUNE'
@@ -38,7 +38,7 @@ export const bachelor: EducationEntry = {
     stop: new Date(2014, 8, 1),
     description: `
         For my thesis research I characterised free-electron laser radiation and
-        ultra-fast THz mirror switching. I also joined the honurs programme, in
+        ultra-fast THz mirror switching. I also joined the honours programme, in
         which I researched tumour treatment using paramagnetic nanoparticles in
         a cross-functional team.
     `,

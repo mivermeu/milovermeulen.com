@@ -5,6 +5,10 @@
     let { children } = $props();
 </script>
 
-<svelte:head><link rel="icon" href={favicon} /></svelte:head>
+<svelte:head>
+    <title>Milo Vermeulen — Software Engineer</title>
+    <meta name="description" content="Full-stack engineer. Particle physics PhD. CERN, ESA, proton therapy, web." />
+    <link rel="icon" href={favicon} />
+</svelte:head>
 
 {@render children()}
