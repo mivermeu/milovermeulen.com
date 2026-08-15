@@ -81,7 +81,7 @@
 <!-- Content (scrolls natively via the document body) -->
 <div bind:this={contentEl} class="lg:ml-[50%]">
     <div
-        class="relative bg-brand-bg p-8 pb-30 lg:mr-auto lg:ml-1 lg:min-h-screen lg:max-w-prose lg:shadow-indent"
+        class="relative bg-brand-bg px-8 pt-8 pb-[calc(15rem+env(safe-area-inset-bottom,0px))] lg:mr-auto lg:ml-1 lg:min-h-screen lg:max-w-prose lg:pb-30 lg:shadow-indent"
     >
         <Noise />
         <!-- Mobile header -->
@@ -96,12 +96,13 @@
 </div>
 
 <!-- Mobile footer -->
-<footer
-    class="fixed -right-10 bottom-0 left-0 z-20 flex h-40 items-center justify-around gap-4 bg-brand-bg py-5 pr-16 pl-6 shadow-raised lg:hidden"
->
+<footer class="fixed -right-10 bottom-0 left-0 z-20 bg-brand-bg shadow-raised lg:hidden">
     <Noise />
-    <Contact />
-    <div class="aspect-square h-full rounded-full shadow-indent">
-        <ScrollDial />
+    <div class="flex h-40 items-center justify-around gap-4 py-5 pr-16 pl-6">
+        <Contact />
+        <div class="aspect-square h-full rounded-full shadow-indent">
+            <ScrollDial />
+        </div>
     </div>
+    <div class="h-[env(safe-area-inset-bottom,0px)]"></div>
 </footer>
