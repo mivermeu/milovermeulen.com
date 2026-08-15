@@ -1,8 +1,20 @@
 <script lang="ts">
+    import { browser } from '$app/environment';
     import Plot from 'svelte-plotly.js';
     import type { Layout, Data } from 'svelte-plotly.js';
     import { oscillationParameters, plotData } from '$lib/webneut/state.svelte';
     import { PlotType, type Parameter } from '$lib/webneut/types';
+
+    let width = $state(browser ? window.innerWidth : 1024);
+
+    $effect(() => {
+        if (!browser) return;
+        const handler = () => (width = window.innerWidth);
+        window.addEventListener('resize', handler);
+        return () => window.removeEventListener('resize', handler);
+    });
+
+    const lineWidth = $derived(width < 768 ? 1 : 2);
 
     const rangeParameter = $derived(
         Object.values(oscillationParameters).find((par: Parameter) => par.values.length > 1) as
@@ -54,7 +66,8 @@
                     mode: 'lines' as const,
                     a: plotData.y[0],
                     b: plotData.y[1],
-                    c: plotData.y[2]
+                    c: plotData.y[2],
+                    line: { width: lineWidth }
                 }
             ] as unknown as Data[];
         }
@@ -64,19 +77,19 @@
                 x: plotData.x,
                 y: plotData.y[0],
                 name: nustr + '<sub>e</sub>',
-                line: { color: '#4ade80' }
+                line: { color: '#4ade80', width: lineWidth }
             },
             {
                 x: plotData.x,
                 y: plotData.y[1],
                 name: nustr + '<sub>\u03BC</sub>',
-                line: { color: '#60a5fa' }
+                line: { color: '#60a5fa', width: lineWidth }
             },
             {
                 x: plotData.x,
                 y: plotData.y[2],
                 name: nustr + '<sub>\u03C4</sub>',
-                line: { color: '#f87171' }
+                line: { color: '#f87171', width: lineWidth }
             }
         ] satisfies Data[];
     });
