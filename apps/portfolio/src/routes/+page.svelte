@@ -5,7 +5,6 @@
     import Projects from '$lib/sections/Projects.svelte';
     import Experience from '$lib/sections/Experience.svelte';
     import Aside from '$lib/sections/Aside.svelte';
-    import SectionDial from '$lib/components/SectionDial.svelte';
     import ScrollDial from '$lib/components/ScrollDial.svelte';
     import Contact from '$lib/components/Contact.svelte';
 
@@ -16,13 +15,12 @@
     const TOTAL_CLICKS = 8;
 
     let contentEl: HTMLDivElement | undefined = $state();
-    let viewportEl: HTMLDivElement | undefined = $state();
-    let touchStartY = 0;
-    let touchStartScrollY = 0;
 
     function updateMaxScrollY() {
-        if (!contentEl || !viewportEl) return;
-        pageState.maxScrollY = Math.max(0, contentEl.scrollHeight - viewportEl.clientHeight);
+        pageState.maxScrollY = Math.max(
+            0,
+            document.documentElement.scrollHeight - window.innerHeight
+        );
     }
 
     $effect(() => {
@@ -33,39 +31,37 @@
         playTick();
     });
 
-    function onWheel(e: WheelEvent) {
-        if (pageState.draggingDial) return;
-        pageState.scrollY = Math.max(
-            0,
-            Math.min(pageState.maxScrollY, pageState.scrollY + e.deltaY)
-        );
-    }
-
-    function onTouchStart(e: TouchEvent) {
-        if (pageState.draggingDial) return;
-        touchStartY = e.touches[0].clientY;
-        touchStartScrollY = pageState.scrollY;
-    }
-
-    function onTouchMove(e: TouchEvent) {
-        if (pageState.draggingDial) return;
-        e.preventDefault();
-        const deltaY = touchStartY - e.touches[0].clientY;
-        pageState.scrollY = Math.max(0, Math.min(pageState.maxScrollY, touchStartScrollY + deltaY));
-    }
+    // Drive native scroll from the dial while dragging (no body lock, so the
+    // address bar stays put). touch-action:none + pointer capture keep the
+    // browser from scrolling on its own during the drag.
+    $effect(() => {
+        if (pageState.draggingDial) {
+            window.scrollTo(0, pageState.scrollY);
+        }
+    });
 
     $effect(() => {
         updateMaxScrollY();
-        if (!contentEl) return;
-        const ro = new ResizeObserver(updateMaxScrollY);
-        ro.observe(contentEl);
-        viewportEl?.addEventListener('touchstart', onTouchStart, { passive: false });
-        viewportEl?.addEventListener('touchmove', onTouchMove, { passive: false });
+
+        function onScroll() {
+            if (!pageState.draggingDial) pageState.scrollY = window.scrollY;
+        }
+
+        window.addEventListener('scroll', onScroll, { passive: true });
+        window.addEventListener('resize', updateMaxScrollY);
+
+        let ro: ResizeObserver | undefined;
+        if (contentEl) {
+            ro = new ResizeObserver(updateMaxScrollY);
+            ro.observe(contentEl);
+        }
+
         const cleanup = attachAutoResume();
+
         return () => {
-            ro.disconnect();
-            viewportEl?.removeEventListener('touchstart', onTouchStart);
-            viewportEl?.removeEventListener('touchmove', onTouchMove);
+            window.removeEventListener('scroll', onScroll);
+            window.removeEventListener('resize', updateMaxScrollY);
+            ro?.disconnect();
             cleanup();
         };
     });
@@ -82,41 +78,30 @@
     </BracketedSection>
 </div>
 
-<!-- Fake-scroll viewport -->
-<div
-    bind:this={viewportEl}
-    class="fixed top-0 right-0 bottom-0 w-full overflow-hidden lg:w-1/2"
-    onwheel={onWheel}
->
+<!-- Content (scrolls natively via the document body) -->
+<div bind:this={contentEl} class="lg:ml-[50%]">
     <div
-        bind:this={contentEl}
-        class="container mr-auto will-change-transform lg:max-w-prose"
-        style:transform="translate3d(0, {-pageState.scrollY}px, 0)"
+        class="relative bg-brand-bg p-8 pb-30 lg:mr-auto lg:ml-1 lg:max-w-prose lg:min-h-screen lg:shadow-indent"
     >
-        <div class="relative bg-brand-bg p-8 pb-30 lg:ml-1 lg:min-h-screen lg:shadow-indent">
-            <Noise />
-            <!-- Mobile header -->
-            <div class="pb-8 lg:hidden">
-                <h1 class="text-4xl font-medium text-brand-text-highlight">milo vermeulen</h1>
-                <p class="text-sm text-brand-text-accent">
-                    μήλο / ميلو / ミロ / 밀로 / 美祿 / मिलो
-                </p>
-            </div>
-            <About />
-            <Experience />
-            <Projects />
+        <Noise />
+        <!-- Mobile header -->
+        <div class="pb-8 lg:hidden">
+            <h1 class="text-4xl font-medium text-brand-text-highlight">milo vermeulen</h1>
+            <p class="text-sm text-brand-text-accent">
+                μήλο / ميلو / ミロ / 밀로 / 美祿 / मिलो
+            </p>
         </div>
+        <About />
+        <Experience />
+        <Projects />
     </div>
 </div>
 
 <!-- Mobile footer -->
 <footer
-    class="fixed -right-10 bottom-0 left-0 z-20 flex h-40 items-center justify-center gap-2 bg-brand-bg px-3 py-5 pr-10 shadow-raised lg:hidden"
+    class="fixed -right-10 bottom-0 left-0 z-20 flex h-40 items-center justify-between gap-4 bg-brand-bg py-5 pl-6 pr-16 shadow-raised lg:hidden"
 >
     <Noise />
-    <div class="aspect-square h-full rounded-full shadow-indent">
-        <SectionDial />
-    </div>
     <Contact />
     <div class="aspect-square h-full rounded-full shadow-indent">
         <ScrollDial />
