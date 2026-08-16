@@ -13,6 +13,7 @@ export type OscillationParameters = {
     animation_period: Parameter,
     nu: Parameter,
     anti: Parameter,
+    mass_ordering: Parameter,
     E: Parameter,
     L: Parameter,
     th12: Parameter,

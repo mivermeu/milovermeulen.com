@@ -20,11 +20,11 @@ function defaultParameters(): OscillationParameters {
             limits: [50, 2000]
         },
         animation_period: {
-            values: [5],
+            values: [10],
             label: 'Animation period [s]',
             snaps: [],
             precision: 1,
-            limits: [1, 20]
+            limits: [1, 40]
         },
         nu: {
             values: [1],
@@ -54,10 +54,17 @@ function defaultParameters(): OscillationParameters {
             precision: 0,
             limits: [0, 40000]
         },
+        mass_ordering: {
+            values: [1],
+            label: 'Mass ordering',
+            snaps: [],
+            precision: 0,
+            limits: [-1, 1]
+        },
         th12: {
-            values: [0.5843],
+            values: [0.584],
             label: '\u03b8<sub>12</sub> [rad]',
-            snaps: [0.5843, pi / 2],
+            snaps: [0.584, pi / 2],
             precision: 3,
             limits: [0, pi]
         },
@@ -84,13 +91,13 @@ function defaultParameters(): OscillationParameters {
         },
         Dm31sq: {
             values: [2.457],
-            label: '\u0394m<sub>31</sub><sup>2</sup> [10<sup>-5</sup> eV<sup>2</sup>]',
-            snaps: [2.457, 0, -2.457],
+            label: '|\u0394m<sub>31</sub><sup>2</sup>| [10<sup>-5</sup> eV<sup>2</sup>]',
+            snaps: [2.457],
             precision: 3,
-            limits: [-5, 5]
+            limits: [0, 5]
         },
         dCP: {
-            values: [-0.62 * pi],
+            values: [-1.948],
             label: '\u03b4<sub>CP</sub> [rad]',
             snaps: [-0.62 * pi, 0, pi / 2, -pi / 2],
             precision: 3,

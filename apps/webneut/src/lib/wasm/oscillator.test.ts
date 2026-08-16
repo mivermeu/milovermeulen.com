@@ -12,6 +12,7 @@ function sampleParams() {
         animation_period: { values: [5] },
         nu: { values: [1] },
         anti: { values: [1] },
+        mass_ordering: { values: [1] },
         E: { values: [1] },
         L: { values: [0, 33060] },
         th12: { values: [0.5843] },
