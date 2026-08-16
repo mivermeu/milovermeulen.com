@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { oscillationParameters } from '$lib/webneut/state.svelte';
+    import { oscillationParameters, resetMixingParameters } from '$lib/webneut/state.svelte';
     import SliderAssembly from '$lib/webneut/SliderAssembly.svelte';
     import NeutrinoSelector from '$lib/webneut/NeutrinoSelector.svelte';
     import PlotTypeSelector from '$lib/webneut/PlotTypeSelector.svelte';
@@ -30,7 +30,10 @@
     <div
         class="control-card self-start rounded-lg bg-brand-secondary p-4 [grid-area:neutrino-controls]"
     >
-        <h3>Neutrino mixing parameters</h3>
+        <h3 class="flex items-center justify-between">
+            Neutrino mixing parameters
+            <button class="px-2 py-0.5 text-sm" onclick={resetMixingParameters}>Reset</button>
+        </h3>
         <MassOrderingSelector />
         {#each [oscillationParameters.th12, oscillationParameters.th23, oscillationParameters.th13, oscillationParameters.Dm21sq, oscillationParameters.Dm31sq, oscillationParameters.dCP] as parameter (parameter.label)}
             <SliderAssembly bind:parameter action_buttons={true} />

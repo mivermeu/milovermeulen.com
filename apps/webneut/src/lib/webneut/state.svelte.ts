@@ -3,6 +3,71 @@ import { PlotType, type OscillationParameters } from './types';
 import { browser } from '$app/environment';
 import { initWasm, oscillate } from '../wasm/oscillator';
 
+type MixingParameters = Pick<
+    OscillationParameters,
+    'th12' | 'th23' | 'th13' | 'Dm21sq' | 'Dm31sq' | 'dCP' | 'mass_ordering'
+>;
+
+function defaultMixingParameters(): MixingParameters {
+    return {
+        th12: {
+            values: [0.5873],
+            label: '\u03b8<sub>12</sub> [rad]',
+            snaps: [0.5873, pi / 2],
+            precision: 4,
+            limits: [0, pi]
+        },
+        th23: {
+            values: [0.8194],
+            label: '\u03b8<sub>23</sub> [rad]',
+            snaps: [0.8194, pi / 2],
+            precision: 4,
+            limits: [0, pi]
+        },
+        th13: {
+            values: [0.1475],
+            label: '\u03b8<sub>13</sub> [rad]',
+            snaps: [0.1475, pi / 2, pi, (pi / 2) * 3],
+            precision: 4,
+            limits: [0, 2 * pi]
+        },
+        Dm21sq: {
+            values: [7.5],
+            label: '\u0394m<sub>21</sub><sup>2</sup> [10<sup>-5</sup> eV<sup>2</sup>]',
+            snaps: [7.5],
+            precision: 3,
+            limits: [0, 10]
+        },
+        Dm31sq: {
+            values: [2.527],
+            label: '|\u0394m<sub>31</sub><sup>2</sup>| [10<sup>-3</sup> eV<sup>2</sup>]',
+            snaps: [2.527],
+            precision: 3,
+            limits: [0, 5]
+        },
+        dCP: {
+            values: [-2.583],
+            label: '\u03b4<sub>CP</sub> [rad]',
+            snaps: [-2.583, 0, pi / 2, -pi / 2],
+            precision: 3,
+            limits: [-pi, pi]
+        },
+        mass_ordering: {
+            values: [1],
+            label: 'Mass ordering',
+            snaps: [],
+            precision: 0,
+            limits: [-1, 1]
+        }
+    };
+}
+
+export function resetMixingParameters() {
+    for (const [key, param] of Object.entries(defaultMixingParameters())) {
+        oscillationParameters[key] = { ...param };
+    }
+}
+
 function defaultParameters(): OscillationParameters {
     return {
         plot_type: {
@@ -54,62 +119,14 @@ function defaultParameters(): OscillationParameters {
             precision: 0,
             limits: [0, 40000]
         },
-        mass_ordering: {
-            values: [1],
-            label: 'Mass ordering',
-            snaps: [],
-            precision: 0,
-            limits: [-1, 1]
-        },
-        th12: {
-            values: [0.584],
-            label: '\u03b8<sub>12</sub> [rad]',
-            snaps: [0.584, pi / 2],
-            precision: 3,
-            limits: [0, pi]
-        },
-        th23: {
-            values: [0.738],
-            label: '\u03b8<sub>23</sub> [rad]',
-            snaps: [0.738, pi / 2],
-            precision: 3,
-            limits: [0, pi]
-        },
-        th13: {
-            values: [0.148],
-            label: '\u03b8<sub>13</sub> [rad]',
-            snaps: [0.148, pi / 2, pi, (pi / 2) * 3],
-            precision: 3,
-            limits: [0, 2 * pi]
-        },
-        Dm21sq: {
-            values: [7.5],
-            label: '\u0394m<sub>21</sub><sup>2</sup> [10<sup>-5</sup> eV<sup>2</sup>]',
-            snaps: [7.5],
-            precision: 3,
-            limits: [0, 10]
-        },
-        Dm31sq: {
-            values: [2.457],
-            label: '|\u0394m<sub>31</sub><sup>2</sup>| [10<sup>-5</sup> eV<sup>2</sup>]',
-            snaps: [2.457],
-            precision: 3,
-            limits: [0, 5]
-        },
-        dCP: {
-            values: [-1.948],
-            label: '\u03b4<sub>CP</sub> [rad]',
-            snaps: [-0.62 * pi, 0, pi / 2, -pi / 2],
-            precision: 3,
-            limits: [-pi, pi]
-        },
         rho: {
             values: [0],
             label: '\u03c1 [kg/m<sup>3</sup>]',
             snaps: [2600],
             precision: 0,
             limits: [0, 10000]
-        }
+        },
+        ...defaultMixingParameters()
     };
 }
 
