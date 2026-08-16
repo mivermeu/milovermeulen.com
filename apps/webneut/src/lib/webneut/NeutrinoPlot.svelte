@@ -2,7 +2,7 @@
     import { browser } from '$app/environment';
     import Plot from 'svelte-plotly.js';
     import type { Layout, Data } from 'svelte-plotly.js';
-    import { oscillationParameters, plotData } from '$lib/webneut/state.svelte';
+    import { oscillationParameters, plotData, animatingParameter } from '$lib/webneut/state.svelte';
     import { PlotType, type Parameter } from '$lib/webneut/types';
 
     let width = $state(browser ? window.innerWidth : 1024);
@@ -72,6 +72,26 @@
     }
 
     const isLinear = $derived(oscillationParameters.plot_type.values[0] === PlotType.Linear);
+
+    const animationAnnotation = $derived.by(() => {
+        const param = animatingParameter.current;
+        if (!param) return [];
+        return [
+            {
+                text: `${param.label} = ${param.values[0].toFixed(param.precision)}`,
+                x: 0.4,
+                y: 1.01,
+                xref: 'paper',
+                yref: 'paper',
+                xanchor: 'right',
+                yanchor: 'bottom',
+                showarrow: false,
+                font: { color: '#ff6900', size: 14 },
+                bgcolor: 'rgba(34, 34, 34, 0.8)',
+                borderpad: 4
+            }
+        ] as Partial<Layout>['annotations'];
+    });
 
     const darkPlot = {
         paper_bgcolor: '#222',
@@ -176,6 +196,7 @@
                     baxis: makeTernAxis(nustr + '<sub>\u03BC</sub>', 45),
                     caxis: makeTernAxis(nustr + '<sub>\u03C4</sub>', -45)
                 },
+                annotations: animationAnnotation,
                 margin: { l: 40, r: 40, b: 90, t: 50 }
             };
         }
@@ -203,6 +224,7 @@
                 xref: 'paper',
                 yref: 'paper'
             },
+            annotations: animationAnnotation,
             showlegend: true,
             legend: {
                 orientation: 'h',
