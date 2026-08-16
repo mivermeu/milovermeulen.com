@@ -45,6 +45,32 @@
         };
     }
 
+    function lerp(a: number, b: number, t: number) {
+        return a + (b - a) * t;
+    }
+
+    const GRADIENT: [number, number, number][] = [
+        [80, 140, 240],
+        [50, 200, 220],
+        [170, 225, 120],
+        [250, 220, 80]
+    ];
+
+    const colorscale: [number, string][] = GRADIENT.map(([r, g, b], i) => [
+        i / (GRADIENT.length - 1),
+        `rgb(${r},${g},${b})`
+    ]);
+
+    function gradientColor(t: number): string {
+        t = Math.min(1, Math.max(0, t));
+        const segments = GRADIENT.length - 1;
+        const segment = Math.min(Math.floor(t * segments), segments - 1);
+        const local = t * segments - segment;
+        const from = GRADIENT[segment];
+        const to = GRADIENT[segment + 1];
+        return `rgb(${Math.round(lerp(from[0], to[0], local))},${Math.round(lerp(from[1], to[1], local))},${Math.round(lerp(from[2], to[2], local))})`;
+    }
+
     const isLinear = $derived(oscillationParameters.plot_type.values[0] === PlotType.Linear);
 
     const darkPlot = {
@@ -60,16 +86,61 @@
 
     const data = $derived.by(() => {
         if (!isLinear) {
-            return [
-                {
+            const pe = plotData.y[0];
+            const pmu = plotData.y[1];
+            const ptau = plotData.y[2];
+            const n = plotData.x.length;
+            const x0 = plotData.x[0];
+            const x1 = plotData.x[n - 1];
+            const segs = Math.min(50, n - 1);
+            const traces = [];
+
+            for (let s = 0; s < segs; s++) {
+                const start = Math.floor((s * (n - 1)) / segs);
+                const end = Math.floor(((s + 1) * (n - 1)) / segs);
+                const t =
+                    x1 === x0 ? 0 : (plotData.x[Math.floor((start + end) / 2)] - x0) / (x1 - x0);
+                traces.push({
                     type: 'scatterternary' as const,
                     mode: 'lines' as const,
-                    a: plotData.y[0],
-                    b: plotData.y[1],
-                    c: plotData.y[2],
-                    line: { width: lineWidth }
-                }
-            ] as unknown as Data[];
+                    a: pe.slice(start, end + 1),
+                    b: pmu.slice(start, end + 1),
+                    c: ptau.slice(start, end + 1),
+                    line: { color: gradientColor(t), width: lineWidth },
+                    hoverinfo: 'skip' as const,
+                    showlegend: false
+                });
+            }
+
+            traces.push({
+                type: 'scatterternary' as const,
+                mode: 'markers' as const,
+                a: [pe[0]],
+                b: [pmu[0]],
+                c: [ptau[0]],
+                marker: {
+                    color: [x0, x1],
+                    colorscale,
+                    showscale: true,
+                    cmin: x0,
+                    cmax: x1,
+                    colorbar: {
+                        title: { text: rangeParameter ? rangeParameter.label : '' },
+                        orientation: 'h',
+                        thickness: 16,
+                        len: 0.7,
+                        x: 0.5,
+                        y: -0.15,
+                        xanchor: 'center',
+                        yanchor: 'bottom'
+                    },
+                    size: 0
+                },
+                hoverinfo: 'skip' as const,
+                showlegend: false
+            });
+
+            return traces as unknown as Data[];
         }
 
         return [
@@ -105,7 +176,7 @@
                     baxis: makeTernAxis(nustr + '<sub>\u03BC</sub>', 45),
                     caxis: makeTernAxis(nustr + '<sub>\u03C4</sub>', -45)
                 },
-                margin: { l: 40, r: 40, b: 50, t: 50 }
+                margin: { l: 40, r: 40, b: 90, t: 50 }
             };
         }
 
