@@ -1,39 +1,27 @@
 <script lang="ts">
     import { oscillationParameters } from '$lib/webneut/state.svelte';
+    import { NEUTRINO_OPTIONS } from '$lib/webneut/constants';
+    import PanelSwitch from '$lib/webneut/PanelSwitch.svelte';
 
-    let antiChecked = $state(oscillationParameters.anti.values[0] < 0);
-    let nuSelected = $state(oscillationParameters.nu.values[0]);
+    let nuSelected = $state(
+        oscillationParameters.anti.values[0] < 0
+            ? oscillationParameters.nu.values[0] + 3
+            : oscillationParameters.nu.values[0]
+    );
 
-    const nuSymbol = $derived(antiChecked ? '\u03BD&#773;' : '\u03BD');
-    const nuOptions = $derived([
-        { label: nuSymbol + '<sub>e</sub>', value: 0 },
-        { label: nuSymbol + '<sub>\u03BC</sub>', value: 1 },
-        { label: nuSymbol + '<sub>\u03C4</sub>', value: 2 }
-    ]);
-
-    function update() {
-        oscillationParameters.anti.values[0] = antiChecked ? -1 : 1;
-        oscillationParameters.nu.values[0] = nuSelected;
-    }
+    $effect(() => {
+        const option = NEUTRINO_OPTIONS[nuSelected];
+        oscillationParameters.nu.values[0] = option.nu;
+        oscillationParameters.anti.values[0] = option.anti;
+    });
 </script>
 
-<div class="my-4 flex flex-col gap-2">
-    <label class="flex items-center gap-2">
-        Antineutrino
-        <input type="checkbox" bind:checked={antiChecked} onchange={update} />
-    </label>
-    <div class="flex flex-col gap-2">
-        {#each nuOptions as nuOption, i}
-            <label class="flex items-center gap-2">
-                <input
-                    type="radio"
-                    bind:group={nuSelected}
-                    name="nu_value"
-                    value={i}
-                    onchange={update}
-                />
-                <span class="font-serif">{@html nuOption.label}</span>
-            </label>
-        {/each}
-    </div>
+<div class="my-4 grid grid-cols-3 gap-2">
+    {#each NEUTRINO_OPTIONS as option, i (i)}
+        <PanelSwitch bind:group={nuSelected} value={i}>
+            <span class="font-serif">
+                {option.anti < 0 ? '\u03BD\u0305' : '\u03BD'}<sub>{option.flavor}</sub>
+            </span>
+        </PanelSwitch>
+    {/each}
 </div>
