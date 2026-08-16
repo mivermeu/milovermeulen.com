@@ -63,9 +63,27 @@ function defaultMixingParameters(): MixingParameters {
 }
 
 export function resetMixingParameters() {
-    for (const [key, param] of Object.entries(defaultMixingParameters())) {
-        oscillationParameters[key] = { ...param };
+    const defaults = defaultMixingParameters();
+    const startValues: Record<string, number> = {};
+    for (const key of Object.keys(defaults) as (keyof MixingParameters)[]) {
+        const param = oscillationParameters[key];
+        startValues[key] = param.values[0];
+        if (key === 'mass_ordering') param.values[0] = defaults[key].values[0];
     }
+    const duration = 700;
+    const startTime = performance.now();
+    const tick = () => {
+        const t = Math.min((performance.now() - startTime) / duration, 1);
+        const ease = 1 - (1 - t) * (1 - t);
+        for (const key of Object.keys(defaults) as (keyof MixingParameters)[]) {
+            const param = oscillationParameters[key];
+            if (key === 'mass_ordering' || param.values.length > 1) continue;
+            param.values[0] =
+                startValues[key] + (defaults[key].values[0] - startValues[key]) * ease;
+        }
+        if (t < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
 }
 
 function defaultParameters(): OscillationParameters {
