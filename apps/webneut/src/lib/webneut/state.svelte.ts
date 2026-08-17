@@ -62,28 +62,59 @@ function defaultMixingParameters(): MixingParameters {
     };
 }
 
-export function resetMixingParameters() {
-    const defaults = defaultMixingParameters();
+let activeTween: (() => void) | undefined;
+
+function tweenValues(
+    targets: Record<string, number>,
+    duration: number,
+    targets1?: Record<string, number>
+) {
+    if (activeTween) activeTween();
+    const entries = Object.entries(targets) as [string, number][];
     const startValues: Record<string, number> = {};
-    for (const key of Object.keys(defaults) as (keyof MixingParameters)[]) {
-        const param = oscillationParameters[key];
-        startValues[key] = param.values[0];
-        if (key === 'mass_ordering') param.values[0] = defaults[key].values[0];
+    const startValues1: Record<string, number> = {};
+    for (const [key] of entries) {
+        startValues[key] = oscillationParameters[key].values[0];
+        if (targets1?.[key] !== undefined) {
+            startValues1[key] = oscillationParameters[key].values[1];
+        }
     }
-    const duration = 700;
+    let cancelled = false;
+    activeTween = () => {
+        cancelled = true;
+    };
     const startTime = performance.now();
     const tick = () => {
+        if (cancelled) return;
         const t = Math.min((performance.now() - startTime) / duration, 1);
         const ease = 1 - (1 - t) * (1 - t);
-        for (const key of Object.keys(defaults) as (keyof MixingParameters)[]) {
-            const param = oscillationParameters[key];
-            if (key === 'mass_ordering' || param.values.length > 1) continue;
-            param.values[0] =
-                startValues[key] + (defaults[key].values[0] - startValues[key]) * ease;
+        for (const [key, target] of entries) {
+            oscillationParameters[key].values[0] =
+                startValues[key] + (target - startValues[key]) * ease;
+            if (targets1?.[key] !== undefined) {
+                oscillationParameters[key].values[1] =
+                    startValues1[key] + (targets1[key] - startValues1[key]) * ease;
+            }
         }
         if (t < 1) requestAnimationFrame(tick);
+        else activeTween = undefined;
     };
     requestAnimationFrame(tick);
+}
+
+export function resetMixingParameters() {
+    const defaults = defaultMixingParameters();
+    const targets: Record<string, number> = {};
+    for (const key of Object.keys(defaults) as (keyof MixingParameters)[]) {
+        const param = oscillationParameters[key];
+        if (key === 'mass_ordering') {
+            param.values[0] = defaults[key].values[0];
+            continue;
+        }
+        if (param.values.length > 1) continue;
+        targets[key] = defaults[key].values[0];
+    }
+    tweenValues(targets, 700);
 }
 
 export type Preset = {
@@ -199,21 +230,37 @@ export const experimentPresets: Preset[] = [
 ];
 
 export function applyPreset(preset: Preset) {
-    for (const p of Object.values(oscillationParameters)) {
-        if (p.values.length > 1) p.values = [p.values[1]];
-    }
+    const startE = oscillationParameters.E.values[0];
+    const startE1 =
+        oscillationParameters.E.values.length > 1 ? oscillationParameters.E.values[1] : startE;
+    const startL = oscillationParameters.L.values[0];
+    const startL1 =
+        oscillationParameters.L.values.length > 1 ? oscillationParameters.L.values[1] : startL;
+    const startRho = oscillationParameters.rho.values[0];
+
+    if (oscillationParameters.E.values.length > 1)
+        oscillationParameters.E.values = [oscillationParameters.E.values[1]];
+    if (oscillationParameters.L.values.length > 1)
+        oscillationParameters.L.values = [oscillationParameters.L.values[1]];
+
     oscillationParameters.nu.values[0] = preset.nu;
     oscillationParameters.anti.values[0] = preset.anti;
-    oscillationParameters.rho.values[0] = preset.rho;
-    const setParam = (key: 'E' | 'L', value: number | [number, number]) => {
-        if (Array.isArray(value)) {
-            oscillationParameters[key].values = [value[0], value[1]];
-        } else {
-            oscillationParameters[key].values = [value];
-        }
-    };
-    setParam('E', preset.E);
-    setParam('L', preset.L);
+
+    const targetE = Array.isArray(preset.E) ? [preset.E[0], preset.E[1]] : [preset.E];
+    const targetL = Array.isArray(preset.L) ? [preset.L[0], preset.L[1]] : [preset.L];
+
+    oscillationParameters.E.values = targetE;
+    oscillationParameters.L.values = targetL;
+    oscillationParameters.E.values[0] = startE;
+    oscillationParameters.L.values[0] = startL;
+    if (targetE.length > 1) oscillationParameters.E.values[1] = startE1;
+    if (targetL.length > 1) oscillationParameters.L.values[1] = startL1;
+    oscillationParameters.rho.values[0] = startRho;
+
+    const targets1: Record<string, number> = {};
+    if (targetE.length > 1) targets1.E = targetE[1];
+    if (targetL.length > 1) targets1.L = targetL[1];
+    tweenValues({ E: targetE[0], L: targetL[0], rho: preset.rho }, 500, targets1);
 }
 
 function defaultParameters(): OscillationParameters {
