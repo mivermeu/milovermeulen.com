@@ -1,8 +1,5 @@
 <script lang="ts">
-    import {
-        oscillationParameters,
-        resetMixingParameters
-    } from '$lib/webneut/state.svelte';
+    import { oscillationParameters, resetMixingParameters } from '$lib/webneut/state.svelte';
     import PresetDropdown from '$lib/webneut/PresetDropdown.svelte';
     import SliderAssembly from '$lib/webneut/SliderAssembly.svelte';
     import NeutrinoSelector from '$lib/webneut/NeutrinoSelector.svelte';
@@ -39,7 +36,7 @@
     >
         <h3 class="flex items-center justify-between">
             Neutrino mixing parameters
-            <button class="px-2 py-0.5 text-sm" onclick={resetMixingParameters}>Reset</button>
+            <button class="text-sm font-normal" onclick={resetMixingParameters}>Reset</button>
         </h3>
         <MassOrderingSelector />
         {#each [oscillationParameters.th12, oscillationParameters.th23, oscillationParameters.th13, oscillationParameters.Dm21sq, oscillationParameters.Dm31sq, oscillationParameters.dCP] as parameter (parameter.label)}

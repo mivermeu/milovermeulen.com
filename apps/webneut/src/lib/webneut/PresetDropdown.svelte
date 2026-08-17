@@ -7,7 +7,7 @@
     const categories = [PresetCategory.Natural, PresetCategory.Reactor, PresetCategory.Accelerator];
 </script>
 
-<button class="px-2 py-0.5 text-sm" onclick={() => (open = !open)}>Preset</button>
+<button class="text-sm font-normal" onclick={() => (open = !open)}>Preset</button>
 {#if open}
     <div
         class="presets absolute top-13 right-4 z-10 flex flex-col rounded-lg border border-brand-primary bg-brand-secondary p-2"
@@ -19,13 +19,15 @@
                 open = false;
             }}
         >
-            <span class="font-medium">{experimentPresets[0].name}</span>
+            <span class="font-normal">{experimentPresets[0].name}</span>
         </button>
         {#each categories as category}
             {@const group = experimentPresets.filter((p) => p.category === category)}
             <div class="mx-1 my-0.5 flex items-center gap-2">
                 <hr class="flex-1 border-t border-current opacity-20" />
-                <span class="text-[10px] tracking-wider uppercase opacity-40">{category}</span>
+                <span class="text-[10px] font-normal tracking-wider uppercase opacity-40"
+                    >{category}</span
+                >
             </div>
             {#each group as preset (preset.name)}
                 <button
@@ -35,8 +37,8 @@
                         open = false;
                     }}
                 >
-                    <span class="font-medium">{preset.name}</span>
-                    <span class="ml-2 text-xs opacity-60">{preset.description}</span>
+                    <span class="font-normal">{preset.name}</span>
+                    <span class="ml-2 text-xs font-normal opacity-60">{preset.description}</span>
                 </button>
             {/each}
         {/each}
