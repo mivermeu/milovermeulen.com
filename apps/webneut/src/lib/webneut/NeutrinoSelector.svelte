@@ -25,9 +25,11 @@
 <div class="my-4 grid grid-cols-3 gap-2">
     {#each NEUTRINO_OPTIONS as option, i (i)}
         <PanelSwitch bind:group={nuSelected} value={i}>
-            <span class="font-serif">
-                {option.anti < 0 ? '\u03BD\u0305' : '\u03BD'}<sub>{option.flavor}</sub>
-            </span>
+            {#if option.anti < 0}
+                {'\u03BD\u0305'}<sub>{option.flavor}</sub>
+            {:else}
+                {'\u03BD'}<sub>{option.flavor}</sub>
+            {/if}
         </PanelSwitch>
     {/each}
 </div>
