@@ -46,15 +46,18 @@
             >
         </div>
     {/if}
-    <div class="slider-name pl-2 [grid-area:slider-name]">{@html parameter.label}</div>
+    <div class="slider-name pl-2 [grid-area:slider-name]">
+        <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+        {@html parameter.label}
+    </div>
     <div class="slider [grid-area:slider]">
         <RangeSlider {parameter} />
     </div>
     <div class="slider-inputs flex h-full flex-col justify-end gap-2 [grid-area:slider-inputs]">
-        {#each parameter.values as _, i}
+        {#each parameter.values as value, i (i)}
             <input
                 class="slider-input h-8 w-20 rounded-md p-1"
-                value={parameter.values[i]}
+                {value}
                 type="number"
                 oninput={(e) => on_input(i, (e.currentTarget as HTMLInputElement).value)}
             />
