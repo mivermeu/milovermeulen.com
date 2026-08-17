@@ -1,12 +1,13 @@
 <script lang="ts">
     import type { Parameter } from './types';
+    import { setValue } from '$lib/webneut/state.svelte';
 
-    let { parameter = $bindable() }: { parameter: Parameter } = $props();
+    let { parameter }: { parameter: Parameter } = $props();
 
-    const min = parameter.limits[0];
-    const max = parameter.limits[1];
-    const step = Math.pow(10, -1 * parameter.precision);
-    const snapThreshold = (max - min) * 0.015;
+    const min = $derived(parameter.limits[0]);
+    const max = $derived(parameter.limits[1]);
+    const step = $derived(Math.pow(10, -1 * parameter.precision));
+    const snapThreshold = $derived((max - min) * 0.015);
 
     let pctLeft = $derived(
         Math.min(100, Math.max(0, ((parameter.values[0] - min) / (max - min)) * 100))
@@ -29,14 +30,8 @@
         const input = e.currentTarget as HTMLInputElement;
         const snapped = snap(Number(input.value));
         input.value = String(snapped);
-        parameter.values[index] = snapped;
+        setValue(parameter, index, snapped);
     }
-
-    $effect(() => {
-        if (parameter.values.length > 1 && parameter.values[0] > parameter.values[1]) {
-            parameter.values[0] = parameter.values[1];
-        }
-    });
 </script>
 
 <div class="w-full py-2.5">

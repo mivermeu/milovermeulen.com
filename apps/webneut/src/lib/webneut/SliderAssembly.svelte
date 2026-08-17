@@ -1,10 +1,10 @@
 <script lang="ts">
     import RangeSlider from '$lib/webneut/RangeSlider.svelte';
-    import { animatingParameter, makeRange as doMakeRange } from '$lib/webneut/state.svelte';
+    import { animatingParameter, makeRange as doMakeRange, setValue } from '$lib/webneut/state.svelte';
     import type { Parameter } from '$lib/webneut/types';
 
     let {
-        parameter = $bindable(),
+        parameter,
         action_buttons = false
     }: { parameter: Parameter; action_buttons?: boolean } = $props();
 
@@ -22,7 +22,7 @@
     function on_input(index: number, value: string) {
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {
-            parameter.values[index] = Number(value);
+            setValue(parameter, index, Number(value));
         }, 150);
     }
 </script>
@@ -48,7 +48,7 @@
     {/if}
     <div class="slider-name pl-2 [grid-area:slider-name]">{@html parameter.label}</div>
     <div class="slider [grid-area:slider]">
-        <RangeSlider bind:parameter />
+        <RangeSlider {parameter} />
     </div>
     <div class="slider-inputs flex h-full flex-col justify-end gap-2 [grid-area:slider-inputs]">
         {#each parameter.values as _, i}

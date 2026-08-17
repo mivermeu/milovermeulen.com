@@ -370,6 +370,13 @@ export function makeRange(param: import('./types').Parameter) {
     param.values = param.values[0] > 0 ? [0, param.values[0]] : [param.values[0], 0];
 }
 
+export function setValue(param: import('./types').Parameter, index: number, value: number) {
+    param.values[index] = value;
+    if (param.values.length > 1 && param.values[0] > param.values[1]) {
+        param.values[0] = param.values[1];
+    }
+}
+
 $effect.root(() => {
     $effect(recompute);
 
