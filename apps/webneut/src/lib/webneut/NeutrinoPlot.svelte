@@ -160,6 +160,24 @@
                 showlegend: false
             });
 
+            traces.push({
+                type: 'scatterternary' as const,
+                mode: 'markers' as const,
+                a: pe,
+                b: pmu,
+                c: ptau,
+                marker: { size: 0, color: 'rgba(0,0,0,0)' },
+                hovertemplate:
+                    (rangeParameter ? `${rangeParameter.label} = %{customdata:.2g}` : '') +
+                    '<br>' +
+                    `${nustr}<sub>e</sub> : %{a:.2%}<br>` +
+                    `${nustr}<sub>\u03BC</sub> : %{b:.2%}<br>` +
+                    `${nustr}<sub>\u03C4</sub> : %{c:.2%}<br>` +
+                    '<extra></extra>',
+                customdata: plotData.x,
+                showlegend: false
+            });
+
             return traces as unknown as Data[];
         }
 
@@ -168,19 +186,22 @@
                 x: plotData.x,
                 y: plotData.y[0],
                 name: nustr + '<sub>e</sub>',
-                line: { color: '#4ade80', width: lineWidth }
+                line: { color: '#4ade80', width: lineWidth },
+                hovertemplate: '%{y:.0%}'
             },
             {
                 x: plotData.x,
                 y: plotData.y[1],
                 name: nustr + '<sub>\u03BC</sub>',
-                line: { color: '#60a5fa', width: lineWidth }
+                line: { color: '#60a5fa', width: lineWidth },
+                hovertemplate: '%{y:.0%}'
             },
             {
                 x: plotData.x,
                 y: plotData.y[2],
                 name: nustr + '<sub>\u03C4</sub>',
-                line: { color: '#f87171', width: lineWidth }
+                line: { color: '#f87171', width: lineWidth },
+                hovertemplate: '%{y:.0%}'
             }
         ] satisfies Data[];
     });
@@ -189,6 +210,7 @@
         if (!isLinear) {
             return {
                 ...darkPlot,
+                hovermode: 'closest' as const,
                 ternary: {
                     sum: 1,
                     bgcolor: '#222',
@@ -203,6 +225,7 @@
 
         return {
             ...darkPlot,
+            hovermode: 'x unified' as const,
             xaxis: {
                 title: {
                     text: rangeParameter ? rangeParameter.label : '',
