@@ -29,3 +29,9 @@ export enum PlotType {
     Linear,
     Ternary
 }
+
+export enum PresetCategory {
+    Natural = 'Natural',
+    Reactor = 'Reactor',
+    Accelerator = 'Accelerator'
+}

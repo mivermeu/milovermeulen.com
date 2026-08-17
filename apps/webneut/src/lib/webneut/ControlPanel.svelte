@@ -1,16 +1,13 @@
 <script lang="ts">
     import {
         oscillationParameters,
-        resetMixingParameters,
-        experimentPresets,
-        applyPreset
+        resetMixingParameters
     } from '$lib/webneut/state.svelte';
+    import PresetDropdown from '$lib/webneut/PresetDropdown.svelte';
     import SliderAssembly from '$lib/webneut/SliderAssembly.svelte';
     import NeutrinoSelector from '$lib/webneut/NeutrinoSelector.svelte';
     import PlotTypeSelector from '$lib/webneut/PlotTypeSelector.svelte';
     import MassOrderingSelector from '$lib/webneut/MassOrderingSelector.svelte';
-
-    let presetsOpen = $state(false);
 </script>
 
 <div
@@ -30,28 +27,8 @@
     >
         <h3 class="flex justify-between">
             Experiment parameters
-            <button class="px-2 py-0.5 text-sm" onclick={() => (presetsOpen = !presetsOpen)}
-                >Preset</button
-            >
+            <PresetDropdown />
         </h3>
-        {#if presetsOpen}
-            <div
-                class="presets absolute top-13 right-4 z-10 flex flex-col gap-1 rounded-lg border border-brand-primary bg-brand-secondary p-2"
-            >
-                {#each experimentPresets as preset (preset.name)}
-                    <button
-                        class="w-full justify-start border-none"
-                        onclick={() => {
-                            applyPreset(preset);
-                            presetsOpen = false;
-                        }}
-                    >
-                        <span class="font-medium">{preset.name}</span>
-                        <span class="ml-2 text-xs opacity-60">{preset.description}</span>
-                    </button>
-                {/each}
-            </div>
-        {/if}
         <NeutrinoSelector />
         {#each [oscillationParameters.E, oscillationParameters.L, oscillationParameters.rho] as parameter (parameter.label)}
             <SliderAssembly {parameter} action_buttons={true} />

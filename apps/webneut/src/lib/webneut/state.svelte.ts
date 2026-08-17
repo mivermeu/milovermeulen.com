@@ -1,5 +1,5 @@
 const pi = Math.PI;
-import { PlotType, type OscillationParameters } from './types';
+import { PlotType, PresetCategory, type OscillationParameters } from './types';
 import { browser } from '$app/environment';
 import { initWasm, oscillate } from '../wasm/oscillator';
 
@@ -120,6 +120,7 @@ export function resetMixingParameters() {
 export type Preset = {
     name: string;
     description: string;
+    category?: PresetCategory;
     nu: number;
     anti: number;
     E: number | [number, number];
@@ -140,6 +141,7 @@ export const experimentPresets: Preset[] = [
     {
         name: 'Solar',
         description: 'Solar neutrinos (Boron-8)',
+        category: PresetCategory.Natural,
         nu: 0,
         anti: 1,
         E: [0.001, 20],
@@ -149,6 +151,7 @@ export const experimentPresets: Preset[] = [
     {
         name: 'Atmospheric',
         description: 'Atmospheric neutrinos',
+        category: PresetCategory.Natural,
         nu: 1,
         anti: 1,
         E: 1,
@@ -158,6 +161,7 @@ export const experimentPresets: Preset[] = [
     {
         name: 'K2K',
         description: '250 km baseline, 1.3 GeV peak',
+        category: PresetCategory.Accelerator,
         nu: 1,
         anti: 1,
         E: [0.001, 3],
@@ -167,6 +171,7 @@ export const experimentPresets: Preset[] = [
     {
         name: 'KamLAND',
         description: 'Reactor, 180 km baseline',
+        category: PresetCategory.Reactor,
         nu: 0,
         anti: -1,
         E: [0.002, 0.01],
@@ -176,6 +181,7 @@ export const experimentPresets: Preset[] = [
     {
         name: 'MINOS',
         description: '735 km baseline, 3 GeV peak',
+        category: PresetCategory.Accelerator,
         nu: 1,
         anti: 1,
         E: [3, 10],
@@ -185,6 +191,7 @@ export const experimentPresets: Preset[] = [
     {
         name: 'T2K',
         description: '295 km baseline, 0.6 GeV peak',
+        category: PresetCategory.Accelerator,
         nu: 1,
         anti: 1,
         E: [0.4, 1.5],
@@ -194,6 +201,7 @@ export const experimentPresets: Preset[] = [
     {
         name: 'Daya Bay',
         description: 'Reactor, 1.6 km baseline',
+        category: PresetCategory.Reactor,
         nu: 0,
         anti: -1,
         E: [0.002, 0.01],
@@ -203,6 +211,7 @@ export const experimentPresets: Preset[] = [
     {
         name: 'RENO',
         description: 'Reactor, 1.4 km baseline',
+        category: PresetCategory.Reactor,
         nu: 0,
         anti: -1,
         E: [0.002, 0.01],
@@ -212,6 +221,7 @@ export const experimentPresets: Preset[] = [
     {
         name: 'NOVA',
         description: '810 km baseline, 2 GeV peak',
+        category: PresetCategory.Accelerator,
         nu: 1,
         anti: 1,
         E: [1, 5],
@@ -221,6 +231,7 @@ export const experimentPresets: Preset[] = [
     {
         name: 'DUNE',
         description: '1300 km baseline, 2.5 GeV peak',
+        category: PresetCategory.Accelerator,
         nu: 1,
         anti: 1,
         E: [0.5, 10],
