@@ -20,11 +20,12 @@
         <div class="flex items-center gap-2">
             <DownloadButton />
             <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- cross-app link to portfolio root -->
-            <a href="/"
+            <a
+                href="/"
                 aria-label="Portfolio"
-                class="inline-flex items-center justify-center overflow-hidden rounded-lg border border-brand-primary bg-transparent transition-colors duration-150 hover:bg-white/15 active:scale-[0.97]"
+                class="inline-flex items-center justify-center overflow-hidden rounded-lg border border-brand-primary bg-transparent p-1.5 transition-colors duration-150 hover:bg-white/15 active:scale-[0.97]"
             >
-                <img src={favicon} alt="Portfolio" class="h-9 w-9" />
+                <img src={favicon} alt="Portfolio" class="h-6 w-6" />
             </a>
         </div>
     </div>
