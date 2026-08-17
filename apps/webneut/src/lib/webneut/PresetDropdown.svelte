@@ -10,7 +10,7 @@
 <button class="text-sm font-normal" onclick={() => (open = !open)}>Preset</button>
 {#if open}
     <div
-        class="presets absolute top-13 right-4 z-10 flex flex-col rounded-lg border border-brand-primary bg-brand-secondary p-2"
+        class="presets absolute top-16 right-4 z-10 flex flex-col rounded-lg border border-brand-primary bg-brand-secondary p-2"
     >
         <button
             class="w-full justify-start border-none text-sm"
