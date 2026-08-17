@@ -86,6 +86,136 @@ export function resetMixingParameters() {
     requestAnimationFrame(tick);
 }
 
+export type Preset = {
+    name: string;
+    description: string;
+    nu: number;
+    anti: number;
+    E: number | [number, number];
+    L: number | [number, number];
+    rho: number;
+};
+
+export const experimentPresets: Preset[] = [
+    {
+        name: 'Default',
+        description: '',
+        nu: 1,
+        anti: 1,
+        E: 1,
+        L: [0, 33060],
+        rho: 0
+    },
+    {
+        name: 'Solar',
+        description: 'Solar neutrinos (Boron-8)',
+        nu: 0,
+        anti: 1,
+        E: [0.001, 20],
+        L: 150000000,
+        rho: 0
+    },
+    {
+        name: 'Atmospheric',
+        description: 'Atmospheric neutrinos',
+        nu: 1,
+        anti: 1,
+        E: 1,
+        L: [15, 13000],
+        rho: 2600
+    },
+    {
+        name: 'K2K',
+        description: '250 km baseline, 1.3 GeV peak',
+        nu: 1,
+        anti: 1,
+        E: [0.001, 3],
+        L: 250,
+        rho: 2600
+    },
+    {
+        name: 'KamLAND',
+        description: 'Reactor, 180 km baseline',
+        nu: 0,
+        anti: -1,
+        E: [0.002, 0.01],
+        L: 180,
+        rho: 0
+    },
+    {
+        name: 'MINOS',
+        description: '735 km baseline, 3 GeV peak',
+        nu: 1,
+        anti: 1,
+        E: [3, 10],
+        L: 735,
+        rho: 2800
+    },
+    {
+        name: 'T2K',
+        description: '295 km baseline, 0.6 GeV peak',
+        nu: 1,
+        anti: 1,
+        E: [0.4, 1.5],
+        L: 295,
+        rho: 2600
+    },
+    {
+        name: 'Daya Bay',
+        description: 'Reactor, 1.6 km baseline',
+        nu: 0,
+        anti: -1,
+        E: [0.002, 0.01],
+        L: 1.6,
+        rho: 0
+    },
+    {
+        name: 'RENO',
+        description: 'Reactor, 1.4 km baseline',
+        nu: 0,
+        anti: -1,
+        E: [0.002, 0.01],
+        L: 1.4,
+        rho: 0
+    },
+    {
+        name: 'NOVA',
+        description: '810 km baseline, 2 GeV peak',
+        nu: 1,
+        anti: 1,
+        E: [1, 5],
+        L: 810,
+        rho: 2850
+    },
+    {
+        name: 'DUNE',
+        description: '1300 km baseline, 2.5 GeV peak',
+        nu: 1,
+        anti: 1,
+        E: [0.5, 10],
+        L: 1300,
+        rho: 2850
+    }
+];
+
+export function applyPreset(preset: Preset) {
+    for (const p of Object.values(oscillationParameters)) {
+        if (p.values.length > 1) p.values = [p.values[1]];
+    }
+    oscillationParameters.nu.values[0] = preset.nu;
+    oscillationParameters.anti.values[0] = preset.anti;
+    oscillationParameters.rho.values[0] = preset.rho;
+    const setParam = (key: 'E' | 'L', value: number | [number, number]) => {
+        if (Array.isArray(value)) {
+            oscillationParameters[key].values = [value[0], value[1]];
+        } else {
+            oscillationParameters[key].values = [value];
+        }
+    };
+    setParam('E', preset.E);
+    setParam('L', preset.L);
+}
+
 function defaultParameters(): OscillationParameters {
     return {
         plot_type: {
@@ -127,8 +257,8 @@ function defaultParameters(): OscillationParameters {
             values: [1],
             label: 'Energy [GeV]',
             snaps: [],
-            precision: 2,
-            limits: [0.3, 20]
+            precision: 4,
+            limits: [0.001, 20]
         },
         L: {
             values: [0, 33060],

@@ -14,6 +14,12 @@
         oscillationParameters.nu.values[0] = option.nu;
         oscillationParameters.anti.values[0] = option.anti;
     });
+
+    $effect(() => {
+        const nu = oscillationParameters.nu.values[0];
+        const anti = oscillationParameters.anti.values[0];
+        nuSelected = anti < 0 ? nu + 3 : nu;
+    });
 </script>
 
 <div class="my-4 grid grid-cols-3 gap-2">

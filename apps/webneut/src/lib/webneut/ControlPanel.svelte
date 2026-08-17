@@ -1,9 +1,16 @@
 <script lang="ts">
-    import { oscillationParameters, resetMixingParameters } from '$lib/webneut/state.svelte';
+    import {
+        oscillationParameters,
+        resetMixingParameters,
+        experimentPresets,
+        applyPreset
+    } from '$lib/webneut/state.svelte';
     import SliderAssembly from '$lib/webneut/SliderAssembly.svelte';
     import NeutrinoSelector from '$lib/webneut/NeutrinoSelector.svelte';
     import PlotTypeSelector from '$lib/webneut/PlotTypeSelector.svelte';
     import MassOrderingSelector from '$lib/webneut/MassOrderingSelector.svelte';
+
+    let presetsOpen = $state(false);
 </script>
 
 <div
@@ -15,16 +22,39 @@
         <h3>Plot options</h3>
         <PlotTypeSelector />
         {#each [oscillationParameters.nsteps, oscillationParameters.animation_period] as parameter (parameter.label)}
-            <SliderAssembly bind:parameter />
+            <SliderAssembly {parameter} />
         {/each}
     </div>
     <div
-        class="control-card self-start rounded-lg bg-brand-secondary p-4 [grid-area:experiment-controls]"
+        class="control-card relative self-start rounded-lg bg-brand-secondary p-4 [grid-area:experiment-controls]"
     >
-        <h3>Experiment parameters</h3>
+        <h3 class="flex justify-between">
+            Experiment parameters
+            <button class="px-2 py-0.5 text-sm" onclick={() => (presetsOpen = !presetsOpen)}
+                >Preset</button
+            >
+        </h3>
+        {#if presetsOpen}
+            <div
+                class="presets absolute top-13 right-4 z-10 flex flex-col gap-1 rounded-lg border border-brand-primary bg-brand-secondary p-2"
+            >
+                {#each experimentPresets as preset (preset.name)}
+                    <button
+                        class="w-full justify-start border-none"
+                        onclick={() => {
+                            applyPreset(preset);
+                            presetsOpen = false;
+                        }}
+                    >
+                        <span class="font-medium">{preset.name}</span>
+                        <span class="ml-2 text-xs opacity-60">{preset.description}</span>
+                    </button>
+                {/each}
+            </div>
+        {/if}
         <NeutrinoSelector />
         {#each [oscillationParameters.E, oscillationParameters.L, oscillationParameters.rho] as parameter (parameter.label)}
-            <SliderAssembly bind:parameter action_buttons={true} />
+            <SliderAssembly {parameter} action_buttons={true} />
         {/each}
     </div>
     <div
@@ -36,7 +66,7 @@
         </h3>
         <MassOrderingSelector />
         {#each [oscillationParameters.th12, oscillationParameters.th23, oscillationParameters.th13, oscillationParameters.Dm21sq, oscillationParameters.Dm31sq, oscillationParameters.dCP] as parameter (parameter.label)}
-            <SliderAssembly bind:parameter action_buttons={true} />
+            <SliderAssembly {parameter} action_buttons={true} />
         {/each}
     </div>
 </div>
