@@ -44,10 +44,28 @@
         .webneut-tool {
             display: flex;
             flex-direction: column;
+            height: 100dvh;
+            overflow: hidden;
         }
-        .webneut-tool .plot,
+        .webneut-tool .header {
+            flex: 0 0 auto;
+        }
+        .webneut-tool .plot {
+            flex: 0 0 40vh;
+            min-height: 200px;
+        }
         .webneut-tool .controls {
-            flex: 1 1 500px;
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+    }
+
+    @media (orientation: portrait) and (max-height: 700px) {
+        .webneut-tool .plot {
+            flex: 0 0 30vh;
+            min-height: 150px;
         }
     }
 
