@@ -19,6 +19,8 @@
 
     let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 
+    const step = $derived(Math.pow(10, -parameter.precision));
+
     function on_input(index: number, value: string) {
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {
@@ -59,6 +61,7 @@
                 class="slider-input h-8 w-20 rounded-md p-1"
                 {value}
                 type="number"
+                {step}
                 oninput={(e) => on_input(i, (e.currentTarget as HTMLInputElement).value)}
             />
         {/each}

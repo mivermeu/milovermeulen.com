@@ -411,7 +411,7 @@ $effect.root(() => {
                 newValue -= param.limits[1] - param.limits[0];
             }
             if (now - lastCommit >= COMMIT_INTERVAL) {
-                param.values[0] = newValue;
+                param.values[0] = +newValue.toFixed(param.precision);
                 lastCommit = now;
             }
             frame = requestAnimationFrame(tick);
