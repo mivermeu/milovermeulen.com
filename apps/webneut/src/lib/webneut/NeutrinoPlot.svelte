@@ -14,7 +14,8 @@
         return () => window.removeEventListener('resize', handler);
     });
 
-    const lineWidth = $derived(width < 768 ? 1 : 2);
+    const mobile = $derived(width < 768);
+    const lineWidth = $derived(mobile ? 1 : 2);
 
     const rangeParameter = $derived(
         Object.values(oscillationParameters).find((par: Parameter) => par.values.length > 1) as
@@ -31,10 +32,11 @@
     );
 
     function makeTernAxis(title: string, tickangle: number) {
+        const m = mobile;
         return {
-            title: { text: title, font: { size: 16 } },
+            title: { text: title, font: { size: m ? 12 : 16 } },
             tickangle,
-            tickfont: { size: 13 },
+            tickfont: { size: m ? 10 : 13 },
             tickcolor: 'rgba(221, 221, 221, 0.3)',
             gridcolor: 'rgba(221, 221, 221, 0.1)',
             linecolor: 'rgba(221, 221, 221, 0.3)',
@@ -86,12 +88,14 @@
                 xanchor: 'right',
                 yanchor: 'bottom',
                 showarrow: false,
-                font: { color: '#ff6900', size: 14 },
+                font: { color: '#ff6900', size: mobile ? 11 : 14 },
                 bgcolor: 'rgba(34, 34, 34, 0.8)',
                 borderpad: 4
             }
         ] as Partial<Layout>['annotations'];
     });
+
+    const baseFontSize = $derived(mobile ? 11 : 14);
 
     const darkPlot = {
         paper_bgcolor: '#222',
@@ -100,7 +104,7 @@
         font: {
             family: '"AtkinsonHyperlegibleMono", ui-monospace, monospace',
             color: 'rgba(221, 221, 221, 0.8)',
-            size: 14
+            size: baseFontSize
         }
     };
 
@@ -145,12 +149,15 @@
                     cmin: x0,
                     cmax: x1,
                     colorbar: {
-                        title: { text: rangeParameter ? rangeParameter.label : '' },
+                        title: {
+                            text: rangeParameter ? rangeParameter.label : '',
+                            font: { size: mobile ? 10 : 14 }
+                        },
                         orientation: 'h',
-                        thickness: 16,
-                        len: 0.7,
+                        thickness: mobile ? 12 : 16,
+                        len: mobile ? 0.9 : 0.7,
                         x: 0.5,
-                        y: -0.15,
+                        y: mobile ? -0.35 : -0.15,
                         xanchor: 'center',
                         yanchor: 'bottom'
                     },
@@ -256,7 +263,7 @@
                 xanchor: 'right',
                 yanchor: 'bottom',
                 bgcolor: 'rgba(0, 0, 0, 0)',
-                font: { color: 'rgba(221, 221, 221, 0.8)', size: 12 }
+                font: { color: 'rgba(221, 221, 221, 0.8)', size: mobile ? 10 : 12 }
             },
             margin: { b: 60, t: 30, l: 40, r: 20, pad: 5 }
         };
