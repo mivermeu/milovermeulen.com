@@ -97,7 +97,7 @@
 
     const baseFontSize = $derived(mobile ? 11 : 14);
 
-    const darkPlot = {
+    const darkPlot = $derived({
         paper_bgcolor: '#222',
         plot_bgcolor: '#222',
         uirevision: '1',
@@ -106,7 +106,7 @@
             color: 'rgba(221, 221, 221, 0.8)',
             size: baseFontSize
         }
-    };
+    });
 
     const data = $derived.by(() => {
         if (!isLinear) {
@@ -116,7 +116,7 @@
             const n = plotData.x.length;
             const x0 = plotData.x[0];
             const x1 = plotData.x[n - 1];
-            const segs = Math.min(50, n - 1);
+            const segs = Math.min(20, n - 1); // Number of segments to divide the plot into for color gradient
             const traces = [];
 
             for (let s = 0; s < segs; s++) {

@@ -358,6 +358,8 @@ function run(params: OscillationParameters) {
     plotData.y = y;
 }
 
+const COMMIT_INTERVAL = 30; // Throttle param writes to ~30fps
+
 export function recompute() {
     for (const p of Object.values(oscillationParameters)) {
         void p.values.length;
@@ -400,13 +402,18 @@ $effect.root(() => {
         const period = oscillationParameters.animation_period.values[0];
 
         let frame = 0;
+        let lastCommit = 0;
         const tick = () => {
-            const progress = ((Date.now() - startTime) / (period * 1000)) % 1;
+            const now = Date.now();
+            const progress = ((now - startTime) / (period * 1000)) % 1;
             let newValue = startValue + progress * (param.limits[1] - param.limits[0]);
             while (newValue > param.limits[1]) {
                 newValue -= param.limits[1] - param.limits[0];
             }
-            param.values[0] = newValue;
+            if (now - lastCommit >= COMMIT_INTERVAL) {
+                param.values[0] = newValue;
+                lastCommit = now;
+            }
             frame = requestAnimationFrame(tick);
         };
         frame = requestAnimationFrame(tick);
