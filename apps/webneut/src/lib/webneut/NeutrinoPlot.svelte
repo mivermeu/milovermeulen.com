@@ -78,6 +78,7 @@
     const animationAnnotation = $derived.by(() => {
         const param = animatingParameter.current;
         if (!param) return [];
+        if (mobile) return [];
         return [
             {
                 text: `${param.label} = ${param.values[0].toFixed(param.precision)}`,
