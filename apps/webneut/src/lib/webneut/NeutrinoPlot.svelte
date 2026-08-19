@@ -158,7 +158,7 @@
                         thickness: mobile ? 12 : 16,
                         len: mobile ? 0.9 : 0.7,
                         x: 0.5,
-                        y: mobile ? -0.35 : -0.15,
+                        y: mobile ? -0.5 : -0.15,
                         xanchor: 'center',
                         yanchor: 'bottom'
                     },
@@ -227,7 +227,7 @@
                     caxis: makeTernAxis(nustr + '<sub>\u03C4</sub>', -45)
                 },
                 annotations: animationAnnotation,
-                margin: { l: 40, r: 40, b: 90, t: 50 }
+                margin: { l: 20, r: 20, b: 20, t: 30 }
             };
         }
 
