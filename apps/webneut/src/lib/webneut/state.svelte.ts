@@ -140,7 +140,7 @@ export const experimentPresets: Preset[] = [
     },
     {
         name: 'Solar',
-        description: 'Solar neutrinos (Boron-8)',
+        description: 'Boron-8',
         category: PresetCategory.Natural,
         nu: 0,
         anti: 1,
@@ -149,14 +149,24 @@ export const experimentPresets: Preset[] = [
         rho: 0
     },
     {
-        name: 'Atmospheric',
-        description: 'Atmospheric neutrinos',
+        name: 'Downgoing atmospheric',
+        description: '',
         category: PresetCategory.Natural,
         nu: 1,
         anti: 1,
         E: 1,
-        L: [15, 13000],
-        rho: 2600
+        L: [15, 100],
+        rho: 0
+    },
+    {
+        name: 'Upgoing atmospheric',
+        description: '',
+        category: PresetCategory.Natural,
+        nu: 1,
+        anti: 1,
+        E: 1,
+        L: [100, 13000],
+        rho: 3500
     },
     {
         name: 'K2K',
@@ -170,7 +180,7 @@ export const experimentPresets: Preset[] = [
     },
     {
         name: 'KamLAND',
-        description: 'Reactor, 180 km baseline',
+        description: '180 km baseline, 4 MeV peak',
         category: PresetCategory.Reactor,
         nu: 0,
         anti: -1,
@@ -200,7 +210,7 @@ export const experimentPresets: Preset[] = [
     },
     {
         name: 'Daya Bay',
-        description: 'Reactor, 1.6 km baseline',
+        description: '1.6 km baseline, 4 MeV peak',
         category: PresetCategory.Reactor,
         nu: 0,
         anti: -1,
@@ -210,7 +220,7 @@ export const experimentPresets: Preset[] = [
     },
     {
         name: 'RENO',
-        description: 'Reactor, 1.4 km baseline',
+        description: '1.4 km baseline, 4 MeV peak',
         category: PresetCategory.Reactor,
         nu: 0,
         anti: -1,

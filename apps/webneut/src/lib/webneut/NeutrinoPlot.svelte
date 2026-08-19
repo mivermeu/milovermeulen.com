@@ -83,7 +83,7 @@
             {
                 text: `${param.label} = ${param.values[0].toFixed(param.precision)}`,
                 x: 0.4,
-                y: 1.01,
+                y: 1,
                 xref: 'paper',
                 yref: 'paper',
                 xanchor: 'right',
