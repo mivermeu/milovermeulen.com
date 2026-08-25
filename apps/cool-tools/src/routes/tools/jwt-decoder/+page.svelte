@@ -1,6 +1,7 @@
 <script lang="ts">
     import ToolShell from '$lib/components/ToolShell.svelte';
     import CodeBlock from '$lib/components/CodeBlock.svelte';
+    import { b64urlToJson } from '$lib/jwt';
 
     let token = $state('');
     let header = $state('');
@@ -9,11 +10,6 @@
     let expiry = $state('');
     let error = $state('');
 
-    function b64urlToJson(seg: string) {
-        const b64 = seg.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (seg.length % 4)) % 4);
-        return JSON.parse(atob(b64));
-    }
-
     function decode() {
         error = ''; header = ''; payload = ''; signature = ''; expiry = '';
         if (!token.trim()) return;
@@ -21,11 +17,11 @@
         if (parts.length !== 3) { error = 'Invalid JWT: expected 3 parts separated by dots.'; return; }
         try {
             header = JSON.stringify(b64urlToJson(parts[0]), null, 2);
-            const p = b64urlToJson(parts[1]);
+            const p = b64urlToJson(parts[1]) as Record<string, unknown>;
             payload = JSON.stringify(p, null, 2);
             signature = parts[2];
-            if (p.exp) expiry = `Expires: ${new Date(p.exp * 1000).toISOString()}`;
-            if (p.iat) expiry += (expiry ? ' | ' : '') + `Issued: ${new Date(p.iat * 1000).toISOString()}`;
+            if (p.exp) expiry = `Expires: ${new Date(Number(p.exp) * 1000).toISOString()}`;
+            if (p.iat) expiry += (expiry ? ' | ' : '') + `Issued: ${new Date(Number(p.iat) * 1000).toISOString()}`;
         } catch (e) {
             error = 'Failed to decode: ' + (e as Error).message;
         }

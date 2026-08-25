@@ -1,8 +1,8 @@
 <script lang="ts">
     import { slide } from 'svelte/transition';
     import ToolShell from '$lib/components/ToolShell.svelte';
-    interface Person { name: string; id: string; }
-    interface Expense { paidBy: string; amount: number; splitAmong: string[]; desc: string; currency: string; }
+    import { currencies, rateOf, computeTransfers, type Person, type Expense } from '$lib/settle';
+
     interface Group { id: string; name: string; people: Person[]; expenses: Expense[]; }
 
     let groups = $state<Group[]>([{ id: 'default', name: 'Untitled Group', people: [], expenses: [] }]);
@@ -20,19 +20,6 @@
     let editingPersonName = $state('');
     let currency = $state('USD');
     let displayCurrency = $state('USD');
-
-    const currencies: { code: string; name: string; rate: number }[] = [
-        { code: 'USD', name: 'US Dollar', rate: 1 },
-        { code: 'EUR', name: 'Euro', rate: 0.92 },
-        { code: 'GBP', name: 'British Pound', rate: 0.79 },
-        { code: 'JPY', name: 'Japanese Yen', rate: 144 },
-        { code: 'CAD', name: 'Canadian Dollar', rate: 1.36 },
-        { code: 'AUD', name: 'Australian Dollar', rate: 1.55 },
-        { code: 'CHF', name: 'Swiss Franc', rate: 0.88 },
-        { code: 'CNY', name: 'Chinese Yuan', rate: 7.24 },
-        { code: 'INR', name: 'Indian Rupee', rate: 83.5 },
-        { code: 'BRL', name: 'Brazilian Real', rate: 4.97 },
-    ];
 
     const STORAGE = 'cool-tools-settle-up';
     const SCHEMA_VERSION = 1;
@@ -144,33 +131,9 @@ splitAmong = (() => g.people.map((p) => p.id))();
         openSplit = openSplit === i ? null : i;
     }
 
-    let txfr = $derived.by(() => {
-        const baseRate = currencies.find((c) => c.code === currency)?.rate ?? 1;
-        const net: Record<string, number> = {};
-        for (const p of g.people) net[p.id] = 0;
-        for (const e of g.expenses) {
-            const rate = currencies.find((c) => c.code === e.currency)?.rate ?? 1;
-            const baseAmount = e.amount / rate * baseRate;
-            net[e.paidBy] += baseAmount;
-            const share = baseAmount / e.splitAmong.length;
-            for (const pid of e.splitAmong) net[pid] -= share;
-        }
-        const debtors = Object.entries(net).filter(([, v]) => v < 0).map(([id, v]) => ({ id, v: -v })).sort((a, b) => b.v - a.v);
-        const creditors = Object.entries(net).filter(([, v]) => v > 0).map(([id, v]) => ({ id, v })).sort((a, b) => b.v - a.v);
-        const result: { from: string; to: string; amount: number }[] = [];
-        let di = 0, ci = 0;
-        while (di < debtors.length && ci < creditors.length) {
-            const amt = Math.min(debtors[di].v, creditors[ci].v);
-            if (amt > 0.01) result.push({ from: debtors[di].id, to: creditors[ci].id, amount: Math.round(amt * 100) / 100 });
-            debtors[di].v -= amt;
-            creditors[ci].v -= amt;
-            if (debtors[di].v < 0.01) di++;
-            if (creditors[ci].v < 0.01) ci++;
-        }
-        return result;
-    });
+    let txfr = $derived.by(() => computeTransfers(g.people, g.expenses, currency));
 
-    let transferRate = $derived((currencies.find((c) => c.code === displayCurrency)?.rate ?? 1) / (currencies.find((c) => c.code === currency)?.rate ?? 1));
+    let transferRate = $derived(rateOf(displayCurrency) / rateOf(currency));
 
     function name(id: string) { return g.people.find((p) => p.id === id)?.name ?? '?'; }
 

@@ -1,21 +1,11 @@
 <script lang="ts">
     import ToolShell from '$lib/components/ToolShell.svelte';
+    import { contrastRatio } from '$lib/colors';
 
     let fg = $state('#000000');
     let bg = $state('#ffffff');
 
-    function luminance(hex: string) {
-        const v = parseInt(hex.replace('#', ''), 16);
-        const [r, g, b] = [(v >> 16) & 255, (v >> 8) & 255, v & 255].map((c) => {
-            const s = c / 255;
-            return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-        });
-        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    }
-
-    let lumFg = $derived(luminance(fg));
-    let lumBg = $derived(luminance(bg));
-    let ratio = $derived(((Math.max(lumFg, lumBg) + 0.05) / (Math.min(lumFg, lumBg) + 0.05)).toFixed(2));
+    let ratio = $derived(contrastRatio(fg, bg).toFixed(2));
 
     let aaNorm = $derived(Number(ratio) >= 4.5);
     let aaLarge = $derived(Number(ratio) >= 3);

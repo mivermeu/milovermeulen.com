@@ -3,6 +3,7 @@
     import CopyButton from '$lib/components/CopyButton.svelte';
     import FilePick from '$lib/components/FilePick.svelte';
     import Toggle from '$lib/components/Toggle.svelte';
+    import { encodeUtf8, decodeUtf8, encodeArrayBuffer } from '$lib/base64';
 
     let input = $state('');
     let output = $state('');
@@ -16,11 +17,7 @@
     function convert() {
         if (!input) { output = ''; return; }
         try {
-            if (mode === 'encode') {
-                output = btoa(new TextEncoder().encode(input).reduce((s, b) => s + String.fromCharCode(b), ''));
-            } else {
-                output = new TextDecoder().decode(Uint8Array.from(atob(input), (c) => c.charCodeAt(0)));
-            }
+            output = mode === 'encode' ? encodeUtf8(input) : decodeUtf8(input);
         } catch {
             output = mode === 'encode' ? 'Input too large to encode in memory.' : 'Invalid input';
         }
@@ -30,10 +27,7 @@
         const reader = new FileReader();
         reader.onload = () => {
             try {
-                let binary = '';
-                const bytes = new Uint8Array(reader.result as ArrayBuffer);
-                for (const b of bytes) binary += String.fromCharCode(b);
-                output = btoa(binary);
+                output = encodeArrayBuffer(reader.result as ArrayBuffer);
                 mode = 'encode';
             } catch {
                 output = 'Input too large to encode in memory.';

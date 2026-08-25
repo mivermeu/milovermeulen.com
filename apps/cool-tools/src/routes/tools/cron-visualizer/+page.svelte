@@ -1,5 +1,6 @@
 <script lang="ts">
     import ToolShell from '$lib/components/ToolShell.svelte';
+    import { parseField, describeCron } from '$lib/cron';
 
     let cron = $state('*/5 * * * *');
     let output = $state('');
@@ -7,34 +8,10 @@
 
     const fields = [['minute', '0-59'], ['hour', '0-23'], ['day of month', '1-31'], ['month', '1-12'], ['day of week', '0-7']];
 
-    function parseField(field: string, min: number, max: number): number[] {
-        if (field === '*') return Array.from({ length: max - min + 1 }, (_, i) => i + min);
-        const values: number[] = [];
-        for (const part of field.split(',')) {
-            if (part.includes('/')) {
-                const [range, step] = part.split('/');
-                const [lo, hi] = range === '*' ? [min, max] : range.split('-').map(Number);
-                for (let i = lo; i <= hi; i += Number(step)) values.push(i);
-            } else if (part.includes('-')) {
-                const [lo, hi] = part.split('-').map(Number);
-                for (let i = lo; i <= hi; i++) values.push(i);
-            } else {
-                values.push(Number(part));
-            }
-        }
-        return values.filter((v, i) => v >= min && v <= max && values.indexOf(v) === i);
-    }
-
     function analyze() {
         const parts = cron.trim().split(/\s+/);
         if (parts.length < 5) { output = 'Invalid: need 5 fields'; nextTimes = []; return; }
-        const names = ['minute', 'hour', 'day of month', 'month', 'day of week'];
-        output = parts.map((p, i) => {
-            if (p === '*') return `every ${names[i]}`;
-            if (p.includes('/')) return `every ${p.split('/')[1]} ${names[i]}s`;
-            if (p.includes(',')) return `${names[i]}s ${p}`;
-            return `${names[i]} ${p}`;
-        }).join(', ');
+        output = describeCron(parts);
 
         const mins = parseField(parts[0], 0, 59);
         const hrs = parseField(parts[1], 0, 23);
