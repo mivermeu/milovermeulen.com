@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { slide } from 'svelte/transition';
     interface Person { name: string; id: string; }
     interface Expense { paidBy: string; amount: number; splitAmong: string[]; desc: string; currency: string; }
     interface Group { id: string; name: string; people: Person[]; expenses: Expense[]; }
@@ -10,6 +11,7 @@
     let amount = $state(0);
     let desc = $state('');
     let splitAmong = $state<string[]>([]);
+    let openSplit: number | null = $state(null);
     let newGroupName = $state('');
     let editingName = $state('');
     let editingGroup: string | null = $state(null);
@@ -120,6 +122,7 @@
             expenses: [...grp.expenses, { paidBy, amount, splitAmong: targets, desc: desc || '(no desc)', currency }]
         });
         paidBy = ''; amount = 0; desc = ''; splitAmong = g.people.map((p) => p.id);
+        openSplit = null;
         save();
     }
 
@@ -128,7 +131,12 @@
             ...grp,
             expenses: grp.expenses.filter((_, idx) => idx !== i)
         });
+        openSplit = null;
         save();
+    }
+
+    function toggleSplit(i: number) {
+        openSplit = openSplit === i ? null : i;
     }
 
     let txfr = $derived.by(() => {
@@ -286,14 +294,26 @@
             <h3>Expenses</h3>
             <div class="mb-4 flex flex-col gap-1">
                 {#each g.expenses as e, i (i)}
-                    <div class="flex items-center justify-between rounded border border-brand-secondary bg-white/5 px-3 py-1.5 text-xs text-brand-text">
-                        <span>
-                            <span class="font-semibold text-brand-text-highlight">{name(e.paidBy)}</span> paid
-                            <span class="font-semibold text-brand-text-highlight">{e.currency} {e.amount.toFixed(2)}</span>
-                            {#if e.desc}<span class="text-brand-text"> — {e.desc}</span>{/if}
-                            <span class="text-brand-text/60"> · split {e.splitAmong.length}: {e.splitAmong.map(name).join(', ')}</span>
-                        </span>
-                        <button class="size-5 p-0 text-[10px]" onclick={() => removeExpense(i)}>✕</button>
+                    <div class="rounded border bg-white/5 transition-colors {openSplit === i ? 'border-brand-primary' : 'border-brand-secondary'}">
+                        <div
+                            class="flex cursor-pointer items-center justify-between rounded px-3 py-1.5 text-xs text-brand-text transition-colors hover:bg-white/10"
+                            role="button"
+                            tabindex="0"
+                            onclick={() => toggleSplit(i)}
+                            onkeydown={(ev) => { if (ev.key === 'Enter') { ev.preventDefault(); toggleSplit(i); } }}
+                        >
+                            <span class="min-w-0">
+                                <span class="font-semibold text-brand-text-highlight">{name(e.paidBy)}</span> paid
+                                <span class="font-semibold text-brand-text-highlight">{e.currency} {e.amount.toFixed(2)}</span>
+                                {#if e.desc}<span class="text-brand-text"> — {e.desc}</span>{/if}
+                            </span>
+                            <button class="ml-2 size-5 shrink-0 p-0 text-[10px]" onclick={(ev) => { ev.stopPropagation(); removeExpense(i); }}>✕</button>
+                        </div>
+                        {#if openSplit === i}
+                            <div class="rounded-b border-t border-brand-secondary/60 px-3 py-1.5 text-xs text-brand-text" transition:slide|local>
+                                Split among: <span class="text-brand-text-highlight">{e.splitAmong.map(name).join(', ')}</span>
+                            </div>
+                        {/if}
                     </div>
                 {/each}
             </div>
