@@ -30,5 +30,15 @@ export const projects: Project[] = [
         link: '/webneut',
         source_code: '',
         tags: ['Physics', 'UI/UX', 'Web development']
+    },
+    {
+        name: 'Cool Tools',
+        description: `
+        Collection of client-side utilities: expense splitter, generators,
+        JSON and CSV converters.
+        `,
+        link: '/cool-tools',
+        source_code: '',
+        tags: ['Svelte', 'TypeScript', 'UI/UX', 'Web development']
     }
 ];
