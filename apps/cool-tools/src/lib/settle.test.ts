@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { computeTransfers, rateOf } from './settle';
 
 const alice = { name: 'Alice', id: 'a' };

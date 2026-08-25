@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { encodeUtf8, decodeUtf8, encodeArrayBuffer } from './base64';
 
 describe('encodeUtf8 / decodeUtf8', () => {

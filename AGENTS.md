@@ -34,8 +34,14 @@ bun dev              # start all dev servers via Turborepo
 bun build            # production builds for all apps
 bun lint             # lint all apps
 bun format           # run Prettier across the repo
+bun test             # run all tests via Turborepo (bun test per app)
+bun run test         # same as above; both invoke `turbo test`
 bun run build:wasm   # (webneut) compile the Rust crate to WASM
 ```
+
+### Before finalizing a task
+
+Run `bun test` (repo-wide, via Turborepo) so every app's suite passes. Do **not** run bare `bun test` from the repo root: it collects all workspaces' tests but runs them with the root as cwd, which breaks webneut's WASM test (it reads `src/lib/wasm/pkg` relative to the app). Use `bun run test` / `bun test`, or `cd apps/<app> && bun test` per app.
 
 The webneut app's `dev`, `build`, and `check` scripts run `build:wasm` automatically, so no manual step is needed in normal workflows. Building webneut requires the Rust toolchain: the `wasm32-unknown-unknown` target and `wasm-pack` (`rustup target add wasm32-unknown-unknown && cargo install wasm-pack`).
 
@@ -101,7 +107,7 @@ Avoid the old `let` and `$: ` syntax. Use Svelte 5 runes:
 - `oscillator-rs/`: Rust crate (`nalgebra`) compiled to WASM via `wasm-pack`. Exposes a single JSON-in/JSON-out `oscillate(json) -> json` function. Run its native tests with `cargo test --lib` (in the crate dir).
 - `src/lib/wasm/`: JS bridge (`oscillator.ts`) that eager-inits the WASM module on page load and exposes a synchronous `oscillate(params)`; `pkg/` is generated output (gitignored).
 - `src/lib/webneut/`: `state.svelte.ts` (reactive state + `recompute()` that calls the WASM bridge), components, `types.ts`, and data.
-- `src/lib/wasm/oscillator.test.ts`: vitest coverage.
+- `src/lib/wasm/oscillator.test.ts`: bun test coverage (`bun test`).
 
 The `oscillate` computation is fully offloaded to WASM — there is no JS fallback path. Numerical parity between WASM and the original mathjs implementation was verified before removing it; physics correctness is asserted by `cargo test --lib` and the WASM smoke test (probabilities sum to 1).
 

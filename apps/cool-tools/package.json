@@ -9,7 +9,7 @@
         "preview": "vite preview --port 4175",
         "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
         "lint": "eslint .",
-        "test": "vitest run"
+        "test": "bun test"
     },
     "devDependencies": {
         "@eslint/js": "^10.0.1",
@@ -28,7 +28,7 @@
         "typescript": "^6.0.2",
         "typescript-eslint": "^8.58.1",
         "vite": "^8.0.7",
-        "vitest": "^4"
+        "@types/bun": "^1"
     },
     "dependencies": {
         "qrcode": "^1.5.4",

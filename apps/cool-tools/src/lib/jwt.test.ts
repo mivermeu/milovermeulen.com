@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { b64urlToJson } from './jwt';
 
 describe('b64urlToJson', () => {
