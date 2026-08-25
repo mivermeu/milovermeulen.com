@@ -1,18 +1,23 @@
 <script lang="ts">
+    import ToolShell from '$lib/components/ToolShell.svelte';
+    import CopyButton from '$lib/components/CopyButton.svelte';
+    import CodeBlock from '$lib/components/CodeBlock.svelte';
+
     let input = $state('');
     let output = $state('');
     let error = $state('');
 
-    function format() {
-        error = ''; output = '';
+    function run(fn: (v: unknown) => string) {
+        error = '';
         if (!input.trim()) return;
         try {
-            output = JSON.stringify(JSON.parse(input), null, 2);
+            output = fn(JSON.parse(input));
         } catch (e) {
             error = (e as Error).message;
         }
     }
-
+    const format = () => run((v) => JSON.stringify(v, null, 2));
+    const minify = () => run((v) => JSON.stringify(v));
     function validate() {
         error = '';
         if (!input.trim()) return;
@@ -23,38 +28,21 @@
             error = (e as Error).message;
         }
     }
-
-    function copy() {
-        navigator.clipboard.writeText(output);
-    }
-
-    function minify() {
-        error = '';
-        if (!input.trim()) return;
-        try {
-            output = JSON.stringify(JSON.parse(input));
-        } catch (e) {
-            error = (e as Error).message;
-        }
-    }
 </script>
 
-<div class="mx-auto max-w-2xl px-4 py-8">
-    <h1 class="mb-1 text-2xl font-bold text-brand-text-highlight">JSON Formatter</h1>
-    <p class="mb-6 text-sm text-brand-text">Format, validate, and minify JSON.</p>
-
+<ToolShell title="JSON Formatter" desc="Format, validate, and minify JSON.">
     <textarea
         placeholder="Paste JSON here..."
         bind:value={input}
         class="mb-3 h-32 w-full"
     ></textarea>
 
-    <div class="mb-4 flex gap-3">
-        <button onclick={format}>Format</button>
-        <button onclick={minify}>Minify</button>
-        <button onclick={validate}>Validate</button>
+    <div class="mb-4 flex flex-wrap gap-3">
+        <button type="button" onclick={format}>Format</button>
+        <button type="button" onclick={minify}>Minify</button>
+        <button type="button" onclick={validate}>Validate</button>
         {#if output && !output.startsWith('✓')}
-            <button onclick={copy}>Copy</button>
+            <CopyButton value={output} label="Copy" />
         {/if}
     </div>
 
@@ -66,7 +54,7 @@
         {#if output === '✓ Valid JSON'}
             <p class="text-sm text-green-400">{output}</p>
         {:else}
-            <pre class="overflow-x-auto rounded border border-brand-secondary bg-white/5 p-3 font-mono text-xs text-brand-text-highlight">{output}</pre>
+            <CodeBlock value={output} />
         {/if}
     {/if}
-</div>
+</ToolShell>

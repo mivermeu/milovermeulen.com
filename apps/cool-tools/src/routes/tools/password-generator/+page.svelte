@@ -1,4 +1,7 @@
 <script lang="ts">
+    import ToolShell from '$lib/components/ToolShell.svelte';
+    import CopyButton from '$lib/components/CopyButton.svelte';
+
     let length = $state(20);
     let upper = $state(true);
     let lower = $state(true);
@@ -20,10 +23,6 @@
         password = Array.from(rand, (b) => chars[b % chars.length]).join('');
     }
 
-    function copy() {
-        navigator.clipboard.writeText(password);
-    }
-
     let strength = $derived.by(() => {
         if (!password) return '';
         const s = password.length;
@@ -40,16 +39,13 @@
     });
 </script>
 
-<div class="mx-auto max-w-xl px-4 py-8">
-    <h1 class="mb-1 text-2xl font-bold text-brand-text-highlight">Password Generator</h1>
-    <p class="mb-6 text-sm text-brand-text">Cryptographically secure passwords via <code class="text-brand-text-highlight">crypto.getRandomValues()</code>.</p>
-
+<ToolShell title="Password Generator" desc="Cryptographically secure passwords via crypto.getRandomValues().">
     <div class="mb-4 flex items-center gap-3">
         <label class="text-sm text-brand-text" for="plen">Length:</label>
         <input id="plen" type="number" min="4" max="128" bind:value={length} class="w-20" />
-        <button onclick={generate}>Generate</button>
+        <button type="button" onclick={generate}>Generate</button>
         {#if password}
-            <button onclick={copy}>Copy</button>
+            <CopyButton value={password} label="Copy" />
         {/if}
     </div>
 
@@ -68,4 +64,4 @@
             Strength: <span class="capitalize {strength === 'very strong' || strength === 'strong' ? 'text-green-400' : strength === 'fair' ? 'text-yellow-400' : 'text-red-400'}">{strength}</span>
         </div>
     {/if}
-</div>
+</ToolShell>

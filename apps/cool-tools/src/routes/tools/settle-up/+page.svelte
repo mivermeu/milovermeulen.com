@@ -1,5 +1,6 @@
 <script lang="ts">
     import { slide } from 'svelte/transition';
+    import ToolShell from '$lib/components/ToolShell.svelte';
     interface Person { name: string; id: string; }
     interface Expense { paidBy: string; amount: number; splitAmong: string[]; desc: string; currency: string; }
     interface Group { id: string; name: string; people: Person[]; expenses: Expense[]; }
@@ -42,12 +43,16 @@
             if (d.groups && d.groups.length > 0) groups = d.groups;
         } catch { /* corrupt stored data, ignore */ }
     }
-    function save() { localStorage.setItem(STORAGE, JSON.stringify({ version: SCHEMA_VERSION, groups })); }
+    function save() {
+        try {
+            localStorage.setItem(STORAGE, JSON.stringify({ version: SCHEMA_VERSION, groups }));
+        } catch { /* storage unavailable, skip */ }
+    }
     load();
 
     let g = $derived(groups.find((g) => g.id === activeGroup) ?? groups[0]);
 
-    splitAmong = g.people.map((p) => p.id);
+splitAmong = (() => g.people.map((p) => p.id))();
 
     function addGroup() {
         const n = newGroupName.trim();
@@ -199,9 +204,7 @@
     }
 </script>
 
-<div class="mx-auto max-w-2xl px-4 py-8">
-    <h1 class="mb-1 text-2xl font-bold text-brand-text-highlight">Settle Up</h1>
-    <p class="mb-6 text-sm text-brand-text">Split expenses and find the minimum transfers to settle debts. Data is saved locally.</p>
+<ToolShell title="Settle Up" desc="Split expenses and find the minimum transfers to settle debts. Data is saved locally.">
 
     <h3>Groups</h3>
     <div class="mb-3 flex items-center gap-2">
@@ -218,7 +221,7 @@
                     role="button"
                     tabindex="0"
                     onclick={() => activeGroup = grp.id}
-                    onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); activeGroup = grp.id; } }}
+                    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activeGroup = grp.id; } }}
                 >
                     {grp.name}
                     <button class="border-0 bg-transparent p-0 text-brand-text/60 hover:text-brand-text-highlight" onclick={(e) => { e.stopPropagation(); startRenameGroup(grp.id); }} title="Rename">~</button>
@@ -300,7 +303,7 @@
                             role="button"
                             tabindex="0"
                             onclick={() => toggleSplit(i)}
-                            onkeydown={(ev) => { if (ev.key === 'Enter') { ev.preventDefault(); toggleSplit(i); } }}
+                            onkeydown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggleSplit(i); } }}
                         >
                             <span class="min-w-0">
                                 <span class="font-semibold text-brand-text-highlight">{name(e.paidBy)}</span> paid
@@ -336,4 +339,4 @@
             </div>
         {/if}
     {/if}
-</div>
+</ToolShell>

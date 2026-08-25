@@ -1,4 +1,6 @@
 <script lang="ts">
+    import ToolShell from '$lib/components/ToolShell.svelte';
+
     let fg = $state('#000000');
     let bg = $state('#ffffff');
 
@@ -11,7 +13,9 @@
         return 0.2126 * r + 0.7152 * g + 0.0722 * b;
     }
 
-    let ratio = $derived(((Math.max(luminance(fg), luminance(bg)) + 0.05) / (Math.min(luminance(fg), luminance(bg)) + 0.05)).toFixed(2));
+    let lumFg = $derived(luminance(fg));
+    let lumBg = $derived(luminance(bg));
+    let ratio = $derived(((Math.max(lumFg, lumBg) + 0.05) / (Math.min(lumFg, lumBg) + 0.05)).toFixed(2));
 
     let aaNorm = $derived(Number(ratio) >= 4.5);
     let aaLarge = $derived(Number(ratio) >= 3);
@@ -19,10 +23,7 @@
     let aaaLarge = $derived(Number(ratio) >= 4.5);
 </script>
 
-<div class="mx-auto max-w-xl px-4 py-8">
-    <h1 class="mb-1 text-2xl font-bold text-brand-text-highlight">WCAG Contrast Checker</h1>
-    <p class="mb-6 text-sm text-brand-text">Check if two colors meet WCAG accessibility guidelines.</p>
-
+<ToolShell title="WCAG Contrast Checker" desc="Check if two colors meet WCAG accessibility guidelines." max="max-w-xl">
     <div class="mb-6 flex items-center gap-6">
         <div>
             <label class="mb-1 block text-xs text-brand-text" for="fg">Foreground</label>
@@ -60,4 +61,4 @@
             </tbody>
         </table>
     </div>
-</div>
+</ToolShell>

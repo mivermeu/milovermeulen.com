@@ -1,41 +1,33 @@
 <script lang="ts">
+    import ToolShell from '$lib/components/ToolShell.svelte';
+    import CopyButton from '$lib/components/CopyButton.svelte';
+    import FilePick from '$lib/components/FilePick.svelte';
+
     let input = $state('');
     let output: { algo: string; hash: string }[] = $state([]);
 
     const algos = ['SHA-1', 'SHA-256', 'SHA-384', 'SHA-512'] as const;
     let selected = $state(new Set(algos));
 
+    const toHex = (buf: ArrayBuffer) => Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+
     async function hash() {
         if (!input) { output = []; return; }
         output = await Promise.all(
             Array.from(selected).map(async (algo) => {
                 const buf = await crypto.subtle.digest(algo, new TextEncoder().encode(input));
-                const hex = Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
-                return { algo, hash: hex };
+                return { algo, hash: toHex(buf) };
             })
         );
     }
 
-    function handleFile(e: Event) {
-        const file = (e.target as HTMLInputElement).files?.[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = async () => {
-            const buf = await crypto.subtle.digest('SHA-256', reader.result as ArrayBuffer);
-            output = [{ algo: 'SHA-256', hash: Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('') }];
-        };
-        reader.readAsArrayBuffer(file);
-    }
-
-    function copyHash(hash: string) {
-        navigator.clipboard.writeText(hash);
+    async function onFile(file: File) {
+        const buf = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+        output = [{ algo: 'SHA-256', hash: toHex(buf) }];
     }
 </script>
 
-<div class="mx-auto max-w-2xl px-4 py-8">
-    <h1 class="mb-1 text-2xl font-bold text-brand-text-highlight">Hash Generator</h1>
-    <p class="mb-6 text-sm text-brand-text">Generate cryptographic hashes using <code class="text-brand-text-highlight">crypto.subtle.digest()</code>.</p>
-
+<ToolShell title="Hash Generator" desc="Generate cryptographic hashes using crypto.subtle.digest().">
     <textarea
         placeholder="Enter text to hash..."
         bind:value={input}
@@ -50,12 +42,7 @@
                 {algo}
             </label>
         {/each}
-        <label>
-            <button class="relative cursor-pointer">
-                Load File
-                <input type="file" onchange={handleFile} class="absolute inset-0 cursor-pointer opacity-0" />
-            </button>
-        </label>
+        <FilePick onfile={onFile} />
     </div>
 
     {#if output.length > 0}
@@ -64,9 +51,9 @@
                 <div class="flex items-center gap-2 rounded border border-brand-secondary bg-white/5 px-3 py-2">
                     <span class="w-24 shrink-0 text-sm font-semibold text-brand-text">{item.algo}</span>
                     <code class="flex-1 break-all text-sm text-brand-text-highlight select-all">{item.hash}</code>
-                    <button class="size-6 p-0 text-xs" onclick={() => copyHash(item.hash)} title="Copy">⎘</button>
+                    <CopyButton value={item.hash} />
                 </div>
             {/each}
         </div>
     {/if}
-</div>
+</ToolShell>

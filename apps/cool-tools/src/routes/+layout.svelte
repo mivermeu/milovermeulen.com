@@ -2,54 +2,10 @@
     import '../app.css';
     import favicon from '$lib/assets/favicon.svg';
     import { resolve } from '$app/paths';
+    import { categories } from '$lib/data/tools';
 
     let { children } = $props();
     let sidebarOpen = $state(false);
-
-    const categories = [
-        {
-            name: 'Money',
-            tools: [{ slug: 'settle-up', name: 'Settle Up' }]
-        },
-        {
-            name: 'Generators',
-            tools: [
-                { slug: 'qr-code', name: 'QR Code' },
-                { slug: 'uuid', name: 'UUID' },
-                { slug: 'password-generator', name: 'Password Generator' },
-                { slug: 'hash-generator', name: 'Hash Generator' }
-            ]
-        },
-        {
-            name: 'Text',
-            tools: [
-                { slug: 'markdown-editor', name: 'Markdown Editor' },
-                { slug: 'diff', name: 'Text Diff' },
-                { slug: 'regex-tester', name: 'Regex Tester' }
-            ]
-        },
-        {
-            name: 'Converters',
-            tools: [
-                { slug: 'base64', name: 'Base64' },
-                { slug: 'csv-json', name: 'CSV ↔ JSON' },
-                { slug: 'json-formatter', name: 'JSON Formatter' },
-                { slug: 'jwt-decoder', name: 'JWT Decoder' }
-            ]
-        },
-        {
-            name: 'Design',
-            tools: [
-                { slug: 'color-palette', name: 'Color Palette' },
-                { slug: 'gradient-generator', name: 'CSS Gradient' },
-                { slug: 'contrast-checker', name: 'Contrast Checker' }
-            ]
-        },
-        {
-            name: 'Scheduling',
-            tools: [{ slug: 'cron-visualizer', name: 'Cron Visualizer' }]
-        }
-    ];
 </script>
 
 <svelte:head>
@@ -91,7 +47,7 @@
                 </div>
                 {#each cat.tools as tool (tool.slug)}
                     <a
-                        href={resolve('/tools/' + tool.slug)}
+                        href={resolve(`/tools/${tool.slug}`)}
                         class="rounded px-2 py-1.5 text-sm text-brand-text transition-colors hover:bg-white/10 hover:text-brand-text-highlight"
                         onclick={() => sidebarOpen = false}
                     >

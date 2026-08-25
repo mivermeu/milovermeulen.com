@@ -1,12 +1,12 @@
 <script lang="ts">
     import { diffChars, diffLines } from 'diff';
+    import ToolShell from '$lib/components/ToolShell.svelte';
+    import CopyButton from '$lib/components/CopyButton.svelte';
+    import Toggle from '$lib/components/Toggle.svelte';
 
     let left = $state('');
     let right = $state('');
     let mode: 'lines' | 'chars' = $state('lines');
-
-    function setLines() { mode = 'lines'; }
-    function setChars() { mode = 'chars'; }
 
     interface Line { text: string; num: number; removed?: boolean; added?: boolean }
     let leftPart = $state<Line[]>([]);
@@ -32,21 +32,16 @@
     }
 
     $effect(() => { rebuild(); });
-
-    function copy() {
-        const joined = leftPart.map((l) => l.text).join('\n');
-        navigator.clipboard.writeText(joined);
-    }
 </script>
 
-<div class="mx-auto max-w-5xl px-4 py-8">
-    <h1 class="mb-1 text-2xl font-bold text-brand-text-highlight">Text Diff Viewer</h1>
-    <p class="mb-6 text-sm text-brand-text">Compare two texts side by side.</p>
-
+<ToolShell title="Text Diff Viewer" desc="Compare two texts side by side." max="max-w-5xl">
     <div class="mb-3 flex items-center gap-3">
-        <button onclick={setLines} class={mode === 'lines' ? 'bg-white/10' : ''}>Lines</button>
-        <button onclick={setChars} class={mode === 'chars' ? 'bg-white/10' : ''}>Characters</button>
-        <button onclick={copy}>Copy Diff</button>
+        <Toggle
+            value={mode}
+            options={[{ value: 'lines', label: 'Lines' }, { value: 'chars', label: 'Characters' }]}
+            onpick={(v) => mode = v as 'lines' | 'chars'}
+        />
+        <CopyButton value={leftPart.map((l) => l.text).join('\n')} label="Copy Diff" />
     </div>
 
     <div class="flex gap-2">
@@ -88,4 +83,4 @@
             </div>
         </div>
     {/if}
-</div>
+</ToolShell>

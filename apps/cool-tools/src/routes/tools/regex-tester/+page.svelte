@@ -1,4 +1,6 @@
 <script lang="ts">
+    import ToolShell from '$lib/components/ToolShell.svelte';
+
     let pattern = $state('');
     let flags = $state('g');
     let testText = $state('');
@@ -21,10 +23,7 @@
     }
 </script>
 
-<div class="mx-auto max-w-3xl px-4 py-8">
-    <h1 class="mb-1 text-2xl font-bold text-brand-text-highlight">Regex Tester</h1>
-    <p class="mb-6 text-sm text-brand-text">Test regular expressions with live matching.</p>
-
+<ToolShell title="Regex Tester" desc="Test regular expressions with live matching." max="max-w-3xl">
     <div class="mb-3 flex flex-wrap items-center gap-3">
         <label class="text-sm text-brand-text" for="pattern">/<input id="pattern" type="text" placeholder="pattern" bind:value={pattern} oninput={test} class="w-48" />/</label>
         <input type="text" placeholder="flags" bind:value={flags} oninput={test} class="w-20" />
@@ -62,4 +61,4 @@
     {:else if testText && pattern && !error}
         <p class="text-sm text-brand-text">No matches found.</p>
     {/if}
-</div>
+</ToolShell>

@@ -1,4 +1,6 @@
 <script lang="ts">
+    import ToolShell from '$lib/components/ToolShell.svelte';
+
     let cron = $state('*/5 * * * *');
     let output = $state('');
     let nextTimes: string[] = $state([]);
@@ -27,13 +29,12 @@
         const parts = cron.trim().split(/\s+/);
         if (parts.length < 5) { output = 'Invalid: need 5 fields'; nextTimes = []; return; }
         const names = ['minute', 'hour', 'day of month', 'month', 'day of week'];
-        const desc = parts.map((p, i) => {
+        output = parts.map((p, i) => {
             if (p === '*') return `every ${names[i]}`;
             if (p.includes('/')) return `every ${p.split('/')[1]} ${names[i]}s`;
             if (p.includes(',')) return `${names[i]}s ${p}`;
             return `${names[i]} ${p}`;
-        });
-        output = desc.join(', ');
+        }).join(', ');
 
         const mins = parseField(parts[0], 0, 59);
         const hrs = parseField(parts[1], 0, 23);
@@ -75,10 +76,7 @@
     }
 </script>
 
-<div class="mx-auto max-w-2xl px-4 py-8">
-    <h1 class="mb-1 text-2xl font-bold text-brand-text-highlight">Cron Visualizer</h1>
-    <p class="mb-6 text-sm text-brand-text">Parse cron expressions and view upcoming schedules.</p>
-
+<ToolShell title="Cron Visualizer" desc="Parse cron expressions and view upcoming schedules.">
     <div class="mb-3 flex items-center gap-3">
         <input type="text" bind:value={cron} oninput={analyze} class="w-48 font-mono" placeholder="*/5 * * * *" />
     </div>
@@ -110,4 +108,4 @@
             {/each}
         </div>
     {/if}
-</div>
+</ToolShell>

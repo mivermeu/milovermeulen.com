@@ -1,4 +1,9 @@
 <script lang="ts">
+    import ToolShell from '$lib/components/ToolShell.svelte';
+    import CopyButton from '$lib/components/CopyButton.svelte';
+    import CodeBlock from '$lib/components/CodeBlock.svelte';
+    import Toggle from '$lib/components/Toggle.svelte';
+
     let stops = $state<{ color: string; pos: number }[]>([
         { color: '#ff6b6b', pos: 0 },
         { color: '#6bcbff', pos: 100 }
@@ -6,15 +11,15 @@
     let angle = $state(90);
     let type: 'linear' | 'radial' = $state('linear');
 
-    function setLinear() { type = 'linear'; }
-    function setRadial() { type = 'radial'; }
+    function onType(v: string) { type = v as 'linear' | 'radial'; }
 
-    function cssValue() {
+    let css = $derived.by(() => {
         const sorted = [...stops].sort((a, b) => a.pos - b.pos);
         const parts = sorted.map((s) => `${s.color} ${s.pos}%`);
-        if (type === 'linear') return `linear-gradient(${angle}deg, ${parts.join(', ')})`;
-        return `radial-gradient(circle, ${parts.join(', ')})`;
-    }
+        return type === 'linear'
+            ? `linear-gradient(${angle}deg, ${parts.join(', ')})`
+            : `radial-gradient(circle, ${parts.join(', ')})`;
+    });
 
     function addStop() {
         if (stops.length >= 8) return;
@@ -26,28 +31,24 @@
         if (stops.length <= 2) return;
         stops = stops.filter((_, idx) => idx !== i);
     }
-
-    function copy() {
-        navigator.clipboard.writeText(`background: ${cssValue()};`);
-    }
 </script>
 
-<div class="mx-auto max-w-2xl px-4 py-8">
-    <h1 class="mb-1 text-2xl font-bold text-brand-text-highlight">CSS Gradient Generator</h1>
-    <p class="mb-6 text-sm text-brand-text">Create and export CSS gradients visually.</p>
-
-    <div class="mb-4 h-32 rounded-lg border border-brand-secondary" style="background: {cssValue()}"></div>
+<ToolShell title="CSS Gradient Generator" desc="Create and export CSS gradients visually.">
+    <div class="mb-4 h-32 rounded-lg border border-brand-secondary" style="background: {css}"></div>
 
     <div class="mb-4 flex flex-wrap items-center gap-3">
-        <button onclick={setLinear} class={type === 'linear' ? 'bg-white/10' : ''}>Linear</button>
-        <button onclick={setRadial} class={type === 'radial' ? 'bg-white/10' : ''}>Radial</button>
+        <Toggle
+            value={type}
+            options={[{ value: 'linear', label: 'Linear' }, { value: 'radial', label: 'Radial' }]}
+            onpick={onType}
+        />
         {#if type === 'linear'}
             <label class="text-sm text-brand-text" for="angle">Angle:</label>
             <span class="w-8 text-xs text-brand-text-highlight">{angle}°</span>
             <input id="angle" type="range" min="0" max="360" bind:value={angle} class="w-24" />
         {/if}
-        <button onclick={addStop}>Add Stop</button>
-        <button onclick={copy}>Copy CSS</button>
+        <button type="button" onclick={addStop}>Add Stop</button>
+        <CopyButton value={`background: ${css};`} label="Copy CSS" />
     </div>
 
     <div class="flex flex-col gap-2">
@@ -57,12 +58,12 @@
                 <span class="w-16 font-mono text-xs text-brand-text-highlight">{stop.color}</span>
                 <input type="range" min="0" max="100" bind:value={stop.pos} class="flex-1" />
                 <span class="w-8 text-xs text-brand-text">{stop.pos}%</span>
-                <button class="size-6 p-0 text-xs" onclick={() => removeStop(i)} disabled={stops.length <= 2}>✕</button>
+                <button type="button" class="size-6 p-0 text-xs" onclick={() => removeStop(i)} disabled={stops.length <= 2}>✕</button>
             </div>
         {/each}
     </div>
 
     <div class="mt-4">
-        <pre class="overflow-x-auto rounded border border-brand-secondary bg-white/5 p-3 font-mono text-xs text-brand-text-highlight select-all">background: {cssValue()};</pre>
+        <CodeBlock value={`background: ${css};`} />
     </div>
-</div>
+</ToolShell>

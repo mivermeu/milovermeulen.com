@@ -1,10 +1,17 @@
 <script lang="ts">
+    import ToolShell from '$lib/components/ToolShell.svelte';
+    import CopyButton from '$lib/components/CopyButton.svelte';
+    import FilePick from '$lib/components/FilePick.svelte';
+    import Toggle from '$lib/components/Toggle.svelte';
+
     let input = $state('');
     let output = $state('');
     let mode: 'encode' | 'decode' = $state('encode');
 
-    function setEncode() { mode = 'encode'; convert(); }
-    function setDecode() { mode = 'decode'; convert(); }
+    function onPick(v: string) {
+        mode = v as 'encode' | 'decode';
+        convert();
+    }
 
     function convert() {
         if (!input) { output = ''; return; }
@@ -14,35 +21,36 @@
             } else {
                 output = new TextDecoder().decode(Uint8Array.from(atob(input), (c) => c.charCodeAt(0)));
             }
-        } catch { output = 'Invalid input'; }
+        } catch {
+            output = mode === 'encode' ? 'Input too large to encode in memory.' : 'Invalid input';
+        }
     }
 
-    function handleFile(e: Event) {
-        const file = (e.target as HTMLInputElement).files?.[0];
-        if (!file) return;
+    function onFile(file: File) {
         const reader = new FileReader();
         reader.onload = () => {
-            const bytes = new Uint8Array(reader.result as ArrayBuffer);
-            output = btoa(bytes.reduce((s, b) => s + String.fromCharCode(b), ''));
-            mode = 'encode';
+            try {
+                let binary = '';
+                const bytes = new Uint8Array(reader.result as ArrayBuffer);
+                for (const b of bytes) binary += String.fromCharCode(b);
+                output = btoa(binary);
+                mode = 'encode';
+            } catch {
+                output = 'Input too large to encode in memory.';
+            }
         };
         reader.readAsArrayBuffer(file);
     }
 </script>
 
-<div class="mx-auto max-w-2xl px-4 py-8">
-    <h1 class="mb-1 text-2xl font-bold text-brand-text-highlight">Base64 Encoder / Decoder</h1>
-    <p class="mb-6 text-sm text-brand-text">Encode text or files to Base64, or decode Base64 back to text.</p>
-
+<ToolShell title="Base64 Encoder / Decoder" desc="Encode text or files to Base64, or decode Base64 back to text.">
     <div class="mb-4 flex items-center gap-3">
-        <button onclick={setEncode} class={mode === 'encode' ? 'bg-white/10' : ''}>Encode</button>
-        <button onclick={setDecode} class={mode === 'decode' ? 'bg-white/10' : ''}>Decode</button>
-        <label>
-            <button class="relative cursor-pointer">
-                Load File
-                <input type="file" onchange={handleFile} class="absolute inset-0 cursor-pointer opacity-0" />
-            </button>
-        </label>
+        <Toggle
+            value={mode}
+            options={[{ value: 'encode', label: 'Encode' }, { value: 'decode', label: 'Decode' }]}
+            onpick={onPick}
+        />
+        <FilePick onfile={onFile} />
     </div>
 
     <textarea
@@ -52,10 +60,13 @@
         class="mb-3 h-32 w-full"
     ></textarea>
 
+    <div class="mb-1 flex justify-end">
+        <CopyButton value={output} />
+    </div>
     <textarea
         readonly
         value={output}
         placeholder="Output"
         class="h-32 w-full"
     ></textarea>
-</div>
+</ToolShell>
