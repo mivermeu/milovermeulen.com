@@ -5,6 +5,7 @@ body {
     background-color: theme('colors.brand-bg');
     color: theme('colors.brand-text');
     color-scheme: dark;
+    overflow-x: hidden;
 }
 
 body {
@@ -36,7 +37,9 @@ body {
     input[type='number'],
     textarea,
     select {
-        @apply rounded-md border border-brand-text/20 bg-brand-bg px-2 py-1 text-sm text-brand-text-highlight;
+        @apply rounded-md border border-brand-secondary bg-brand-bg px-2 py-1 text-sm text-brand-text-highlight;
+        appearance: none;
+        -webkit-appearance: none;
     }
 
     input[type='text']:focus,
@@ -48,5 +51,15 @@ body {
 
     textarea {
         @apply resize-y font-mono;
+    }
+}
+
+/* iOS auto-zooms into form controls smaller than 16px; 16px keeps focus steady on phones */
+@media (max-width: 640px) {
+    input[type='text'],
+    input[type='number'],
+    textarea,
+    select {
+        font-size: 16px;
     }
 }

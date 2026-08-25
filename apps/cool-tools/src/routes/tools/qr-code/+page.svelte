@@ -48,7 +48,7 @@
         <button onclick={generate}>Generate</button>
     </div>
 
-    <div class="mb-4 flex items-center gap-4 text-sm text-brand-text">
+    <div class="mb-4 flex flex-wrap items-center gap-4 text-sm text-brand-text">
         <label class="flex items-center gap-1">Size:
             <input type="number" bind:value={size} min="128" max="1024" step="64" class="w-20" />
             <span class="relative inline-flex">

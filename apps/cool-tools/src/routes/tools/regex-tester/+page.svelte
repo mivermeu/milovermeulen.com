@@ -25,7 +25,7 @@
     <h1 class="mb-1 text-2xl font-bold text-brand-text-highlight">Regex Tester</h1>
     <p class="mb-6 text-sm text-brand-text">Test regular expressions with live matching.</p>
 
-    <div class="mb-3 flex items-center gap-3">
+    <div class="mb-3 flex flex-wrap items-center gap-3">
         <label class="text-sm text-brand-text" for="pattern">/<input id="pattern" type="text" placeholder="pattern" bind:value={pattern} oninput={test} class="w-48" />/</label>
         <input type="text" placeholder="flags" bind:value={flags} oninput={test} class="w-20" />
     </div>

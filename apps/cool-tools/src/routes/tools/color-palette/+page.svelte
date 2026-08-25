@@ -87,7 +87,7 @@
             {#each palette as group (group.name)}
                 <div>
                     <h3 class="!mb-2 !border-0">{group.name}</h3>
-                    <div class="flex gap-3">
+                    <div class="flex flex-wrap gap-3">
                         {#each group.colors as c, ci (c)}
                             {@const idx = group.name + ci}
                             <div class="flex flex-col items-center gap-1">

@@ -10,8 +10,6 @@
     let amount = $state(0);
     let desc = $state('');
     let splitAmong = $state<string[]>([]);
-    let txfr: { from: string; to: string; amount: number }[] = $state([]);
-    let txfrCurrency = $state('USD');
     let newGroupName = $state('');
     let editingName = $state('');
     let editingGroup: string | null = $state(null);
@@ -46,6 +44,8 @@
     load();
 
     let g = $derived(groups.find((g) => g.id === activeGroup) ?? groups[0]);
+
+    splitAmong = g.people.map((p) => p.id);
 
     function addGroup() {
         const n = newGroupName.trim();
@@ -112,13 +112,14 @@
     }
 
     function addExpense() {
-        if (!paidBy || amount <= 0 || splitAmong.length === 0) return;
+        const valid = splitAmong.filter((id) => g.people.some((p) => p.id === id));
+        const targets = valid.length > 0 ? valid : g.people.map((p) => p.id);
+        if (!paidBy || amount <= 0 || targets.length === 0) return;
         groups = groups.map((grp) => grp.id !== activeGroup ? grp : {
             ...grp,
-            expenses: [...grp.expenses, { paidBy, amount, splitAmong, desc: desc || '(no desc)', currency }]
+            expenses: [...grp.expenses, { paidBy, amount, splitAmong: targets, desc: desc || '(no desc)', currency }]
         });
-        paidBy = ''; amount = 0; desc = ''; splitAmong = [];
-        txfr = [];
+        paidBy = ''; amount = 0; desc = ''; splitAmong = g.people.map((p) => p.id);
         save();
     }
 
@@ -127,11 +128,10 @@
             ...grp,
             expenses: grp.expenses.filter((_, idx) => idx !== i)
         });
-        txfr = [];
         save();
     }
 
-    function settle() {
+    let txfr = $derived.by(() => {
         const baseRate = currencies.find((c) => c.code === currency)?.rate ?? 1;
         const net: Record<string, number> = {};
         for (const p of g.people) net[p.id] = 0;
@@ -154,12 +154,10 @@
             if (debtors[di].v < 0.01) di++;
             if (creditors[ci].v < 0.01) ci++;
         }
-        txfr = result;
-        txfrCurrency = currency;
-        displayCurrency = currency;
-    }
+        return result;
+    });
 
-    let transferRate = $derived((currencies.find((c) => c.code === displayCurrency)?.rate ?? 1) / (currencies.find((c) => c.code === txfrCurrency)?.rate ?? 1));
+    let transferRate = $derived((currencies.find((c) => c.code === displayCurrency)?.rate ?? 1) / (currencies.find((c) => c.code === currency)?.rate ?? 1));
 
     function name(id: string) { return g.people.find((p) => p.id === id)?.name ?? '?'; }
 
@@ -197,11 +195,12 @@
     <h1 class="mb-1 text-2xl font-bold text-brand-text-highlight">Settle Up</h1>
     <p class="mb-6 text-sm text-brand-text">Split expenses and find the minimum transfers to settle debts. Data is saved locally.</p>
 
-    <div class="mb-2 flex items-center gap-2">
+    <h3>Groups</h3>
+    <div class="mb-3 flex items-center gap-2">
         <input type="text" placeholder="New group" bind:value={newGroupName} onkeydown={(e) => e.key === 'Enter' && addGroup()} class="w-32" />
         <button onclick={addGroup} class="text-xs">+</button>
     </div>
-    <div class="mb-4 flex flex-wrap items-center gap-2">
+    <div class="mb-3 flex flex-wrap items-center gap-2">
         {#each groups as grp (grp.id)}
             {#if editingGroup === grp.id}
                 <input type="text" bind:value={editingName} onkeydown={(e) => e.key === 'Enter' && finishRenameGroup(grp.id)} onblur={() => finishRenameGroup(grp.id)} class="w-24 text-xs" />
@@ -222,12 +221,17 @@
             {/if}
         {/each}
     </div>
+    <div class="mb-1 flex items-center gap-2">
+        <span class="text-xs text-brand-text">Active group:</span>
+        <button onclick={exportGroup} class="text-xs">Export</button>
+        <button onclick={importGroup} class="text-xs">Import</button>
+    </div>
 
-    <div class="mb-2 flex items-center gap-2">
+    <h3>People</h3>
+    <div class="mb-3 flex items-center gap-2">
         <input type="text" placeholder="New person" bind:value={newName} onkeydown={(e) => e.key === 'Enter' && addPerson()} class="w-32" />
         <button onclick={addPerson} class="text-xs">+</button>
     </div>
-
     {#if g.people.length > 0}
         <div class="mb-4 flex flex-wrap gap-2">
             {#each g.people as p (p.id)}
@@ -242,37 +246,41 @@
                 </span>
             {/each}
         </div>
+    {:else}
+        <p class="mb-6 text-sm text-brand-text">No people yet — add someone above to start splitting expenses.</p>
+    {/if}
 
+    {#if g.people.length > 0}
         <h3>Add Expense</h3>
-        <div class="mb-6 grid grid-cols-2 gap-2 text-sm">
-            <select bind:value={paidBy} class="text-xs">
+        <div class="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
+            <select bind:value={paidBy} class="w-full min-w-0 text-xs sm:flex-1">
                 <option value="">Who paid?</option>
                 {#each g.people as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
             </select>
-            <div class="flex gap-1">
-                <input type="number" placeholder="Amount" bind:value={amount} min="0" step="0.01" class="flex-1" />
-                <select bind:value={currency} class="w-20 text-xs">
+            <div class="flex min-w-0 gap-1 sm:flex-1">
+                <input type="number" placeholder="Amount" bind:value={amount} min="0" step="0.01" class="w-full min-w-0 flex-1" />
+                <select bind:value={currency} class="w-20 shrink-0 text-xs">
                     {#each currencies as c (c.code)}<option value={c.code}>{c.code}</option>{/each}
                 </select>
             </div>
-            <input type="text" placeholder="Description" bind:value={desc} class="col-span-2" />
-            <div class="col-span-2">
-                <p class="mb-1 text-xs text-brand-text">Split among:</p>
-                <div class="flex flex-wrap gap-2">
-{#each g.people as p (p.id)}
-                        <label class="flex items-center gap-1 text-xs">
-                            <input type="checkbox" checked={splitAmong.includes(p.id)} onchange={() => {
-                                splitAmong = splitAmong.includes(p.id)
-                                    ? splitAmong.filter((id) => id !== p.id)
-                                    : [...splitAmong, p.id];
-                            }} />
-                            {p.name}
-                        </label>
-                    {/each}
-                </div>
-            </div>
-            <button onclick={addExpense} class="col-span-2">Add</button>
         </div>
+        <input type="text" placeholder="Description" bind:value={desc} class="mb-3 w-full" />
+        <div class="mb-3">
+            <p class="mb-1 text-xs text-brand-text">Split among:</p>
+            <div class="flex flex-wrap gap-2">
+                {#each g.people as p (p.id)}
+                    <label class="flex items-center gap-1 text-xs">
+                        <input type="checkbox" checked={splitAmong.includes(p.id)} onchange={() => {
+                            splitAmong = splitAmong.includes(p.id)
+                                ? splitAmong.filter((id) => id !== p.id)
+                                : [...splitAmong, p.id];
+                        }} />
+                        {p.name}
+                    </label>
+                {/each}
+            </div>
+        </div>
+        <button onclick={addExpense} class="mb-4 w-full sm:w-auto">Add</button>
 
         {#if g.expenses.length > 0}
             <h3>Expenses</h3>
@@ -291,30 +299,21 @@
             </div>
         {/if}
 
-        <div class="flex gap-2">
-            <button onclick={settle}>Settle Up</button>
-            <button onclick={exportGroup}>Export</button>
-            <button onclick={importGroup}>Import</button>
-        </div>
-
         {#if txfr.length > 0}
-            <div class="mt-4">
-                <div class="mb-2 flex items-center gap-2">
-                    <label class="text-xs text-brand-text" for="dispCur">Show in:</label>
-                    <select id="dispCur" bind:value={displayCurrency} class="w-20 text-xs">
-{#each currencies as c (c.code)}<option value={c.code}>{c.code}</option>{/each}
-                    </select>
-                </div>
-                <div class="flex flex-col gap-1">
-                    {#each txfr as t (t.from + t.to)}
-                        <div class="rounded border border-green-400/30 bg-green-400/5 px-3 py-1.5 text-sm text-green-300">
-                            {name(t.from)} → {name(t.to)}: <span class="font-bold">{displayCurrency} {(t.amount * transferRate).toFixed(2)}</span>
-                        </div>
-                    {/each}
-                </div>
+            <h3>Transfers</h3>
+            <div class="mb-2 flex items-center gap-2">
+                <label class="text-xs text-brand-text" for="dispCur">Show in:</label>
+                <select id="dispCur" bind:value={displayCurrency} class="w-20 text-xs">
+                    {#each currencies as c (c.code)}<option value={c.code}>{c.code}</option>{/each}
+                </select>
+            </div>
+            <div class="flex flex-col gap-1">
+                {#each txfr as t (t.from + t.to)}
+                    <div class="rounded border border-green-400/30 bg-green-400/5 px-3 py-1.5 text-sm text-green-300">
+                        {name(t.from)} → {name(t.to)}: <span class="font-bold">{displayCurrency} {(t.amount * transferRate).toFixed(2)}</span>
+                    </div>
+                {/each}
             </div>
         {/if}
-    {:else}
-        <p class="text-sm text-brand-text">Add people above to get started.</p>
     {/if}
 </div>
