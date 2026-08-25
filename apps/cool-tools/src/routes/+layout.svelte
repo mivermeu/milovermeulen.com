@@ -6,23 +6,49 @@
     let { children } = $props();
     let sidebarOpen = $state(false);
 
-    const tools = [
-        { slug: 'settle-up', name: 'Settle Up' },
-        { slug: 'qr-code', name: 'QR Code' },
-        { slug: 'json-formatter', name: 'JSON Formatter' },
-        { slug: 'regex-tester', name: 'Regex Tester' },
-        { slug: 'color-palette', name: 'Color Palette' },
-        { slug: 'password-generator', name: 'Password Generator' },
-        { slug: 'markdown-editor', name: 'Markdown Editor' },
-        { slug: 'base64', name: 'Base64' },
-        { slug: 'uuid', name: 'UUID' },
-        { slug: 'jwt-decoder', name: 'JWT Decoder' },
-        { slug: 'cron-visualizer', name: 'Cron Visualizer' },
-        { slug: 'diff', name: 'Text Diff' },
-        { slug: 'hash-generator', name: 'Hash Generator' },
-        { slug: 'csv-json', name: 'CSV ↔ JSON' },
-        { slug: 'gradient-generator', name: 'CSS Gradient' },
-        { slug: 'contrast-checker', name: 'Contrast Checker' }
+    const categories = [
+        {
+            name: 'Money',
+            tools: [{ slug: 'settle-up', name: 'Settle Up' }]
+        },
+        {
+            name: 'Generators',
+            tools: [
+                { slug: 'qr-code', name: 'QR Code' },
+                { slug: 'uuid', name: 'UUID' },
+                { slug: 'password-generator', name: 'Password Generator' },
+                { slug: 'hash-generator', name: 'Hash Generator' }
+            ]
+        },
+        {
+            name: 'Text',
+            tools: [
+                { slug: 'markdown-editor', name: 'Markdown Editor' },
+                { slug: 'diff', name: 'Text Diff' },
+                { slug: 'regex-tester', name: 'Regex Tester' }
+            ]
+        },
+        {
+            name: 'Converters',
+            tools: [
+                { slug: 'base64', name: 'Base64' },
+                { slug: 'csv-json', name: 'CSV ↔ JSON' },
+                { slug: 'json-formatter', name: 'JSON Formatter' },
+                { slug: 'jwt-decoder', name: 'JWT Decoder' }
+            ]
+        },
+        {
+            name: 'Design',
+            tools: [
+                { slug: 'color-palette', name: 'Color Palette' },
+                { slug: 'gradient-generator', name: 'CSS Gradient' },
+                { slug: 'contrast-checker', name: 'Contrast Checker' }
+            ]
+        },
+        {
+            name: 'Scheduling',
+            tools: [{ slug: 'cron-visualizer', name: 'Cron Visualizer' }]
+        }
     ];
 </script>
 
@@ -58,14 +84,20 @@
     >
         <a href={resolve('/')} class="mb-6 block text-lg font-bold text-brand-text-highlight" onclick={() => sidebarOpen = false}>Cool Tools</a>
         <nav class="flex flex-col gap-1">
-            {#each tools as tool (tool.slug)}
-                <a
-                    href={resolve('/tools/' + tool.slug)}
-                    class="rounded px-2 py-1.5 text-sm text-brand-text transition-colors hover:bg-white/10 hover:text-brand-text-highlight"
-                    onclick={() => sidebarOpen = false}
-                >
-                    {tool.name}
-                </a>
+            {#each categories as cat (cat.name)}
+                <div class="mb-1 mt-3 flex items-center gap-2 first:mt-0">
+                    <hr class="flex-1 border-t border-current opacity-20" />
+                    <span class="text-[10px] font-normal tracking-wider uppercase opacity-40">{cat.name}</span>
+                </div>
+                {#each cat.tools as tool (tool.slug)}
+                    <a
+                        href={resolve('/tools/' + tool.slug)}
+                        class="rounded px-2 py-1.5 text-sm text-brand-text transition-colors hover:bg-white/10 hover:text-brand-text-highlight"
+                        onclick={() => sidebarOpen = false}
+                    >
+                        {tool.name}
+                    </a>
+                {/each}
             {/each}
         </nav>
     </aside>
