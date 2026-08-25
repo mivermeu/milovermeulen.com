@@ -14,7 +14,7 @@ body {
 
 @layer base {
     h3 {
-        @apply mb-4 border-b border-brand-secondary pb-2 text-lg font-semibold text-brand-text-highlight;
+        @apply mb-4 mt-10 border-b border-brand-secondary pb-2 text-lg font-semibold text-brand-text-highlight;
     }
 
     button {
