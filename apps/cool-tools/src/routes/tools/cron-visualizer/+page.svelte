@@ -7,20 +7,20 @@
 
     function parseField(field: string, min: number, max: number): number[] {
         if (field === '*') return Array.from({ length: max - min + 1 }, (_, i) => i + min);
-        const values = new Set<number>();
+        const values: number[] = [];
         for (const part of field.split(',')) {
             if (part.includes('/')) {
                 const [range, step] = part.split('/');
                 const [lo, hi] = range === '*' ? [min, max] : range.split('-').map(Number);
-                for (let i = lo; i <= hi; i += Number(step)) values.add(i);
+                for (let i = lo; i <= hi; i += Number(step)) values.push(i);
             } else if (part.includes('-')) {
                 const [lo, hi] = part.split('-').map(Number);
-                for (let i = lo; i <= hi; i++) values.add(i);
+                for (let i = lo; i <= hi; i++) values.push(i);
             } else {
-                values.add(Number(part));
+                values.push(Number(part));
             }
         }
-        return Array.from(values).filter((v) => v >= min && v <= max);
+        return values.filter((v, i) => v >= min && v <= max && values.indexOf(v) === i);
     }
 
     function analyze() {
@@ -42,6 +42,7 @@
         const dows = parseField(parts[4], 0, 7);
         const times: Date[] = [];
         const now = new Date();
+        // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local cursor mutated imperatively, not reactive state
         let cursor = new Date(now);
         cursor.setSeconds(0, 0);
         for (let y = 0; y < 5; y++) {
@@ -85,7 +86,7 @@
     <div class="mb-4 text-xs text-brand-text">
         Format: <code class="text-brand-text-highlight">minute hour day month weekday</code>
         <div class="mt-1 flex flex-wrap gap-x-4 gap-y-1">
-            {#each fields as [name, range]}
+            {#each fields as [name, range] (name)}
                 <span>{name}<br class="hidden sm:inline" /><span class="text-brand-text/60"> ({range})</span></span>
             {/each}
         </div>
@@ -104,7 +105,7 @@
     {#if nextTimes.length > 0}
         <h3>Next 10 Runs</h3>
         <div class="flex flex-col gap-1">
-            {#each nextTimes as t}
+            {#each nextTimes as t (t)}
                 <div class="rounded border border-brand-secondary bg-white/5 px-3 py-1.5 font-mono text-xs text-brand-text-highlight">{t}</div>
             {/each}
         </div>

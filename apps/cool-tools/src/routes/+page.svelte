@@ -1,4 +1,6 @@
 <script lang="ts">
+    import { resolve } from '$app/paths';
+
     const tools = [
         { slug: 'settle-up', name: 'Settle Up', desc: 'Split expenses and minimize transfers' },
         { slug: 'qr-code', name: 'QR Code Generator', desc: 'Generate QR codes from text or URLs' },
@@ -24,9 +26,9 @@
     <p class="mb-8 text-brand-text">A collection of free, client-side utilities. No sign-up, no tracking.</p>
 
     <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {#each tools as tool}
+        {#each tools as tool (tool.slug)}
             <a
-                href="/cool-tools/tools/{tool.slug}"
+                href={resolve('/tools/' + tool.slug)}
                 class="block rounded-lg border border-brand-secondary bg-brand-bg p-4 transition-colors hover:border-brand-primary hover:bg-white/5"
             >
                 <h2 class="text-lg font-semibold text-brand-text-highlight">{tool.name}</h2>

@@ -31,7 +31,7 @@
         rightPart = rp;
     }
 
-    $effect(() => { left; right; mode; rebuild(); });
+    $effect(() => { rebuild(); });
 
     function copy() {
         const joined = leftPart.map((l) => l.text).join('\n');
@@ -67,7 +67,7 @@
             <div class="w-1/2 overflow-auto font-mono text-xs leading-relaxed">
                 <div class="rounded-t border-x border-t border-brand-secondary bg-white/5 p-1 px-2 text-[10px] text-brand-text">Original</div>
                 <div class="border border-brand-secondary bg-white/5 p-2">
-                    {#each leftPart as l}
+                    {#each leftPart as l (l.num)}
                         <div class="flex">
                             <span class="mr-2 w-6 shrink-0 text-right text-brand-text/40 select-none">{l.num}</span>
                             <span class="whitespace-pre-wrap break-all {l.removed ? 'bg-red-400/20 line-through text-red-300' : ''}">{l.text}</span>
@@ -78,7 +78,7 @@
             <div class="w-1/2 overflow-auto font-mono text-xs leading-relaxed">
                 <div class="rounded-t border-x border-t border-brand-secondary bg-white/5 p-1 px-2 text-[10px] text-brand-text">Modified</div>
                 <div class="border border-brand-secondary bg-white/5 p-2">
-                    {#each rightPart as l}
+                    {#each rightPart as l (l.num)}
                         <div class="flex">
                             <span class="mr-2 w-6 shrink-0 text-right text-brand-text/40 select-none">{l.num}</span>
                             <span class="whitespace-pre-wrap break-all {l.added ? 'bg-green-400/20 text-green-300' : ''}">{l.text}</span>

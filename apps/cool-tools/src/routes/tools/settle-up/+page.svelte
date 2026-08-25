@@ -40,7 +40,7 @@
         try {
             const d = JSON.parse(localStorage.getItem(STORAGE) || '{}');
             if (d.groups && d.groups.length > 0) groups = d.groups;
-        } catch {}
+        } catch { /* corrupt stored data, ignore */ }
     }
     function save() { localStorage.setItem(STORAGE, JSON.stringify({ version: SCHEMA_VERSION, groups })); }
     load();
@@ -187,7 +187,7 @@
                     activeGroup = id;
                     save();
                 }
-            } catch {}
+            } catch { /* invalid/unsupported file, ignore */ }
         };
         input.click();
     }
@@ -202,7 +202,7 @@
         <button onclick={addGroup} class="text-xs">+</button>
     </div>
     <div class="mb-4 flex flex-wrap items-center gap-2">
-        {#each groups as grp}
+        {#each groups as grp (grp.id)}
             {#if editingGroup === grp.id}
                 <input type="text" bind:value={editingName} onkeydown={(e) => e.key === 'Enter' && finishRenameGroup(grp.id)} onblur={() => finishRenameGroup(grp.id)} class="w-24 text-xs" />
             {:else}
@@ -230,7 +230,7 @@
 
     {#if g.people.length > 0}
         <div class="mb-4 flex flex-wrap gap-2">
-            {#each g.people as p}
+            {#each g.people as p (p.id)}
                 <span class="flex items-center gap-1 rounded border border-brand-secondary bg-white/5 px-2 py-1 text-xs text-brand-text-highlight">
                     {#if editingPerson === p.id}
                         <input type="text" bind:value={editingPersonName} onkeydown={(e) => e.key === 'Enter' && finishRenamePerson(p.id)} onblur={() => finishRenamePerson(p.id)} class="w-20 text-xs" />
@@ -247,19 +247,19 @@
         <div class="mb-6 grid grid-cols-2 gap-2 text-sm">
             <select bind:value={paidBy} class="text-xs">
                 <option value="">Who paid?</option>
-                {#each g.people as p}<option value={p.id}>{p.name}</option>{/each}
+                {#each g.people as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
             </select>
             <div class="flex gap-1">
                 <input type="number" placeholder="Amount" bind:value={amount} min="0" step="0.01" class="flex-1" />
                 <select bind:value={currency} class="w-20 text-xs">
-                    {#each currencies as c}<option value={c.code}>{c.code}</option>{/each}
+                    {#each currencies as c (c.code)}<option value={c.code}>{c.code}</option>{/each}
                 </select>
             </div>
             <input type="text" placeholder="Description" bind:value={desc} class="col-span-2" />
             <div class="col-span-2">
                 <p class="mb-1 text-xs text-brand-text">Split among:</p>
                 <div class="flex flex-wrap gap-2">
-                    {#each g.people as p}
+{#each g.people as p (p.id)}
                         <label class="flex items-center gap-1 text-xs">
                             <input type="checkbox" checked={splitAmong.includes(p.id)} onchange={() => {
                                 splitAmong = splitAmong.includes(p.id)
@@ -277,7 +277,7 @@
         {#if g.expenses.length > 0}
             <h3>Expenses</h3>
             <div class="mb-4 flex flex-col gap-1">
-                {#each g.expenses as e, i}
+                {#each g.expenses as e, i (i)}
                     <div class="flex items-center justify-between rounded border border-brand-secondary bg-white/5 px-3 py-1.5 text-xs text-brand-text">
                         <span>
                             <span class="font-semibold text-brand-text-highlight">{name(e.paidBy)}</span> paid
@@ -302,11 +302,11 @@
                 <div class="mb-2 flex items-center gap-2">
                     <label class="text-xs text-brand-text" for="dispCur">Show in:</label>
                     <select id="dispCur" bind:value={displayCurrency} class="w-20 text-xs">
-                        {#each currencies as c}<option value={c.code}>{c.code}</option>{/each}
+{#each currencies as c (c.code)}<option value={c.code}>{c.code}</option>{/each}
                     </select>
                 </div>
                 <div class="flex flex-col gap-1">
-                    {#each txfr as t}
+                    {#each txfr as t (t.from + t.to)}
                         <div class="rounded border border-green-400/30 bg-green-400/5 px-3 py-1.5 text-sm text-green-300">
                             {name(t.from)} → {name(t.to)}: <span class="font-bold">{displayCurrency} {(t.amount * transferRate).toFixed(2)}</span>
                         </div>

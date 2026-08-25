@@ -51,7 +51,7 @@
     </div>
 
     <div class="flex flex-col gap-2">
-        {#each stops as stop, i}
+        {#each stops as stop, i (i)}
             <div class="flex items-center gap-2 rounded border border-brand-secondary bg-white/5 px-3 py-2">
                 <input type="color" bind:value={stop.color} class="size-8 cursor-pointer rounded border-0 p-0.5" />
                 <span class="w-16 font-mono text-xs text-brand-text-highlight">{stop.color}</span>

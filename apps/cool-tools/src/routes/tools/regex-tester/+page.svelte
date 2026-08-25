@@ -44,14 +44,14 @@
     {#if matches.length > 0}
         <h3>Matches ({matches.length})</h3>
         <div class="flex flex-col gap-1.5">
-            {#each matches as m, i}
+            {#each matches as m, i (m.index)}
                 <div class="rounded border border-brand-secondary bg-white/5 px-3 py-2 font-mono text-xs text-brand-text-highlight">
                     <span class="font-semibold text-brand-text">#{i + 1} </span>
                     <span class="select-all">{m.full}</span>
                     <span class="text-brand-text"> @ {m.index}</span>
                     {#if m.groups.length > 0}
                         <div class="mt-1 pl-4 text-brand-text">
-                            {#each m.groups as g, gi}
+                            {#each m.groups as g, gi (gi)}
                                 <div>Group {gi + 1}: <span class="text-brand-text-highlight">{g ?? '(undefined)'}</span></div>
                             {/each}
                         </div>
