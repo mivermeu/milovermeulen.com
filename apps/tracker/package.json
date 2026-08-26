@@ -1,0 +1,37 @@
+{
+    "name": "tracker",
+    "private": true,
+    "version": "0.0.1",
+    "type": "module",
+    "scripts": {
+        "dev": "vite dev --port 5175",
+        "build": "vite build",
+        "preview": "vite preview --port 4175",
+        "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+        "lint": "eslint .",
+        "test": "bun test"
+    },
+    "devDependencies": {
+        "@eslint/js": "^10.0.1",
+        "@sveltejs/adapter-static": "^3.0.10",
+        "@sveltejs/kit": "^2.57.0",
+        "@sveltejs/vite-plugin-svelte": "^7.0.0",
+        "@tailwindcss/vite": "^4.2.2",
+        "eslint": "^10.2.0",
+        "eslint-config-prettier": "^10.1.8",
+        "eslint-plugin-svelte": "^3.17.0",
+        "globals": "^17.4.0",
+        "shared-config": "workspace:*",
+        "svelte": "^5.55.2",
+        "svelte-check": "^4.4.6",
+        "tailwindcss": "^4.2.2",
+        "typescript": "^6.0.2",
+        "typescript-eslint": "^8.58.1",
+        "vite": "^8.0.7",
+        "@types/bun": "^1"
+    },
+    "dependencies": {
+        "satellite.js": "^5.0.0",
+        "three": "^0.179.0"
+    }
+}

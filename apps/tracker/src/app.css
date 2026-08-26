@@ -1,0 +1,42 @@
+@import 'shared-config/app.css';
+
+html,
+body {
+    background-color: theme('colors.brand-bg');
+    color: theme('colors.brand-text');
+    color-scheme: dark;
+}
+
+body {
+    @apply text-sm;
+}
+
+@layer base {
+    h3 {
+        @apply mb-4 border-b border-brand-secondary pb-2 text-lg font-semibold text-brand-text-highlight;
+    }
+
+    button {
+        @apply inline-flex cursor-pointer items-center justify-center rounded-lg border border-brand-primary bg-transparent px-3 py-2 whitespace-nowrap text-brand-text transition-colors duration-150;
+    }
+
+    button:hover:not(:disabled) {
+        @apply bg-white/15;
+    }
+
+    button:active:not(:disabled) {
+        transform: scale(0.97);
+    }
+
+    button:disabled {
+        @apply cursor-not-allowed opacity-40;
+    }
+
+    input[type='number'] {
+        @apply rounded-md border border-brand-text/20 bg-brand-bg px-2 py-1 text-sm text-brand-text-highlight;
+    }
+
+    input[type='number']:focus {
+        @apply border-brand-primary outline-none;
+    }
+}
