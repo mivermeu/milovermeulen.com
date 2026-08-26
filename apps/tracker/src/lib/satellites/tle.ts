@@ -20,7 +20,7 @@ export function parseTleText(text: string): ParsedSatellite[] {
         let name = '';
         for (let j = i - 1; j >= 0; j--) {
             const candidate = lines[j].trim();
-            if (candidate.length > 0) {
+            if (candidate.length > 0 && !candidate.startsWith('1 ') && !candidate.startsWith('2 ')) {
                 name = candidate;
                 break;
             }

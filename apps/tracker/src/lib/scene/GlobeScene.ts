@@ -8,7 +8,8 @@ export const SCALE = GLOBE_RADIUS / EARTH_RADIUS_KM;
 
 const DEG2RAD = Math.PI / 180;
 const POSITION_CADENCE_MS = 120;
-const ORBIT_POINTS_PER_SAT = 200;
+const ORBIT_POINTS_PER_SAT = 96;
+const ORBIT_REBUILD_INTERVAL_MS = 5000;
 
 export interface GlobeSceneCallbacks {
     onSatCount?: (count: number) => void;
@@ -27,7 +28,7 @@ interface WorkerResponse {
 }
 
 export class GlobeScene {
-    private readonly renderer: THREE.WebGLRenderer;
+    private readonly renderer: THREE.WebGLRenderer | null;
     private readonly scene: THREE.Scene;
     private readonly camera: THREE.PerspectiveCamera;
     private readonly controls: OrbitControls;
@@ -37,6 +38,8 @@ export class GlobeScene {
     private positionArray: Float32Array;
     private readonly orbitMesh: THREE.LineSegments;
     private readonly orbitGeometry: THREE.BufferGeometry;
+    private readonly graticule: THREE.LineSegments;
+    private readonly equatorRing: THREE.LineLoop;
     private readonly resizeObserver: ResizeObserver;
 
     private speed = 1;
@@ -44,6 +47,7 @@ export class GlobeScene {
     private simTimeMs = Date.now();
     private lastFrameWall = performance.now();
     private lastRequestWall = 0;
+    private lastOrbitBuildWall = 0;
     private positionRequestPending = false;
     private positionRequestSeq = 0;
     private orbitRequestSeq = 0;
@@ -62,22 +66,31 @@ export class GlobeScene {
         private readonly satellites: ParsedSatellite[],
         private readonly callbacks: GlobeSceneCallbacks = {}
     ) {
-        this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
-        this.renderer.setClearColor(0x1a1a1f, 1);
+        try {
+            this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
+            this.renderer.setClearColor(0x1a1a1f, 1);
+        } catch {
+            this.renderer = null;
+            this.callbacks.onError?.('WebGL is not available on this browser or device.');
+        }
 
         this.scene = new THREE.Scene();
         this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
-        this.camera.position.set(0, 0, 30);
+        this.camera.position.set(0, 25, 0);
 
         this.controls = new OrbitControls(this.camera, canvas);
+        this.camera.up.set(0, 0, 1);
         this.controls.enableDamping = true;
         this.controls.dampingFactor = 0.08;
         this.controls.enablePan = false;
         this.controls.minDistance = 9;
         this.controls.maxDistance = 90;
+        this.controls.listenToKeyEvents(canvas);
 
-        this.scene.add(this.buildGraticule());
-        this.scene.add(this.buildEquatorRing());
+        this.graticule = this.buildGraticule();
+        this.scene.add(this.graticule);
+        this.equatorRing = this.buildEquatorRing();
+        this.scene.add(this.equatorRing);
 
         this.pointsGeometry = new THREE.BufferGeometry();
         this.positionArray = new Float32Array(satellites.length * 3);
@@ -119,7 +132,10 @@ export class GlobeScene {
             type: 'module'
         });
         this.worker.onmessage = (event) => this.handleWorkerMessage(event);
-        this.worker.onerror = (event) => this.callbacks.onError?.(event.message || 'Worker error');
+        this.worker.onerror = (event) => {
+            this.positionRequestPending = false;
+            this.callbacks.onError?.(event.message || 'Worker error');
+        };
         this.worker.postMessage({ type: 'init', satellites, scale: SCALE });
 
         this.raf = requestAnimationFrame(() => this.loop());
@@ -168,6 +184,7 @@ export class GlobeScene {
     }
 
     private handleResize(): void {
+        if (!this.renderer) return;
         const container = this.renderer.domElement.parentElement;
         if (!container) return;
         const width = container.clientWidth;
@@ -264,6 +281,7 @@ export class GlobeScene {
     }
 
     private requestOrbits(): void {
+        this.lastOrbitBuildWall = performance.now();
         this.orbitRequestSeq++;
         this.worker.postMessage({
             type: 'buildOrbits',
@@ -283,6 +301,10 @@ export class GlobeScene {
             this.simTimeMs += deltaSeconds * this.speed * 1000;
         }
 
+        if (this.positionRequestPending && now - this.lastRequestWall > 3 * POSITION_CADENCE_MS) {
+            this.positionRequestPending = false;
+        }
+
         if (
             this.speed > 0 &&
             this.ready &&
@@ -293,9 +315,13 @@ export class GlobeScene {
             this.requestPositions();
         }
 
+        if (this.showOrbits && this.ready && now - this.lastOrbitBuildWall >= ORBIT_REBUILD_INTERVAL_MS) {
+            this.requestOrbits();
+        }
+
         this.updatePositions();
         this.controls.update();
-        this.renderer.render(this.scene, this.camera);
+        if (this.renderer) this.renderer.render(this.scene, this.camera);
         this.raf = requestAnimationFrame(this.loop);
     };
 
@@ -323,7 +349,11 @@ export class GlobeScene {
         (this.points.material as THREE.Material).dispose();
         this.orbitGeometry.dispose();
         (this.orbitMesh.material as THREE.Material).dispose();
-        this.renderer.dispose();
+        this.graticule.geometry.dispose();
+        (this.graticule.material as THREE.Material).dispose();
+        this.equatorRing.geometry.dispose();
+        (this.equatorRing.material as THREE.Material).dispose();
+        this.renderer?.dispose();
     }
 }
 
@@ -332,7 +362,7 @@ function latLonToVector(latitudeDeg: number, longitudeDeg: number, radius: numbe
     const lon = longitudeDeg * DEG2RAD;
     return new THREE.Vector3(
         radius * Math.cos(lat) * Math.cos(lon),
-        radius * Math.sin(lat),
-        radius * Math.cos(lat) * Math.sin(lon)
+        radius * Math.cos(lat) * Math.sin(lon),
+        radius * Math.sin(lat)
     );
 }

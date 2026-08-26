@@ -50,7 +50,7 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
     const maxSegments = total * (pointsPerOrbit - 1);
     const positions = new Float32Array(maxSegments * 2 * 3);
     let vertexCount = 0;
-    const CHUNK = 250;
+    const CHUNK = 100;
     const epochMs = epoch;
 
     for (let i = 0; i < total; i++) {
