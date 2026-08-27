@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { gstime } from 'satellite.js';
+import { trackerState } from '$lib/state.svelte';
 import type { ParsedSatellite } from '$lib/satellites/types';
 
 const EARTH_RADIUS_KM = 6371;
@@ -57,6 +58,7 @@ export class GlobeScene {
     private lastFrameWall = performance.now();
     private lastRequestWall = 0;
     private lastOrbitBuildWall = 0;
+    private lastDateTimeUpdate = 0;
     private positionRequestPending = false;
     private positionRequestSeq = 0;
     private orbitRequestSeq = 0;
@@ -179,6 +181,10 @@ export class GlobeScene {
             satellites: satellites.map(({ name, line1, line2 }) => ({ name, line1, line2 })),
             scale: SCALE
         });
+
+        trackerState.setSimTime = (ms: number) => {
+            this.simTimeMs = ms;
+        };
 
         this.raf = requestAnimationFrame(() => this.loop());
     }
@@ -431,6 +437,11 @@ export class GlobeScene {
             this.requestOrbits();
         }
 
+        if (now - this.lastDateTimeUpdate > 1000) {
+            this.lastDateTimeUpdate = now;
+            trackerState.simDateTime = formatUtc(this.simTimeMs);
+        }
+
         this.updatePositions();
         if (this.orbitsReady) {
             this.orbitMesh.rotation.z = -gstime(new Date(this.simTimeMs));
@@ -498,6 +509,10 @@ function buildCircleTexture(): THREE.Texture {
         ctx.fillRect(0, 0, size, size);
     }
     return new THREE.CanvasTexture(canvas);
+}
+
+function formatUtc(ms: number): string {
+    return new Date(ms).toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
 }
 
 function latLonToVector(latitudeDeg: number, longitudeDeg: number, radius: number): THREE.Vector3 {

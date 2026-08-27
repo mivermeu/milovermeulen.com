@@ -1,5 +1,8 @@
 <script lang="ts">
     import { SPEED_OPTIONS, sourceLabel, trackerState } from '$lib/state.svelte';
+
+    const SCRUB_RANGE_MS = 30 * 24 * 60 * 60 * 1000;
+    const now = Date.now();
 </script>
 
 <div
@@ -27,6 +30,23 @@
                 </button>
             {/each}
         </div>
+    </div>
+
+    <div class="mb-4">
+        <p class="mb-1 text-brand-text">Simulation time</p>
+        <p class="mb-2 font-mono text-sm text-brand-text-highlight">{trackerState.simDateTime || '—'}</p>
+        <input
+            type="range"
+            min={now - SCRUB_RANGE_MS}
+            max={now + SCRUB_RANGE_MS}
+            step={60000}
+            value={now}
+            oninput={(e) => {
+                trackerState.setSimTime(Number(e.currentTarget.value));
+                trackerState.speed = 0;
+            }}
+            class="w-full accent-brand-primary"
+        />
     </div>
 
     <dl class="space-y-1 text-xs">

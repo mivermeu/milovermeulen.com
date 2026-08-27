@@ -16,7 +16,9 @@ export const trackerState = $state({
     speed: 1,
     renderedCount: 0,
     dataSource: 'loading' as DataSource,
-    error: ''
+    error: '',
+    simDateTime: '',
+    setSimTime: (_ms: number) => {}
 });
 
 export function sourceLabel(source: DataSource): string {
