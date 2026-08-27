@@ -40,6 +40,7 @@ export class GlobeScene {
     private readonly orbitGeometry: THREE.BufferGeometry;
     private readonly graticule: THREE.LineSegments;
     private readonly equatorRing: THREE.LineLoop;
+    private readonly earth: THREE.Mesh;
     private readonly resizeObserver: ResizeObserver;
 
     private speed = 1;
@@ -87,6 +88,12 @@ export class GlobeScene {
         this.controls.maxDistance = 90;
         this.controls.listenToKeyEvents(canvas);
 
+        this.earth = new THREE.Mesh(
+            new THREE.SphereGeometry(GLOBE_RADIUS, 48, 32),
+            new THREE.MeshBasicMaterial({ color: 0x262e42 })
+        );
+        this.scene.add(this.earth);
+
         this.graticule = this.buildGraticule();
         this.scene.add(this.graticule);
         this.equatorRing = this.buildEquatorRing();
@@ -114,9 +121,9 @@ export class GlobeScene {
         this.orbitMesh = new THREE.LineSegments(
             this.orbitGeometry,
             new THREE.LineBasicMaterial({
-                color: 0x4a5a78,
+                color: 0x6a7fa8,
                 transparent: true,
-                opacity: 0.45,
+                opacity: 0.85,
                 depthWrite: false
             })
         );
@@ -169,7 +176,7 @@ export class GlobeScene {
         geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
         return new THREE.LineSegments(
             geometry,
-            new THREE.LineBasicMaterial({ color: 0x3a4a63, transparent: true, opacity: 0.55 })
+            new THREE.LineBasicMaterial({ color: 0x43597c, transparent: true, opacity: 0.75 })
         );
     }
 
@@ -357,6 +364,8 @@ export class GlobeScene {
         (this.graticule.material as THREE.Material).dispose();
         this.equatorRing.geometry.dispose();
         (this.equatorRing.material as THREE.Material).dispose();
+        this.earth.geometry.dispose();
+        (this.earth.material as THREE.Material).dispose();
         this.renderer?.dispose();
     }
 }
