@@ -154,6 +154,7 @@ export class GlobeScene {
             })
         );
         this.highlightMesh.frustumCulled = false;
+        this.highlightMesh.renderOrder = 999;
         this.highlightMesh.visible = false;
         this.scene.add(this.highlightMesh);
 
