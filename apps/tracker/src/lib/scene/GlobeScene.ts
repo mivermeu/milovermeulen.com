@@ -26,6 +26,7 @@ interface WorkerResponse {
     colors?: Float32Array;
     positions?: Float32Array;
     message?: string;
+    ranges?: number[];
 }
 
 export class GlobeScene {
@@ -43,6 +44,12 @@ export class GlobeScene {
     private readonly equatorRing: THREE.LineLoop;
     private readonly earth: THREE.Mesh;
     private readonly resizeObserver: ResizeObserver;
+    private readonly highlightMesh: THREE.LineSegments;
+    private readonly highlightGeometry: THREE.BufferGeometry;
+    private readonly raycaster = new THREE.Raycaster();
+    private readonly pointerNdc = new THREE.Vector2();
+    private readonly onPointerMove: (event: PointerEvent) => void;
+    private readonly canvas: HTMLCanvasElement;
 
     private speed = 1;
     private ready = false;
@@ -55,6 +62,9 @@ export class GlobeScene {
     private orbitRequestSeq = 0;
     private showOrbits = true;
     private orbitsReady = false;
+    private orbitRanges: number[] = [];
+    private orbitPositions: Float32Array | null = null;
+    private highlightIndex = -1;
 
     private prevPositions: Float32Array | null = null;
     private nextPositions: Float32Array | null = null;
@@ -132,6 +142,24 @@ export class GlobeScene {
         this.orbitMesh.frustumCulled = false;
         this.orbitMesh.visible = false;
         this.scene.add(this.orbitMesh);
+
+        this.highlightGeometry = new THREE.BufferGeometry();
+        this.highlightMesh = new THREE.LineSegments(
+            this.highlightGeometry,
+            new THREE.LineBasicMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0.95,
+                depthWrite: false
+            })
+        );
+        this.highlightMesh.frustumCulled = false;
+        this.highlightMesh.visible = false;
+        this.scene.add(this.highlightMesh);
+
+        this.canvas = canvas;
+        this.onPointerMove = (event: PointerEvent) => this.handlePointerMove(event);
+        canvas.addEventListener('pointermove', this.onPointerMove);
 
         this.resizeObserver = new ResizeObserver(() => this.handleResize());
         this.resizeObserver.observe(canvas.parentElement ?? canvas);
@@ -265,11 +293,81 @@ export class GlobeScene {
         const positions = message.positions;
         const vertexCount = message.vertexCount ?? 0;
         if (!positions || vertexCount === 0) return;
-        const attribute = new THREE.Float32BufferAttribute(positions, 3);
-        this.orbitGeometry.setAttribute('position', attribute);
-        this.orbitGeometry.setDrawRange(0, vertexCount / 3);
+        this.orbitPositions = positions;
+        this.orbitRanges = message.ranges ?? [];
         this.orbitsReady = true;
+        this.applyOrbitGeometry();
+        if (this.highlightIndex >= 0) this.setHighlight(this.highlightIndex);
+    }
+
+    private applyOrbitGeometry(): void {
+        const full = this.orbitPositions;
+        if (!full) return;
+        let array = full;
+        if (this.highlightIndex >= 0) {
+            const a = this.orbitRanges[this.highlightIndex * 2];
+            const b = this.orbitRanges[this.highlightIndex * 2 + 1];
+            if (b > a) {
+                const out = new Float32Array(full.length - (b - a));
+                out.set(full.subarray(0, a), 0);
+                out.set(full.subarray(b), a);
+                array = out;
+            }
+        }
+        this.orbitGeometry.setAttribute('position', new THREE.BufferAttribute(array, 3));
+        this.orbitGeometry.setDrawRange(0, array.length / 3);
         this.orbitMesh.visible = this.showOrbits;
+    }
+
+    private handlePointerMove(event: PointerEvent): void {
+        if (!this.ready || !this.points.visible || !this.showOrbits) {
+            this.clearHighlight();
+            return;
+        }
+        const rect = this.canvas.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return;
+        this.pointerNdc.set(
+            ((event.clientX - rect.left) / rect.width) * 2 - 1,
+            -((event.clientY - rect.top) / rect.height) * 2 + 1
+        );
+        this.raycaster.setFromCamera(this.pointerNdc, this.camera);
+        const size = (this.points.material as THREE.PointsMaterial).size;
+        this.raycaster.params.Points.threshold = 3 * size;
+
+        const earthHits = this.raycaster.intersectObject(this.earth, false);
+        const earthDist = earthHits.length > 0 ? earthHits[0].distance : Infinity;
+        const hits = this.raycaster.intersectObject(this.points, false);
+        if (hits.length === 0 || earthDist < hits[0].distance - 1e-3) {
+            this.clearHighlight();
+            return;
+        }
+        this.setHighlight(hits[0].index ?? -1);
+    }
+
+    private setHighlight(index: number): void {
+        if (index < 0 || index * 2 + 1 >= this.orbitRanges.length) {
+            this.clearHighlight();
+            return;
+        }
+        const start = this.orbitRanges[index * 2];
+        const end = this.orbitRanges[index * 2 + 1];
+        const master = this.orbitPositions;
+        if (end <= start || !master) {
+            this.clearHighlight();
+            return;
+        }
+        const array = master.subarray(start, end);
+        this.highlightGeometry.setAttribute('position', new THREE.BufferAttribute(array, 3));
+        this.highlightMesh.visible = true;
+        this.highlightIndex = index;
+        this.applyOrbitGeometry();
+    }
+
+    private clearHighlight(): void {
+        if (this.highlightIndex === -1) return;
+        this.highlightIndex = -1;
+        this.highlightMesh.visible = false;
+        this.applyOrbitGeometry();
     }
 
     setSpeed(speed: number): void {
@@ -335,6 +433,11 @@ export class GlobeScene {
         this.updatePositions();
         if (this.orbitsReady) {
             this.orbitMesh.rotation.z = -gstime(new Date(this.simTimeMs));
+            this.highlightMesh.rotation.z = this.orbitMesh.rotation.z;
+        }
+        if (this.points.visible) {
+            const material = this.points.material as THREE.PointsMaterial;
+            material.size = 0.25 * (this.camera.position.length() / 25);
         }
         this.controls.update();
         if (this.renderer) this.renderer.render(this.scene, this.camera);
@@ -359,11 +462,14 @@ export class GlobeScene {
         this.disposed = true;
         cancelAnimationFrame(this.raf);
         this.resizeObserver.disconnect();
+        this.canvas.removeEventListener('pointermove', this.onPointerMove);
         this.worker.terminate();
         this.controls.dispose();
         this.pointsGeometry.dispose();
         (this.points.material as THREE.PointsMaterial).map?.dispose();
         (this.points.material as THREE.Material).dispose();
+        this.highlightGeometry.dispose();
+        (this.highlightMesh.material as THREE.Material).dispose();
         this.orbitGeometry.dispose();
         (this.orbitMesh.material as THREE.Material).dispose();
         this.graticule.geometry.dispose();

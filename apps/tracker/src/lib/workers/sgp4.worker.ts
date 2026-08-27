@@ -50,6 +50,7 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
     const maxSegments = total * pointsPerOrbit;
     const positions = new Float32Array(maxSegments * 2 * 3);
     let vertexCount = 0;
+    const ranges: number[] = [];
     const CHUNK = 100;
     const epochMs = epoch;
 
@@ -57,6 +58,7 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
         const rec = satellites[i].rec;
         const periodMs = (2 * Math.PI / rec.no) * 60000;
         let previous: [number, number, number] | null = null;
+        const rangeStart = vertexCount;
 
         // Sample one full period in inertial (ECI) space, including the endpoint
         // (k == pointsPerOrbit coincides with the start, closing the ellipse).
@@ -80,6 +82,8 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
             previous = point;
         }
 
+        ranges.push(rangeStart, vertexCount);
+
         if ((i + 1) % CHUNK === 0) {
             if (buildId !== orbitBuildId) return;
             await new Promise((resolve) => setTimeout(resolve, 0));
@@ -87,7 +91,7 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
     }
 
     if (buildId !== orbitBuildId) return;
-    postMessage({ type: 'orbits', requestId, vertexCount, positions }, [positions.buffer]);
+    postMessage({ type: 'orbits', requestId, vertexCount, positions, ranges }, [positions.buffer]);
 }
 
 function handleMessage(event: MessageEvent<WorkerMessage>): void {
