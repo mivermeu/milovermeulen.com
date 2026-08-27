@@ -26,7 +26,6 @@ interface WorkerResponse {
     colors?: Float32Array;
     positions?: Float32Array;
     message?: string;
-    gmstRef?: number;
 }
 
 export class GlobeScene {
@@ -56,7 +55,6 @@ export class GlobeScene {
     private orbitRequestSeq = 0;
     private showOrbits = true;
     private orbitsReady = false;
-    private orbitGmstRef = 0;
 
     private prevPositions: Float32Array | null = null;
     private nextPositions: Float32Array | null = null;
@@ -269,7 +267,6 @@ export class GlobeScene {
         const attribute = new THREE.Float32BufferAttribute(positions, 3);
         this.orbitGeometry.setAttribute('position', attribute);
         this.orbitGeometry.setDrawRange(0, vertexCount / 3);
-        this.orbitGmstRef = message.gmstRef ?? gstime(new Date(this.simTimeMs));
         this.orbitsReady = true;
         this.orbitMesh.visible = this.showOrbits;
     }
@@ -336,7 +333,7 @@ export class GlobeScene {
 
         this.updatePositions();
         if (this.orbitsReady) {
-            this.orbitMesh.rotation.z = this.orbitGmstRef - gstime(new Date(this.simTimeMs));
+            this.orbitMesh.rotation.z = -gstime(new Date(this.simTimeMs));
         }
         this.controls.update();
         if (this.renderer) this.renderer.render(this.scene, this.camera);

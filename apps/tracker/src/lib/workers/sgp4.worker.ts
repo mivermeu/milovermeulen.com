@@ -52,7 +52,6 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
     let vertexCount = 0;
     const CHUNK = 100;
     const epochMs = epoch;
-    const gmstRef = gstime(new Date(epochMs));
 
     for (let i = 0; i < total; i++) {
         const rec = satellites[i].rec;
@@ -88,7 +87,7 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
     }
 
     if (buildId !== orbitBuildId) return;
-    postMessage({ type: 'orbits', requestId, vertexCount, positions, gmstRef }, [positions.buffer]);
+    postMessage({ type: 'orbits', requestId, vertexCount, positions }, [positions.buffer]);
 }
 
 function handleMessage(event: MessageEvent<WorkerMessage>): void {
