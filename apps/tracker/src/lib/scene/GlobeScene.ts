@@ -287,7 +287,7 @@ export class GlobeScene {
         this.positionRequestSeq++;
         this.worker.postMessage({
             type: 'propagate',
-            epoch: Math.round(this.simTimeMs),
+            epoch: Math.round(this.simTimeMs + this.speed * POSITION_CADENCE_MS),
             requestId: this.positionRequestSeq
         });
     }
