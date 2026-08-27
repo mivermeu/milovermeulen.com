@@ -109,6 +109,7 @@ export class GlobeScene {
                 size: 0.25,
                 sizeAttenuation: true,
                 vertexColors: true,
+                map: buildCircleTexture(),
                 depthWrite: false,
                 transparent: true,
                 opacity: 0.95
@@ -361,6 +362,7 @@ export class GlobeScene {
         this.worker.terminate();
         this.controls.dispose();
         this.pointsGeometry.dispose();
+        (this.points.material as THREE.PointsMaterial).map?.dispose();
         (this.points.material as THREE.Material).dispose();
         this.orbitGeometry.dispose();
         (this.orbitMesh.material as THREE.Material).dispose();
@@ -372,6 +374,23 @@ export class GlobeScene {
         (this.earth.material as THREE.Material).dispose();
         this.renderer?.dispose();
     }
+}
+
+function buildCircleTexture(): THREE.Texture {
+    const size = 64;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+        const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+        gradient.addColorStop(0, 'rgba(255,255,255,1)');
+        gradient.addColorStop(0.65, 'rgba(255,255,255,1)');
+        gradient.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, size, size);
+    }
+    return new THREE.CanvasTexture(canvas);
 }
 
 function latLonToVector(latitudeDeg: number, longitudeDeg: number, radius: number): THREE.Vector3 {
