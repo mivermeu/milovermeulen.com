@@ -39,35 +39,37 @@ function colorFor(rec: SatRec): number[] {
     return GEO_COLOR;
 }
 
-function ecfToScene(ecf: { x: number; y: number; z: number }): [number, number, number] {
-    return [ecf.x * scale, ecf.y * scale, ecf.z * scale];
+function toScene(p: { x: number; y: number; z: number }): [number, number, number] {
+    return [p.x * scale, p.y * scale, p.z * scale];
 }
 
 async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
     const buildId = ++orbitBuildId;
     const { requestId, epoch, pointsPerOrbit } = message;
     const total = satellites.length;
-    const maxSegments = total * (pointsPerOrbit - 1);
+    const maxSegments = total * pointsPerOrbit;
     const positions = new Float32Array(maxSegments * 2 * 3);
     let vertexCount = 0;
     const CHUNK = 100;
     const epochMs = epoch;
+    const gmstRef = gstime(new Date(epochMs));
 
     for (let i = 0; i < total; i++) {
         const rec = satellites[i].rec;
         const periodMs = (2 * Math.PI / rec.no) * 60000;
         let previous: [number, number, number] | null = null;
 
-        for (let k = 0; k < pointsPerOrbit; k++) {
-            const t = epochMs + (k / (pointsPerOrbit - 1)) * periodMs;
+        // Sample one full period in inertial (ECI) space, including the endpoint
+        // (k == pointsPerOrbit coincides with the start, closing the ellipse).
+        for (let k = 0; k <= pointsPerOrbit; k++) {
+            const t = epochMs + (k / pointsPerOrbit) * periodMs;
             const date = new Date(t);
             const state = propagate(rec, date);
             if (state.position === false || state.position === undefined) {
                 previous = null;
                 continue;
             }
-            const ecf = eciToEcf(state.position as EciVec3<number>, gstime(date));
-            const point = ecfToScene(ecf);
+            const point = toScene(state.position as EciVec3<number>);
             if (previous) {
                 positions[vertexCount++] = previous[0];
                 positions[vertexCount++] = previous[1];
@@ -86,7 +88,7 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
     }
 
     if (buildId !== orbitBuildId) return;
-    postMessage({ type: 'orbits', requestId, vertexCount, positions }, [positions.buffer]);
+    postMessage({ type: 'orbits', requestId, vertexCount, positions, gmstRef }, [positions.buffer]);
 }
 
 function handleMessage(event: MessageEvent<WorkerMessage>): void {
