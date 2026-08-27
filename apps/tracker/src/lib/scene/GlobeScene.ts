@@ -136,7 +136,11 @@ export class GlobeScene {
             this.positionRequestPending = false;
             this.callbacks.onError?.(event.message || 'Worker error');
         };
-        this.worker.postMessage({ type: 'init', satellites, scale: SCALE });
+        this.worker.postMessage({
+            type: 'init',
+            satellites: satellites.map(({ name, line1, line2 }) => ({ name, line1, line2 })),
+            scale: SCALE
+        });
 
         this.raf = requestAnimationFrame(() => this.loop());
     }
