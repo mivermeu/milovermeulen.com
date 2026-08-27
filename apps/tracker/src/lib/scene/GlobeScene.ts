@@ -77,9 +77,9 @@ export class GlobeScene {
         this.scene = new THREE.Scene();
         this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
         this.camera.position.set(0, 25, 0);
+        this.camera.up.set(0, 0, 1);
 
         this.controls = new OrbitControls(this.camera, canvas);
-        this.camera.up.set(0, 0, 1);
         this.controls.enableDamping = true;
         this.controls.dampingFactor = 0.08;
         this.controls.enablePan = false;
@@ -94,11 +94,11 @@ export class GlobeScene {
 
         this.pointsGeometry = new THREE.BufferGeometry();
         this.positionArray = new Float32Array(satellites.length * 3);
-        this.pointsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(this.positionArray, 3));
+        this.pointsGeometry.setAttribute('position', new THREE.BufferAttribute(this.positionArray, 3));
         this.points = new THREE.Points(
             this.pointsGeometry,
             new THREE.PointsMaterial({
-                size: 0.1,
+                size: 0.25,
                 sizeAttenuation: true,
                 vertexColors: true,
                 depthWrite: false,
@@ -222,7 +222,7 @@ export class GlobeScene {
         const count = message.count ?? 0;
         this.ready = true;
         this.positionArray = new Float32Array(count * 3);
-        this.pointsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(this.positionArray, 3));
+        this.pointsGeometry.setAttribute('position', new THREE.BufferAttribute(this.positionArray, 3));
         this.pointsGeometry.setAttribute('color', new THREE.Float32BufferAttribute(message.colors ?? new Float32Array(0), 3));
         this.callbacks.onSatCount?.(count);
         if (count === 0) {
@@ -234,11 +234,11 @@ export class GlobeScene {
     }
 
     private onPositions(message: WorkerResponse): void {
-        if (message.requestId !== this.positionRequestSeq) return;
         this.positionRequestPending = false;
         const positions = message.positions;
         const epoch = message.epoch ?? this.simTimeMs;
         if (!positions) return;
+        if (epoch <= this.nextEpoch && this.nextPositions) return;
         this.prevPositions = this.nextPositions;
         this.prevEpoch = this.nextEpoch;
         this.nextPositions = positions;
