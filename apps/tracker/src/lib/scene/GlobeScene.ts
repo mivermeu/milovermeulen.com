@@ -59,6 +59,7 @@ export class GlobeScene {
     private lastRequestWall = 0;
     private lastOrbitBuildWall = 0;
     private lastDateTimeUpdate = 0;
+    private lastReferenceFrame: 'ecf' | 'eci' = 'ecf';
     private positionRequestPending = false;
     private positionRequestSeq = 0;
     private orbitRequestSeq = 0;
@@ -394,7 +395,8 @@ export class GlobeScene {
         this.worker.postMessage({
             type: 'propagate',
             epoch: Math.round(this.simTimeMs + this.speed * POSITION_CADENCE_MS),
-            requestId: this.positionRequestSeq
+            requestId: this.positionRequestSeq,
+            frame: trackerState.referenceFrame
         });
     }
 
@@ -405,7 +407,8 @@ export class GlobeScene {
             type: 'buildOrbits',
             epoch: Math.round(this.simTimeMs),
             requestId: this.orbitRequestSeq,
-            pointsPerOrbit: ORBIT_POINTS_PER_SAT
+            pointsPerOrbit: ORBIT_POINTS_PER_SAT,
+            frame: trackerState.referenceFrame
         });
     }
 
@@ -442,19 +445,19 @@ export class GlobeScene {
             trackerState.simDateTime = formatUtc(this.simTimeMs);
         }
 
+        if (trackerState.referenceFrame !== this.lastReferenceFrame) {
+            this.lastReferenceFrame = trackerState.referenceFrame;
+            this.positionRequestPending = false;
+            this.requestPositions();
+            if (this.showOrbits && this.ready) this.requestOrbits();
+        }
+
         this.updatePositions();
         const gmst = gstime(new Date(this.simTimeMs));
         const eci = trackerState.referenceFrame === 'eci';
-        const sceneRotation = eci ? 0 : -gmst;
-        const earthRotation = eci ? gmst : 0;
-        this.points.rotation.z = sceneRotation;
-        if (this.orbitsReady) {
-            this.orbitMesh.rotation.z = sceneRotation;
-            this.highlightMesh.rotation.z = sceneRotation;
-        }
-        this.earth.rotation.z = earthRotation;
-        this.graticule.rotation.z = earthRotation;
-        this.equatorRing.rotation.z = earthRotation;
+        this.earth.rotation.z = eci ? gmst : 0;
+        this.graticule.rotation.z = eci ? gmst : 0;
+        this.equatorRing.rotation.z = eci ? gmst : 0;
         if (this.points.visible) {
             const material = this.points.material as THREE.PointsMaterial;
             material.size = 0.25 * (this.camera.position.length() / 25);

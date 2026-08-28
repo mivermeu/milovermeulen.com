@@ -1,13 +1,14 @@
-import { twoline2satrec, propagate } from 'satellite.js';
+import { twoline2satrec, propagate, eciToEcf, gstime } from 'satellite.js';
 import type { EciVec3, SatRec } from 'satellite.js';
 import type { ParsedSatellite } from '$lib/satellites/types';
 
 const EARTH_RADIUS_KM = 6371;
 const MU_KM3_S2 = 398600.4418;
 
+type Frame = 'ecf' | 'eci';
 type InitMessage = { type: 'init'; satellites: ParsedSatellite[]; scale: number };
-type PropagateMessage = { type: 'propagate'; epoch: number; requestId: number };
-type BuildOrbitsMessage = { type: 'buildOrbits'; epoch: number; requestId: number; pointsPerOrbit: number };
+type PropagateMessage = { type: 'propagate'; epoch: number; requestId: number; frame: Frame };
+type BuildOrbitsMessage = { type: 'buildOrbits'; epoch: number; requestId: number; pointsPerOrbit: number; frame: Frame };
 
 type WorkerMessage = InitMessage | PropagateMessage | BuildOrbitsMessage;
 
@@ -45,7 +46,7 @@ function toScene(p: { x: number; y: number; z: number }): [number, number, numbe
 
 async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
     const buildId = ++orbitBuildId;
-    const { requestId, epoch, pointsPerOrbit } = message;
+    const { requestId, epoch, pointsPerOrbit, frame } = message;
     const total = satellites.length;
     const maxSegments = total * pointsPerOrbit;
     const positions = new Float32Array(maxSegments * 2 * 3);
@@ -60,9 +61,10 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
         let previous: [number, number, number] | null = null;
         const rangeStart = vertexCount;
 
-        // Sample one full period in inertial (ECI) space, including the endpoint
-        // (k == pointsPerOrbit coincides with the start, closing the ellipse).
-        for (let k = 0; k <= pointsPerOrbit; k++) {
+        // ECI: sample one full period including endpoint (closes the ellipse).
+        // ECF: sample one period excluding endpoint (open ground-track arc).
+        const samples = frame === 'ecf' ? pointsPerOrbit : pointsPerOrbit + 1;
+        for (let k = 0; k < samples; k++) {
             const t = epochMs + (k / pointsPerOrbit) * periodMs;
             const date = new Date(t);
             const state = propagate(rec, date);
@@ -70,7 +72,13 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
                 previous = null;
                 continue;
             }
-            const point = toScene(state.position as EciVec3<number>);
+            let point: [number, number, number];
+            if (frame === 'ecf') {
+                const ecf = eciToEcf(state.position as EciVec3<number>, gstime(date));
+                point = [ecf.x * scale, ecf.y * scale, ecf.z * scale];
+            } else {
+                point = toScene(state.position as EciVec3<number>);
+            }
             if (previous) {
                 positions[vertexCount++] = previous[0];
                 positions[vertexCount++] = previous[1];
@@ -123,16 +131,24 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
         }
         case 'propagate': {
             if (!initialized) break;
-            const { epoch, requestId } = message;
+            const { epoch, requestId, frame } = message;
             const date = new Date(epoch);
+            const gmst = gstime(date);
             const positions = new Float32Array(satellites.length * 3);
             for (let i = 0; i < satellites.length; i++) {
                 const state = propagate(satellites[i].rec, date);
                 if (state.position === false || state.position === undefined) continue;
-                const eci = toScene(state.position as EciVec3<number>);
-                positions[i * 3] = eci[0];
-                positions[i * 3 + 1] = eci[1];
-                positions[i * 3 + 2] = eci[2];
+                if (frame === 'ecf') {
+                    const ecf = eciToEcf(state.position as EciVec3<number>, gmst);
+                    positions[i * 3] = ecf.x * scale;
+                    positions[i * 3 + 1] = ecf.y * scale;
+                    positions[i * 3 + 2] = ecf.z * scale;
+                } else {
+                    const eci = toScene(state.position as EciVec3<number>);
+                    positions[i * 3] = eci[0];
+                    positions[i * 3 + 1] = eci[1];
+                    positions[i * 3 + 2] = eci[2];
+                }
             }
             postMessage(
                 { type: 'positions', requestId, epoch, count: satellites.length, positions },
