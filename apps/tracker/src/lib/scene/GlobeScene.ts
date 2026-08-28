@@ -395,7 +395,8 @@ export class GlobeScene {
         this.worker.postMessage({
             type: 'propagate',
             epoch: Math.round(this.simTimeMs + this.speed * POSITION_CADENCE_MS),
-            requestId: this.positionRequestSeq
+            requestId: this.positionRequestSeq,
+            frame: trackerState.referenceFrame
         });
     }
 
@@ -446,13 +447,14 @@ export class GlobeScene {
 
         if (trackerState.referenceFrame !== this.lastReferenceFrame) {
             this.lastReferenceFrame = trackerState.referenceFrame;
+            this.positionRequestPending = false;
+            this.requestPositions();
             if (this.showOrbits && this.ready) this.requestOrbits();
         }
 
         this.updatePositions();
         const gmst = gstime(new Date(this.simTimeMs));
         const eci = trackerState.referenceFrame === 'eci';
-        this.points.rotation.z = eci ? 0 : -gmst;
         this.earth.rotation.z = eci ? gmst : 0;
         this.graticule.rotation.z = eci ? gmst : 0;
         this.equatorRing.rotation.z = eci ? gmst : 0;
