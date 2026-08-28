@@ -7,7 +7,7 @@ const MU_KM3_S2 = 398600.4418;
 
 type Frame = 'ecf' | 'eci';
 type InitMessage = { type: 'init'; satellites: ParsedSatellite[]; scale: number };
-type PropagateMessage = { type: 'propagate'; epoch: number; requestId: number; frame: Frame };
+type PropagateMessage = { type: 'propagate'; epoch: number; requestId: number };
 type BuildOrbitsMessage = { type: 'buildOrbits'; epoch: number; requestId: number; pointsPerOrbit: number; frame: Frame };
 
 type WorkerMessage = InitMessage | PropagateMessage | BuildOrbitsMessage;
@@ -131,24 +131,16 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
         }
         case 'propagate': {
             if (!initialized) break;
-            const { epoch, requestId, frame } = message;
+            const { epoch, requestId } = message;
             const date = new Date(epoch);
-            const gmst = gstime(date);
             const positions = new Float32Array(satellites.length * 3);
             for (let i = 0; i < satellites.length; i++) {
                 const state = propagate(satellites[i].rec, date);
                 if (state.position === false || state.position === undefined) continue;
-                if (frame === 'ecf') {
-                    const ecf = eciToEcf(state.position as EciVec3<number>, gmst);
-                    positions[i * 3] = ecf.x * scale;
-                    positions[i * 3 + 1] = ecf.y * scale;
-                    positions[i * 3 + 2] = ecf.z * scale;
-                } else {
-                    const eci = toScene(state.position as EciVec3<number>);
-                    positions[i * 3] = eci[0];
-                    positions[i * 3 + 1] = eci[1];
-                    positions[i * 3 + 2] = eci[2];
-                }
+                const eci = toScene(state.position as EciVec3<number>);
+                positions[i * 3] = eci[0];
+                positions[i * 3 + 1] = eci[1];
+                positions[i * 3 + 2] = eci[2];
             }
             postMessage(
                 { type: 'positions', requestId, epoch, count: satellites.length, positions },
