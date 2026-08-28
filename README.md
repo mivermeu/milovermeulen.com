@@ -8,7 +8,7 @@ Personal portfolio and project hub, built with **SvelteKit**, **Svelte 5**, and 
 |------|-----|-------------|
 | `/` | [portfolio](./apps/portfolio) | Personal portfolio and resume |
 | `/webneut` | [webneut](./apps/webneut) | Neutrino oscillation visualizer |
-| `/tracker` | [tracker](./apps/tracker) | Satellite globe tracker (lines-only 3D visualization) |
+| `/tracker` | [tracker](./apps/tracker) | Satellite globe tracker (SGP4, three.js, ECF/ECI) |
 | `/builder` | builder | Cat tree builder (planned) |
 
 ## Getting Started

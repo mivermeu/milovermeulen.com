@@ -6,7 +6,7 @@ This document provides guidelines and best practices for AI agents and developer
 This is a **Turborepo monorepo** managed by **bun** containing multiple apps under a single domain:
 - `apps/portfolio` (`/`) — Personal portfolio and resume website
 - `apps/webneut` (`/webneut`) — Neutrino oscillation visualizer
-- `apps/tracker` (`/tracker`) — Satellite tracker (planned)
+- `apps/tracker` (`/tracker`) — Satellite globe tracker
 - `apps/builder` (`/builder`) — Cat tree builder (planned)
 
 All apps are built with **SvelteKit**, **Svelte 5**, and **Tailwind CSS v4**. The portfolio app emphasizes a high-end, polished aesthetic with custom components like `BracketedSection` and `Noise`.
@@ -111,6 +111,21 @@ Avoid the old `let` and `$: ` syntax. Use Svelte 5 runes:
 
 The `oscillate` computation is fully offloaded to WASM — there is no JS fallback path. Numerical parity between WASM and the original mathjs implementation was verified before removing it; physics correctness is asserted by `cargo test --lib` and the WASM smoke test (probabilities sum to 1).
 
+## Tracker App Architecture
+
+- `src/lib/scene/GlobeScene.ts`: three.js scene — opaque earth sphere, graticule, equator ring, satellite dots (round, zoom-adaptive), orbit lines, hover highlight. Manages the render loop and worker communication.
+- `src/lib/workers/sgp4.worker.ts`: Web Worker — SGP4 propagation via `satellite.js`. Handles `propagate` (satellite positions) and `buildOrbits` (orbit paths) messages. All positions computed in ECI.
+- `src/lib/satellites/tle.ts`: TLE fetching (CelesTrak live with bundled sample fallback) and parsing.
+- `src/lib/state.svelte.ts`: Reactive state — speed, reference frame (ECF/ECI), simulation time, satellite data.
+- `src/lib/components/ControlPanel.svelte`: UI — speed controls, reference frame toggle, time scrub slider (±30 days), orbit toggle, stats.
+- `src/lib/satellites/data/sample-tles.txt`: Bundled sample catalog (~90 satellites including Molniya and polar orbits).
+
+Key design decisions:
+- All positions computed in ECI (inertial). ECF display achieved by rotating the earth/graticule/equator by `-gmst` while dots and orbits stay in ECI.
+- Orbit ellipses sampled over one full period in ECI (closed loops). The orbit mesh rotates by `-gmst` each frame to align with the ECF scene.
+- Satellite dots use a circular radial-gradient texture (single draw call, scales to any catalog size).
+- Hover highlight rebuilds the orbit geometry excluding the hovered satellite's range (one-shot copy on pointermove, not per-frame).
+
 ## Component Guidelines
 - **Consistency**: New components should follow the design language of existing ones (e.g., using the `BracketedSection` wrapper where appropriate).
 - **TypeScript**: All components must be strictly typed. Define interfaces for `Props`.
@@ -121,4 +136,7 @@ The `oscillate` computation is fully offloaded to WASM — there is no JS fallba
 2. **Implement**: Create the logic using Svelte 5 runes.
 3. **Style**: Apply Tailwind classes to match the visual identity.
 4. **Verify**: Ensure the layout remains stable across different screen sizes.
+
+## Git & GitHub Policy
+**Never commit, push, open PRs, or perform any GitHub actions unless the user explicitly requests it.** Always wait for confirmation before staging, committing, or pushing changes.
 ```
