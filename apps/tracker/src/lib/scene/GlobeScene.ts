@@ -443,10 +443,18 @@ export class GlobeScene {
         }
 
         this.updatePositions();
+        const gmst = gstime(new Date(this.simTimeMs));
+        const eci = trackerState.referenceFrame === 'eci';
+        const sceneRotation = eci ? 0 : -gmst;
+        const earthRotation = eci ? gmst : 0;
+        this.points.rotation.z = sceneRotation;
         if (this.orbitsReady) {
-            this.orbitMesh.rotation.z = -gstime(new Date(this.simTimeMs));
-            this.highlightMesh.rotation.z = this.orbitMesh.rotation.z;
+            this.orbitMesh.rotation.z = sceneRotation;
+            this.highlightMesh.rotation.z = sceneRotation;
         }
+        this.earth.rotation.z = earthRotation;
+        this.graticule.rotation.z = earthRotation;
+        this.equatorRing.rotation.z = earthRotation;
         if (this.points.visible) {
             const material = this.points.material as THREE.PointsMaterial;
             material.size = 0.25 * (this.camera.position.length() / 25);

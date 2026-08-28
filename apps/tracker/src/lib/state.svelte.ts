@@ -18,7 +18,8 @@ export const trackerState = $state({
     dataSource: 'loading' as DataSource,
     error: '',
     simDateTime: '',
-    setSimTime: (_ms: number) => {}
+    setSimTime: (_ms: number) => {},
+    referenceFrame: 'ecf' as 'ecf' | 'eci'
 });
 
 export function sourceLabel(source: DataSource): string {

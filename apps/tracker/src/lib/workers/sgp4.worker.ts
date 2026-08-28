@@ -1,4 +1,4 @@
-import { twoline2satrec, propagate, eciToEcf, gstime } from 'satellite.js';
+import { twoline2satrec, propagate } from 'satellite.js';
 import type { EciVec3, SatRec } from 'satellite.js';
 import type { ParsedSatellite } from '$lib/satellites/types';
 
@@ -125,15 +125,14 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
             if (!initialized) break;
             const { epoch, requestId } = message;
             const date = new Date(epoch);
-            const gmst = gstime(date);
             const positions = new Float32Array(satellites.length * 3);
             for (let i = 0; i < satellites.length; i++) {
                 const state = propagate(satellites[i].rec, date);
                 if (state.position === false || state.position === undefined) continue;
-                const ecf = eciToEcf(state.position as EciVec3<number>, gmst);
-                positions[i * 3] = ecf.x * scale;
-                positions[i * 3 + 1] = ecf.y * scale;
-                positions[i * 3 + 2] = ecf.z * scale;
+                const eci = toScene(state.position as EciVec3<number>);
+                positions[i * 3] = eci[0];
+                positions[i * 3 + 1] = eci[1];
+                positions[i * 3 + 2] = eci[2];
             }
             postMessage(
                 { type: 'positions', requestId, epoch, count: satellites.length, positions },

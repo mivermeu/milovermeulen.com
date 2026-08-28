@@ -33,6 +33,30 @@
     </div>
 
     <div class="mb-4">
+        <p class="mb-2 text-brand-text">Reference frame</p>
+        <div class="flex gap-1.5">
+            <button
+                type="button"
+                class="speed-btn"
+                class:active={trackerState.referenceFrame === 'ecf'}
+                aria-pressed={trackerState.referenceFrame === 'ecf'}
+                onclick={() => (trackerState.referenceFrame = 'ecf')}
+            >
+                ECF
+            </button>
+            <button
+                type="button"
+                class="speed-btn"
+                class:active={trackerState.referenceFrame === 'eci'}
+                aria-pressed={trackerState.referenceFrame === 'eci'}
+                onclick={() => (trackerState.referenceFrame = 'eci')}
+            >
+                ECI
+            </button>
+        </div>
+    </div>
+
+    <div class="mb-4">
         <p class="mb-1 text-brand-text">Simulation time</p>
         <p class="mb-2 font-mono text-sm text-brand-text-highlight">{trackerState.simDateTime || '—'}</p>
         <input
