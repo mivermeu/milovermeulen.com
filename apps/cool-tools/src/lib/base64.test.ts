@@ -6,7 +6,9 @@ describe('encodeUtf8 / decodeUtf8', () => {
         expect(decodeUtf8(encodeUtf8('hello world'))).toBe('hello world');
     });
     it('encodes UTF-8 (multibyte) correctly', () => {
-        expect(encodeUtf8('héllo ☃')).toBe(btoa(String.fromCharCode(...new Uint8Array(new TextEncoder().encode('héllo ☃')))));
+        expect(encodeUtf8('héllo ☃')).toBe(
+            btoa(String.fromCharCode(...new Uint8Array(new TextEncoder().encode('héllo ☃'))))
+        );
         expect(decodeUtf8(encodeUtf8('héllo ☃'))).toBe('héllo ☃');
     });
     it('round-trips empty string', () => {

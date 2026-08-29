@@ -65,10 +65,11 @@
         dragValue = Math.max(min, Math.min(max, dragValue + (delta * 180) / Math.PI));
         targetScrollY = Math.round(((dragValue - min) / (max - min)) * pageState.maxScrollY);
         // ponytail: RAF coalesces pointermove into one update per frame
-        if (!rafId) rafId = requestAnimationFrame(() => {
-            rafId = 0;
-            pageState.scrollY = targetScrollY;
-        });
+        if (!rafId)
+            rafId = requestAnimationFrame(() => {
+                rafId = 0;
+                pageState.scrollY = targetScrollY;
+            });
     }
 
     function onPointerUp(): void {

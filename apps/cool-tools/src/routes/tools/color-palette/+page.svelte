@@ -16,22 +16,38 @@
         const [h, s, l] = rgbToHsl(hexToRgb(hex));
         palette = [
             { name: 'Complementary', colors: [hslToHex((h + 180) % 360, s, l)] },
-            { name: 'Analogous', colors: [hslToHex((h + 30) % 360, s, l), hslToHex((h - 30 + 360) % 360, s, l)] },
-            { name: 'Triadic', colors: [hslToHex((h + 120) % 360, s, l), hslToHex((h + 240) % 360, s, l)] },
-            { name: 'Split Complementary', colors: [hslToHex((h + 150) % 360, s, l), hslToHex((h + 210) % 360, s, l)] }
+            {
+                name: 'Analogous',
+                colors: [hslToHex((h + 30) % 360, s, l), hslToHex((h - 30 + 360) % 360, s, l)]
+            },
+            {
+                name: 'Triadic',
+                colors: [hslToHex((h + 120) % 360, s, l), hslToHex((h + 240) % 360, s, l)]
+            },
+            {
+                name: 'Split Complementary',
+                colors: [hslToHex((h + 150) % 360, s, l), hslToHex((h + 210) % 360, s, l)]
+            }
         ];
     }
 
     async function copyColor(c: string, key: string) {
         await navigator.clipboard.writeText(c);
         copiedKey = key;
-        setTimeout(() => { if (copiedKey === key) copiedKey = ''; }, 1000);
+        setTimeout(() => {
+            if (copiedKey === key) copiedKey = '';
+        }, 1000);
     }
 </script>
 
 <ToolShell title="Color Palette Generator" desc="Generate color harmonies from any color.">
     <div class="mb-6 flex items-center gap-3">
-        <input type="color" bind:value={hex} onchange={generate} class="size-10 cursor-pointer rounded border-0 p-0.5" />
+        <input
+            type="color"
+            bind:value={hex}
+            onchange={generate}
+            class="size-10 cursor-pointer rounded border-0 p-0.5"
+        />
         <input type="text" bind:value={hex} class="w-28 font-mono" />
         <button type="button" onclick={generate}>Generate</button>
     </div>
@@ -49,8 +65,15 @@
                         {#each group.colors as c, ci (c)}
                             {@const idx = group.name + ci}
                             <div class="flex flex-col items-center gap-1">
-                                <div class="size-14 rounded-md border border-white/20" style="background: {c}"></div>
-                                <button type="button" class="px-2 py-0.5 text-[10px]" onclick={() => copyColor(c, idx)}>
+                                <div
+                                    class="size-14 rounded-md border border-white/20"
+                                    style="background: {c}"
+                                ></div>
+                                <button
+                                    type="button"
+                                    class="px-2 py-0.5 text-[10px]"
+                                    onclick={() => copyColor(c, idx)}
+                                >
                                     {copiedKey === idx ? 'Copied!' : c}
                                 </button>
                             </div>

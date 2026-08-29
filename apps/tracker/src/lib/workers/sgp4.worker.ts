@@ -8,7 +8,13 @@ const MU_KM3_S2 = 398600.4418;
 type Frame = 'ecf' | 'eci';
 type InitMessage = { type: 'init'; satellites: ParsedSatellite[]; scale: number };
 type PropagateMessage = { type: 'propagate'; epoch: number; requestId: number };
-type BuildOrbitsMessage = { type: 'buildOrbits'; epoch: number; requestId: number; pointsPerOrbit: number; frame: Frame };
+type BuildOrbitsMessage = {
+    type: 'buildOrbits';
+    epoch: number;
+    requestId: number;
+    pointsPerOrbit: number;
+    frame: Frame;
+};
 
 type WorkerMessage = InitMessage | PropagateMessage | BuildOrbitsMessage;
 
@@ -58,7 +64,7 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
 
     for (let i = 0; i < total; i++) {
         const rec = satellites[i].rec;
-        const periodMs = (2 * Math.PI / rec.no) * 60000;
+        const periodMs = ((2 * Math.PI) / rec.no) * 60000;
         let previous: [number, number, number] | null = null;
         const rangeStart = vertexCount;
 

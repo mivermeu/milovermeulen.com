@@ -1,15 +1,16 @@
 # milovermeulen.com
 
-Personal portfolio and project hub, built with **SvelteKit**, **Svelte 5**, and **Tailwind CSS** in a **Turborepo** monorepo managed by **bun**.
+Personal portfolio and project hub, built with **SvelteKit**, **Svelte 5**, and **Tailwind CSS** in
+a **Turborepo** monorepo managed by **bun**.
 
 ## Apps
 
-| Path | App | Description |
-|------|-----|-------------|
-| `/` | [portfolio](./apps/portfolio) | Personal portfolio and resume |
-| `/webneut` | [webneut](./apps/webneut) | Neutrino oscillation visualizer |
-| `/tracker` | [tracker](./apps/tracker) | Satellite globe tracker (SGP4, three.js, ECF/ECI) |
-| `/builder` | builder | Cat tree builder (planned) |
+| Path       | App                           | Description                                       |
+| ---------- | ----------------------------- | ------------------------------------------------- |
+| `/`        | [portfolio](./apps/portfolio) | Personal portfolio and resume                     |
+| `/webneut` | [webneut](./apps/webneut)     | Neutrino oscillation visualizer                   |
+| `/tracker` | [tracker](./apps/tracker)     | Satellite globe tracker (SGP4, three.js, ECF/ECI) |
+| `/builder` | builder                       | Cat tree builder (planned)                        |
 
 ## Getting Started
 
@@ -22,7 +23,9 @@ bun lint     # lint all apps
 
 Each dev server runs on its own port. See individual app `package.json` for ports.
 
-> **webneut requires Rust.** Its `dev`/`build`/`check` scripts compile `apps/webneut/oscillator-rs` to WASM automatically. Install the `wasm32-unknown-unknown` target and `wasm-pack` first:
+> **webneut requires Rust.** Its `dev`/`build`/`check` scripts compile `apps/webneut/oscillator-rs`
+> to WASM automatically. Install the `wasm32-unknown-unknown` target and `wasm-pack` first:
+>
 > ```bash
 > rustup target add wasm32-unknown-unknown
 > cargo install wasm-pack
@@ -51,5 +54,7 @@ Each dev server runs on its own port. See individual app `package.json` for port
 - **Language**: TypeScript
 - **Package manager**: bun
 - **Build orchestrator**: Turborepo
-- **Compute offload**: Rust → WASM (`nalgebra`, via `wasm-pack`) for the webneut neutrino oscillation engine
-- **3D rendering**: three.js (WebGL2) lines-only globe in tracker, SGP4 orbit propagation in a Web Worker
+- **Compute offload**: Rust → WASM (`nalgebra`, via `wasm-pack`) for the webneut neutrino
+  oscillation engine
+- **3D rendering**: three.js (WebGL2) lines-only globe in tracker, SGP4 orbit propagation in a Web
+  Worker

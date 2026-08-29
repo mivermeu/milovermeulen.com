@@ -21,7 +21,9 @@
     {#if uuids.length > 0}
         <div class="flex flex-col gap-1.5">
             {#each uuids as uuid (uuid)}
-                <div class="flex items-center gap-2 rounded border border-brand-secondary bg-white/5 px-3 py-2 font-mono text-sm text-brand-text-highlight">
+                <div
+                    class="flex items-center gap-2 rounded border border-brand-secondary bg-white/5 px-3 py-2 font-mono text-sm text-brand-text-highlight"
+                >
                     <span class="flex-1 select-all">{uuid}</span>
                     <CopyButton value={uuid} />
                 </div>

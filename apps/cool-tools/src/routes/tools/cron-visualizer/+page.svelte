@@ -6,11 +6,21 @@
     let output = $state('');
     let nextTimes: string[] = $state([]);
 
-    const fields = [['minute', '0-59'], ['hour', '0-23'], ['day of month', '1-31'], ['month', '1-12'], ['day of week', '0-7']];
+    const fields = [
+        ['minute', '0-59'],
+        ['hour', '0-23'],
+        ['day of month', '1-31'],
+        ['month', '1-12'],
+        ['day of week', '0-7']
+    ];
 
     function analyze() {
         const parts = cron.trim().split(/\s+/);
-        if (parts.length < 5) { output = 'Invalid: need 5 fields'; nextTimes = []; return; }
+        if (parts.length < 5) {
+            output = 'Invalid: need 5 fields';
+            nextTimes = [];
+            return;
+        }
         output = describeCron(parts);
 
         const mins = parseField(parts[0], 0, 59);
@@ -55,14 +65,24 @@
 
 <ToolShell title="Cron Visualizer" desc="Parse cron expressions and view upcoming schedules.">
     <div class="mb-3 flex items-center gap-3">
-        <input type="text" bind:value={cron} oninput={analyze} class="w-48 font-mono" placeholder="*/5 * * * *" />
+        <input
+            type="text"
+            bind:value={cron}
+            oninput={analyze}
+            class="w-48 font-mono"
+            placeholder="*/5 * * * *"
+        />
     </div>
 
     <div class="mb-4 text-xs text-brand-text">
         Format: <code class="text-brand-text-highlight">minute hour day month weekday</code>
         <div class="mt-1 flex flex-wrap gap-x-4 gap-y-1">
             {#each fields as [name, range] (name)}
-                <span>{name}<br class="hidden sm:inline" /><span class="text-brand-text/60"> ({range})</span></span>
+                <span
+                    >{name}<br class="hidden sm:inline" /><span class="text-brand-text/60">
+                        ({range})</span
+                    ></span
+                >
             {/each}
         </div>
     </div>
@@ -72,8 +92,11 @@
     {/if}
 
     {#if output && nextTimes.length > 0}
-        <div class="mb-4 rounded border border-brand-secondary bg-white/5 p-3 text-sm text-brand-text">
-            <span class="font-semibold text-brand-text-highlight">Description:</span> {output}
+        <div
+            class="mb-4 rounded border border-brand-secondary bg-white/5 p-3 text-sm text-brand-text"
+        >
+            <span class="font-semibold text-brand-text-highlight">Description:</span>
+            {output}
         </div>
     {/if}
 
@@ -81,7 +104,11 @@
         <h3>Next 10 Runs</h3>
         <div class="flex flex-col gap-1">
             {#each nextTimes as t (t)}
-                <div class="rounded border border-brand-secondary bg-white/5 px-3 py-1.5 font-mono text-xs text-brand-text-highlight">{t}</div>
+                <div
+                    class="rounded border border-brand-secondary bg-white/5 px-3 py-1.5 font-mono text-xs text-brand-text-highlight"
+                >
+                    {t}
+                </div>
             {/each}
         </div>
     {/if}

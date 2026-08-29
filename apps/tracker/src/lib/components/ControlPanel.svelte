@@ -13,7 +13,11 @@
 
     <label class="mb-4 flex cursor-pointer items-center justify-between">
         <span class="text-brand-text">Show orbits</span>
-        <input type="checkbox" bind:checked={trackerState.showOrbits} class="h-4 w-4 accent-brand-primary" />
+        <input
+            type="checkbox"
+            bind:checked={trackerState.showOrbits}
+            class="h-4 w-4 accent-brand-primary"
+        />
     </label>
 
     <div class="mb-4">
@@ -59,7 +63,9 @@
 
     <div class="mb-4">
         <p class="mb-1 text-brand-text">Simulation time</p>
-        <p class="mb-2 font-mono text-sm text-brand-text-highlight">{trackerState.simDateTime || '—'}</p>
+        <p class="mb-2 font-mono text-sm text-brand-text-highlight">
+            {trackerState.simDateTime || '—'}
+        </p>
         <input
             type="range"
             min={now - SCRUB_RANGE_MS}
@@ -81,12 +87,16 @@
         </div>
         <div class="flex justify-between gap-2">
             <dt class="text-brand-text">Data source</dt>
-            <dd class="text-right text-brand-text-highlight">{sourceLabel(trackerState.dataSource)}</dd>
+            <dd class="text-right text-brand-text-highlight">
+                {sourceLabel(trackerState.dataSource)}
+            </dd>
         </div>
     </dl>
 
     {#if trackerState.error}
-        <p class="mt-3 border-t border-brand-secondary pt-2 text-xs text-brand-accent">{trackerState.error}</p>
+        <p class="mt-3 border-t border-brand-secondary pt-2 text-xs text-brand-accent">
+            {trackerState.error}
+        </p>
     {/if}
 </div>
 

@@ -11,7 +11,9 @@
     let angle = $state(90);
     let type: 'linear' | 'radial' = $state('linear');
 
-    function onType(v: string) { type = v as 'linear' | 'radial'; }
+    function onType(v: string) {
+        type = v as 'linear' | 'radial';
+    }
 
     let css = $derived.by(() => {
         const sorted = [...stops].sort((a, b) => a.pos - b.pos);
@@ -23,7 +25,10 @@
 
     function addStop() {
         if (stops.length >= 8) return;
-        const mid = stops.reduce((a, b) => Math.abs(a - 50) < Math.abs(b.pos - 50) ? a : b.pos, 50);
+        const mid = stops.reduce(
+            (a, b) => (Math.abs(a - 50) < Math.abs(b.pos - 50) ? a : b.pos),
+            50
+        );
         stops = [...stops, { color: '#888888', pos: mid }];
     }
 
@@ -39,7 +44,10 @@
     <div class="mb-4 flex flex-wrap items-center gap-3">
         <Toggle
             value={type}
-            options={[{ value: 'linear', label: 'Linear' }, { value: 'radial', label: 'Radial' }]}
+            options={[
+                { value: 'linear', label: 'Linear' },
+                { value: 'radial', label: 'Radial' }
+            ]}
             onpick={onType}
         />
         {#if type === 'linear'}
@@ -53,12 +61,23 @@
 
     <div class="flex flex-col gap-2">
         {#each stops as stop, i (i)}
-            <div class="flex items-center gap-2 rounded border border-brand-secondary bg-white/5 px-3 py-2">
-                <input type="color" bind:value={stop.color} class="size-8 cursor-pointer rounded border-0 p-0.5" />
+            <div
+                class="flex items-center gap-2 rounded border border-brand-secondary bg-white/5 px-3 py-2"
+            >
+                <input
+                    type="color"
+                    bind:value={stop.color}
+                    class="size-8 cursor-pointer rounded border-0 p-0.5"
+                />
                 <span class="w-16 font-mono text-xs text-brand-text-highlight">{stop.color}</span>
                 <input type="range" min="0" max="100" bind:value={stop.pos} class="flex-1" />
                 <span class="w-8 text-xs text-brand-text">{stop.pos}%</span>
-                <button type="button" class="size-6 p-0 text-xs" onclick={() => removeStop(i)} disabled={stops.length <= 2}>✕</button>
+                <button
+                    type="button"
+                    class="size-6 p-0 text-xs"
+                    onclick={() => removeStop(i)}
+                    disabled={stops.length <= 2}>✕</button
+                >
             </div>
         {/each}
     </div>

@@ -141,7 +141,10 @@ export class GlobeScene {
 
         this.pointsGeometry = new THREE.BufferGeometry();
         this.positionArray = new Float32Array(satellites.length * 3);
-        this.pointsGeometry.setAttribute('position', new THREE.BufferAttribute(this.positionArray, 3));
+        this.pointsGeometry.setAttribute(
+            'position',
+            new THREE.BufferAttribute(this.positionArray, 3)
+        );
         this.points = new THREE.Points(
             this.pointsGeometry,
             new THREE.PointsMaterial({
@@ -279,8 +282,14 @@ export class GlobeScene {
         const count = message.count ?? 0;
         this.ready = true;
         this.positionArray = new Float32Array(count * 3);
-        this.pointsGeometry.setAttribute('position', new THREE.BufferAttribute(this.positionArray, 3));
-        this.pointsGeometry.setAttribute('color', new THREE.Float32BufferAttribute(message.colors ?? new Float32Array(0), 3));
+        this.pointsGeometry.setAttribute(
+            'position',
+            new THREE.BufferAttribute(this.positionArray, 3)
+        );
+        this.pointsGeometry.setAttribute(
+            'color',
+            new THREE.Float32BufferAttribute(message.colors ?? new Float32Array(0), 3)
+        );
         this.callbacks.onSatCount?.(count);
         if (count === 0) {
             this.callbacks.onError?.('No propagable satellites found in catalog.');
@@ -451,7 +460,11 @@ export class GlobeScene {
             this.requestPositions();
         }
 
-        if (this.showOrbits && this.ready && now - this.lastOrbitBuildWall >= ORBIT_REBUILD_INTERVAL_MS) {
+        if (
+            this.showOrbits &&
+            this.ready &&
+            now - this.lastOrbitBuildWall >= ORBIT_REBUILD_INTERVAL_MS
+        ) {
             this.requestOrbits();
         }
 
@@ -526,7 +539,14 @@ function buildCircleTexture(): THREE.Texture {
     canvas.height = size;
     const ctx = canvas.getContext('2d');
     if (ctx) {
-        const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+        const gradient = ctx.createRadialGradient(
+            size / 2,
+            size / 2,
+            0,
+            size / 2,
+            size / 2,
+            size / 2
+        );
         gradient.addColorStop(0, 'rgba(255,255,255,1)');
         gradient.addColorStop(0.65, 'rgba(255,255,255,1)');
         gradient.addColorStop(1, 'rgba(255,255,255,0)');
@@ -565,11 +585,7 @@ function buildLandmass(geojson: GeoJSONFeatureCollection, radius: number): numbe
     return vertices;
 }
 
-function addPolygon(
-    coordinates: number[][][],
-    vertices: number[],
-    radius: number
-): void {
+function addPolygon(coordinates: number[][][], vertices: number[], radius: number): void {
     for (const ring of coordinates) {
         let prev: THREE.Vector3 | null = null;
         for (const coord of ring) {

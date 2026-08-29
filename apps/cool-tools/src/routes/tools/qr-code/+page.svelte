@@ -11,7 +11,8 @@
     let showEccTip = $state(false);
 
     async function generate() {
-        error = ''; dataUrl = '';
+        error = '';
+        dataUrl = '';
         if (!text.trim()) return;
         try {
             dataUrl = await QRCode.toDataURL(text, { width: size, errorCorrectionLevel: ecc });
@@ -47,16 +48,27 @@
     </div>
 
     <div class="mb-4 flex flex-wrap items-center gap-4 text-sm text-brand-text">
-        <label class="flex items-center gap-1">Size:
+        <label class="flex items-center gap-1"
+            >Size:
             <input type="number" bind:value={size} min="128" max="1024" step="64" class="w-20" />
             <span class="relative inline-flex">
-                <button type="button" class="size-4 p-0 text-xs leading-none" onclick={() => showSizeTip = !showSizeTip} onmouseenter={() => showSizeTip = true} onmouseleave={() => showSizeTip = false}>?</button>
+                <button
+                    type="button"
+                    class="size-4 p-0 text-xs leading-none"
+                    onclick={() => (showSizeTip = !showSizeTip)}
+                    onmouseenter={() => (showSizeTip = true)}
+                    onmouseleave={() => (showSizeTip = false)}>?</button
+                >
                 {#if showSizeTip}
-                    <span class="absolute bottom-full left-1/2 z-50 mb-1 w-36 -translate-x-1/2 rounded bg-black/80 px-2 py-1 text-center text-[10px] text-white">Higher = sharper but larger file.</span>
+                    <span
+                        class="absolute bottom-full left-1/2 z-50 mb-1 w-36 -translate-x-1/2 rounded bg-black/80 px-2 py-1 text-center text-[10px] text-white"
+                        >Higher = sharper but larger file.</span
+                    >
                 {/if}
             </span>
         </label>
-        <label class="flex items-center gap-1">ECC:
+        <label class="flex items-center gap-1"
+            >ECC:
             <select bind:value={ecc}>
                 <option value="L">L</option>
                 <option value="M">M</option>
@@ -64,9 +76,19 @@
                 <option value="H">H</option>
             </select>
             <span class="relative inline-flex">
-                <button type="button" class="size-4 p-0 text-xs leading-none" onclick={() => showEccTip = !showEccTip} onmouseenter={() => showEccTip = true} onmouseleave={() => showEccTip = false}>?</button>
+                <button
+                    type="button"
+                    class="size-4 p-0 text-xs leading-none"
+                    onclick={() => (showEccTip = !showEccTip)}
+                    onmouseenter={() => (showEccTip = true)}
+                    onmouseleave={() => (showEccTip = false)}>?</button
+                >
                 {#if showEccTip}
-                    <span class="absolute bottom-full left-1/2 z-50 mb-1 w-44 -translate-x-1/2 rounded bg-black/80 px-2 py-1 text-center text-[10px] text-white">Error correction: L=7%, M=15%, Q=25%, H=30%. Higher = more damage tolerance, denser QR.</span>
+                    <span
+                        class="absolute bottom-full left-1/2 z-50 mb-1 w-44 -translate-x-1/2 rounded bg-black/80 px-2 py-1 text-center text-[10px] text-white"
+                        >Error correction: L=7%, M=15%, Q=25%, H=30%. Higher = more damage
+                        tolerance, denser QR.</span
+                    >
                 {/if}
             </span>
         </label>

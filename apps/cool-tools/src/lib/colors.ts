@@ -4,9 +4,13 @@ export function hexToRgb(hex: string): [number, number, number] {
 }
 
 export function rgbToHsl([r, g, b]: number[]): [number, number, number] {
-    r /= 255; g /= 255; b /= 255;
-    const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
-    let h = 0, s = 0;
+    r /= 255;
+    g /= 255;
+    b /= 255;
+    const mx = Math.max(r, g, b),
+        mn = Math.min(r, g, b);
+    let h = 0,
+        s = 0;
     const l = (mx + mn) / 2;
     if (mx !== mn) {
         const d = mx - mn;
@@ -19,12 +23,15 @@ export function rgbToHsl([r, g, b]: number[]): [number, number, number] {
 }
 
 export function hslToHex(h: number, s: number, l: number): string {
-    s /= 100; l /= 100;
+    s /= 100;
+    l /= 100;
     const a = s * Math.min(l, 1 - l);
     const f = (n: number) => {
         const k = (n + h / 30) % 12;
         const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
-        return Math.round(255 * color).toString(16).padStart(2, '0');
+        return Math.round(255 * color)
+            .toString(16)
+            .padStart(2, '0');
     };
     return `#${f(0)}${f(8)}${f(4)}`;
 }

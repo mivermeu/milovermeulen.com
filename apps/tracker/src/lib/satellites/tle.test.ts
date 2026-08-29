@@ -17,8 +17,12 @@ describe('parseTleText', () => {
         const result = parseTleText(SAMPLE_TLE);
         expect(result).toHaveLength(1);
         expect(result[0].name).toBe('ISS (ZARYA)');
-        expect(result[0].line1).toBe('1 25544U 98067A   24275.50000000  .00016717  00000-0  10270-3 0  9990');
-        expect(result[0].line2).toBe('2 25544  51.6400 210.1000 0005000 130.2000 240.5000  15.4949000    10');
+        expect(result[0].line1).toBe(
+            '1 25544U 98067A   24275.50000000  .00016717  00000-0  10270-3 0  9990'
+        );
+        expect(result[0].line2).toBe(
+            '2 25544  51.6400 210.1000 0005000 130.2000 240.5000  15.4949000    10'
+        );
     });
 
     it('parses multiple satellites', () => {
@@ -62,10 +66,7 @@ ANOTHER
     it('parses the bundled sample catalog', async () => {
         const { readFile } = await import('node:fs/promises');
         const { join } = await import('node:path');
-        const text = await readFile(
-            join(import.meta.dir, 'data/sample-tles.txt'),
-            'utf-8'
-        );
+        const text = await readFile(join(import.meta.dir, 'data/sample-tles.txt'), 'utf-8');
         const result = parseTleText(text);
         expect(result.length).toBeGreaterThan(0);
         expect(result[0].name).toBeTruthy();

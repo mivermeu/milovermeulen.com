@@ -12,10 +12,7 @@
 </script>
 
 {#if display_icon}
-    <svg
-        class={className}
-        viewBox="0 0 {display_icon.box} {display_icon.box}"
-    >
+    <svg class={className} viewBox="0 0 {display_icon.box} {display_icon.box}">
         <!-- eslint-disable-next-line svelte/no-at-html-tags -->
         {@html display_icon.svg_path}
     </svg>

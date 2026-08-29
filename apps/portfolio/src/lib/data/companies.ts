@@ -62,4 +62,15 @@ const uh: Company = {
     website: 'https://www.uh.edu'
 };
 
-export const companies = { realself, nypc, ru, felix, goteborg, stcorp, esa, nikhef, cern, uh } as const;
+export const companies = {
+    realself,
+    nypc,
+    ru,
+    felix,
+    goteborg,
+    stcorp,
+    esa,
+    nikhef,
+    cern,
+    uh
+} as const;
