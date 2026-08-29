@@ -179,6 +179,8 @@ Key design decisions:
 **Never commit, push, open PRs, or perform any GitHub actions unless the user explicitly requests
 it.** Always wait for confirmation before staging, committing, or pushing changes.
 
+Before committing, run `bun format` to ensure all code is formatted with Prettier.
+
 ```
 
 ```
