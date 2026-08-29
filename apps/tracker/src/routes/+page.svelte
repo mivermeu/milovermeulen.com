@@ -1,5 +1,6 @@
 <script lang="ts">
     import ControlPanel from '$lib/components/ControlPanel.svelte';
+    import SatelliteInfo from '$lib/components/SatelliteInfo.svelte';
     import SatelliteViewer from '$lib/components/SatelliteViewer.svelte';
     import favicon from '$lib/assets/favicon.svg';
     import { sourceLabel } from '$lib/utils';
@@ -30,7 +31,10 @@
 
     <div class="relative flex-1 overflow-hidden">
         <SatelliteViewer />
-        <div class="pointer-events-none absolute top-4 right-4 z-10 max-h-full overflow-y-auto">
+        <div class="pointer-events-none absolute inset-0 z-10">
+            <SatelliteInfo />
+        </div>
+        <div class="pointer-events-none absolute top-4 right-4 z-20 max-h-full overflow-y-auto">
             <ControlPanel />
         </div>
     </div>

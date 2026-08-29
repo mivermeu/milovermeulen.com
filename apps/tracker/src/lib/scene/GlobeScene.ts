@@ -21,6 +21,8 @@ const POINTER_THROTTLE_MS = 66;
 export interface GlobeSceneCallbacks {
     onSatCount?: (count: number) => void;
     onError?: (message: string) => void;
+    onHover?: (index: number, name: string | null, screenX: number, screenY: number) => void;
+    onSelect?: (index: number) => void;
 }
 
 interface WorkerResponse {
@@ -56,6 +58,8 @@ export class GlobeScene {
     private readonly raycaster = new THREE.Raycaster();
     private readonly pointerNdc = new THREE.Vector2();
     private readonly onPointerMove: (event: PointerEvent) => void;
+    private readonly onPointerDown: (event: PointerEvent) => void;
+    private readonly onPointerUp: (event: PointerEvent) => void;
     private readonly canvas: HTMLCanvasElement;
 
     private speed = 1;
@@ -76,6 +80,8 @@ export class GlobeScene {
     private orbitBuildGmst = 0;
     private highlightIndex = -1;
     private lastPointerMoveWall = 0;
+    private pointerDownX = 0;
+    private pointerDownY = 0;
 
     private prevPositions: Float32Array | null = null;
     private nextPositions: Float32Array | null = null;
@@ -192,7 +198,11 @@ export class GlobeScene {
 
         this.canvas = canvas;
         this.onPointerMove = (event: PointerEvent) => this.handlePointerMove(event);
+        this.onPointerDown = (event: PointerEvent) => this.handlePointerDown(event);
+        this.onPointerUp = (event: PointerEvent) => this.handlePointerUp(event);
         canvas.addEventListener('pointermove', this.onPointerMove);
+        canvas.addEventListener('pointerdown', this.onPointerDown);
+        canvas.addEventListener('pointerup', this.onPointerUp);
 
         this.resizeObserver = new ResizeObserver(() => this.handleResize());
         this.resizeObserver.observe(canvas.parentElement ?? canvas);
@@ -327,7 +337,7 @@ export class GlobeScene {
         this.orbitBuildGmst = gstime(new Date(this.simTimeMs));
         this.orbitsReady = true;
         this.applyOrbitGeometry();
-        if (this.highlightIndex >= 0) this.setHighlight(this.highlightIndex);
+        if (this.highlightIndex >= 0) this.showHighlight(this.highlightIndex);
     }
 
     private applyOrbitGeometry(): void {
@@ -354,11 +364,46 @@ export class GlobeScene {
         if (now - this.lastPointerMoveWall < POINTER_THROTTLE_MS) return;
         this.lastPointerMoveWall = now;
         if (!this.ready || !this.points.visible || !this.showOrbits) {
-            this.clearHighlight();
+            this.callbacks.onHover?.(-1, null, 0, 0);
             return;
         }
+        const index = this.raycastSatellite(event);
+        if (index < 0) {
+            this.callbacks.onHover?.(-1, null, 0, 0);
+        } else {
+            const sat = this.satellites[index];
+            if (sat) {
+                const pos = new THREE.Vector3(
+                    this.positionArray[index * 3],
+                    this.positionArray[index * 3 + 1],
+                    this.positionArray[index * 3 + 2]
+                );
+                pos.project(this.camera);
+                const rect = this.canvas.getBoundingClientRect();
+                const sx = ((pos.x + 1) / 2) * rect.width;
+                const sy = ((-pos.y + 1) / 2) * rect.height;
+                this.callbacks.onHover?.(index, sat.name, sx, sy);
+            }
+        }
+    }
+
+    private handlePointerDown(event: PointerEvent): void {
+        this.pointerDownX = event.clientX;
+        this.pointerDownY = event.clientY;
+    }
+
+    private handlePointerUp(event: PointerEvent): void {
+        if (!this.ready || !this.points.visible || !this.showOrbits) return;
+        const dx = event.clientX - this.pointerDownX;
+        const dy = event.clientY - this.pointerDownY;
+        if (dx * dx + dy * dy > 25) return;
+        const index = this.raycastSatellite(event);
+        this.callbacks.onSelect?.(index);
+    }
+
+    private raycastSatellite(event: PointerEvent): number {
         const rect = this.canvas.getBoundingClientRect();
-        if (rect.width === 0 || rect.height === 0) return;
+        if (rect.width === 0 || rect.height === 0) return -1;
         this.pointerNdc.set(
             ((event.clientX - rect.left) / rect.width) * 2 - 1,
             -((event.clientY - rect.top) / rect.height) * 2 + 1
@@ -370,23 +415,20 @@ export class GlobeScene {
         const earthHits = this.raycaster.intersectObject(this.earth, false);
         const earthDist = earthHits.length > 0 ? earthHits[0].distance : Infinity;
         const hits = this.raycaster.intersectObject(this.points, false);
-        if (hits.length === 0 || earthDist < hits[0].distance - 1e-3) {
-            this.clearHighlight();
-            return;
-        }
-        this.setHighlight(hits[0].index ?? -1);
+        if (hits.length === 0 || earthDist < hits[0].distance - 1e-3) return -1;
+        return hits[0].index ?? -1;
     }
 
-    private setHighlight(index: number): void {
+    showHighlight(index: number): void {
         if (index < 0 || index * 2 + 1 >= this.orbitRanges.length) {
-            this.clearHighlight();
+            this.hideHighlight();
             return;
         }
         const start = this.orbitRanges[index * 2];
         const end = this.orbitRanges[index * 2 + 1];
         const master = this.orbitPositions;
         if (end <= start || !master) {
-            this.clearHighlight();
+            this.hideHighlight();
             return;
         }
         const array = master.subarray(start, end);
@@ -396,7 +438,7 @@ export class GlobeScene {
         this.applyOrbitGeometry();
     }
 
-    private clearHighlight(): void {
+    hideHighlight(): void {
         if (this.highlightIndex === -1) return;
         this.highlightIndex = -1;
         this.highlightMesh.visible = false;
@@ -444,6 +486,7 @@ export class GlobeScene {
 
         if (this.speed > 0) {
             this.simTimeMs += deltaSeconds * this.speed * 1000;
+            trackerState.simTimeMs = this.simTimeMs;
         }
 
         if (this.positionRequestPending && now - this.lastRequestWall > 3 * POSITION_CADENCE_MS) {
@@ -480,6 +523,22 @@ export class GlobeScene {
         }
 
         this.updatePositions();
+
+        if (this.highlightIndex >= 0) {
+            const sat = this.satellites[this.highlightIndex];
+            const i = this.highlightIndex * 3;
+            const pos = new THREE.Vector3(
+                this.positionArray[i],
+                this.positionArray[i + 1],
+                this.positionArray[i + 2]
+            );
+            pos.project(this.camera);
+            const rect = this.canvas.getBoundingClientRect();
+            const sx = ((pos.x + 1) / 2) * rect.width;
+            const sy = ((-pos.y + 1) / 2) * rect.height;
+            this.callbacks.onHover?.(this.highlightIndex, sat?.name ?? null, sx, sy);
+        }
+
         const gmst = gstime(new Date(this.simTimeMs));
         const eci = trackerState.referenceFrame === 'eci';
         const orbitDelta = eci ? this.orbitBuildGmst - gmst : 0;
@@ -513,6 +572,8 @@ export class GlobeScene {
         cancelAnimationFrame(this.raf);
         this.resizeObserver.disconnect();
         this.canvas.removeEventListener('pointermove', this.onPointerMove);
+        this.canvas.removeEventListener('pointerdown', this.onPointerDown);
+        this.canvas.removeEventListener('pointerup', this.onPointerUp);
         this.worker.terminate();
         this.controls.dispose();
         this.pointsGeometry.dispose();

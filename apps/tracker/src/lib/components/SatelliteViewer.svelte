@@ -15,6 +15,22 @@
                 },
                 onError: (message: string) => {
                     trackerState.error = message;
+                },
+                onHover: (index: number, name: string | null, screenX: number, screenY: number) => {
+                    if (index < 0 || !name) {
+                        trackerState.hovered = null;
+                    } else {
+                        trackerState.hovered = { index, name, screenX, screenY };
+                    }
+                },
+                onSelect: (index: number) => {
+                    if (index < 0) {
+                        trackerState.pinnedIndex = -1;
+                    } else if (trackerState.pinnedIndex === index) {
+                        trackerState.pinnedIndex = -1;
+                    } else {
+                        trackerState.pinnedIndex = index;
+                    }
                 }
             }) ?? undefined;
     });
@@ -23,6 +39,19 @@
         if (!scene) return;
         scene.setSpeed(trackerState.speed);
         scene.setShowOrbits(trackerState.showOrbits);
+    });
+
+    $effect(() => {
+        if (!scene) return;
+        const pi = trackerState.pinnedIndex;
+        const hv = trackerState.hovered;
+        if (pi >= 0) {
+            scene.showHighlight(pi);
+        } else if (hv) {
+            scene.showHighlight(hv.index);
+        } else {
+            scene.hideHighlight();
+        }
     });
 
     onDestroy(() => {

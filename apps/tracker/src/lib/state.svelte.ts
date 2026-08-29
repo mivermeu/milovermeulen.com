@@ -4,11 +4,18 @@ import type { DataSource, ParsedSatellite } from '$lib/satellites/types';
 
 export const SPEED_OPTIONS = [
     { label: 'Pause', value: 0 },
-    { label: '1\u00d7', value: 1 },
-    { label: '5\u00d7', value: 5 },
-    { label: '15\u00d7', value: 15 },
-    { label: '60\u00d7', value: 60 }
+    { label: '1×', value: 1 },
+    { label: '5×', value: 5 },
+    { label: '15×', value: 15 },
+    { label: '60×', value: 60 }
 ] as const;
+
+export interface HoverInfo {
+    index: number;
+    name: string;
+    screenX: number;
+    screenY: number;
+}
 
 export const trackerState = $state({
     satellites: [] as ParsedSatellite[],
@@ -18,8 +25,11 @@ export const trackerState = $state({
     dataSource: 'loading' as DataSource,
     error: '',
     simDateTime: '',
+    simTimeMs: Date.now(),
     setSimTime: null as ((ms: number) => void) | null,
-    referenceFrame: 'ecf' as 'ecf' | 'eci'
+    referenceFrame: 'ecf' as 'ecf' | 'eci',
+    hovered: null as HoverInfo | null,
+    pinnedIndex: -1
 });
 
 if (browser) {
