@@ -18,22 +18,9 @@ export const trackerState = $state({
     dataSource: 'loading' as DataSource,
     error: '',
     simDateTime: '',
-    setSimTime: (_ms: number) => {},
+    setSimTime: null as ((ms: number) => void) | null,
     referenceFrame: 'ecf' as 'ecf' | 'eci'
 });
-
-export function sourceLabel(source: DataSource): string {
-    switch (source) {
-        case 'celestrak':
-            return 'CelesTrak (live)';
-        case 'sample':
-            return 'Bundled sample';
-        case 'error':
-            return 'No data';
-        case 'loading':
-            return 'Loading\u2026';
-    }
-}
 
 if (browser) {
     loadCatalog().then(({ satellites, source, error }) => {

@@ -12,6 +12,7 @@ const DEG2RAD = Math.PI / 180;
 const POSITION_CADENCE_MS = 120;
 const ORBIT_POINTS_PER_SAT = 96;
 const ORBIT_REBUILD_INTERVAL_MS = 5000;
+const POINTER_THROTTLE_MS = 66;
 
 export interface GlobeSceneCallbacks {
     onSatCount?: (count: number) => void;
@@ -31,7 +32,7 @@ interface WorkerResponse {
 }
 
 export class GlobeScene {
-    private readonly renderer: THREE.WebGLRenderer | null;
+    private readonly renderer: THREE.WebGLRenderer;
     private readonly scene: THREE.Scene;
     private readonly camera: THREE.PerspectiveCamera;
     private readonly controls: OrbitControls;
@@ -69,6 +70,7 @@ export class GlobeScene {
     private orbitPositions: Float32Array | null = null;
     private orbitBuildGmst = 0;
     private highlightIndex = -1;
+    private lastPointerMoveWall = 0;
 
     private prevPositions: Float32Array | null = null;
     private nextPositions: Float32Array | null = null;
@@ -77,18 +79,29 @@ export class GlobeScene {
     private raf = 0;
     private disposed = false;
 
-    constructor(
+    static create(
+        canvas: HTMLCanvasElement,
+        satellites: ParsedSatellite[],
+        callbacks: GlobeSceneCallbacks = {}
+    ): GlobeScene | null {
+        let renderer: THREE.WebGLRenderer;
+        try {
+            renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
+            renderer.setClearColor(0x1a1a1f, 1);
+        } catch {
+            callbacks.onError?.('WebGL is not available on this browser or device.');
+            return null;
+        }
+        return new GlobeScene(canvas, satellites, callbacks, renderer);
+    }
+
+    private constructor(
         canvas: HTMLCanvasElement,
         private readonly satellites: ParsedSatellite[],
-        private readonly callbacks: GlobeSceneCallbacks = {}
+        private readonly callbacks: GlobeSceneCallbacks,
+        renderer: THREE.WebGLRenderer
     ) {
-        try {
-            this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
-            this.renderer.setClearColor(0x1a1a1f, 1);
-        } catch {
-            this.renderer = null;
-            this.callbacks.onError?.('WebGL is not available on this browser or device.');
-        }
+        this.renderer = renderer;
 
         this.scene = new THREE.Scene();
         this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
@@ -234,7 +247,6 @@ export class GlobeScene {
     }
 
     private handleResize(): void {
-        if (!this.renderer) return;
         const container = this.renderer.domElement.parentElement;
         if (!container) return;
         const width = container.clientWidth;
@@ -330,6 +342,9 @@ export class GlobeScene {
     }
 
     private handlePointerMove(event: PointerEvent): void {
+        const now = performance.now();
+        if (now - this.lastPointerMoveWall < POINTER_THROTTLE_MS) return;
+        this.lastPointerMoveWall = now;
         if (!this.ready || !this.points.visible || !this.showOrbits) {
             this.clearHighlight();
             return;
@@ -463,7 +478,7 @@ export class GlobeScene {
             material.size = 0.25 * (this.camera.position.length() / 25);
         }
         this.controls.update();
-        if (this.renderer) this.renderer.render(this.scene, this.camera);
+        this.renderer.render(this.scene, this.camera);
         this.raf = requestAnimationFrame(this.loop);
     };
 
@@ -501,7 +516,7 @@ export class GlobeScene {
         (this.equatorRing.material as THREE.Material).dispose();
         this.earth.geometry.dispose();
         (this.earth.material as THREE.Material).dispose();
-        this.renderer?.dispose();
+        this.renderer.dispose();
     }
 }
 

@@ -161,7 +161,5 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
     }
 }
 
-// WebGPU-compute SGP4 (propagating all satellites on the GPU) is a future
-// optimization; for now all propagation runs off the main thread in this worker.
 const workerScope = globalThis as unknown as Worker;
 workerScope.onmessage = handleMessage;

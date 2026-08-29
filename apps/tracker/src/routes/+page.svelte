@@ -2,7 +2,8 @@
     import ControlPanel from '$lib/components/ControlPanel.svelte';
     import SatelliteViewer from '$lib/components/SatelliteViewer.svelte';
     import favicon from '$lib/assets/favicon.svg';
-    import { sourceLabel, trackerState } from '$lib/state.svelte';
+    import { sourceLabel } from '$lib/utils';
+    import { trackerState } from '$lib/state.svelte';
 </script>
 
 <svelte:head>

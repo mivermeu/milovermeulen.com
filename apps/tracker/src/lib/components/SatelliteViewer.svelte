@@ -8,22 +8,20 @@
 
     $effect(() => {
         if (trackerState.satellites.length === 0 || scene) return;
-        scene = new GlobeScene(canvas, trackerState.satellites, {
+        scene = GlobeScene.create(canvas, trackerState.satellites, {
             onSatCount: (count: number) => {
                 trackerState.renderedCount = count;
             },
             onError: (message: string) => {
                 trackerState.error = message;
             }
-        });
+        }) ?? undefined;
     });
 
     $effect(() => {
-        scene?.setSpeed(trackerState.speed);
-    });
-
-    $effect(() => {
-        scene?.setShowOrbits(trackerState.showOrbits);
+        if (!scene) return;
+        scene.setSpeed(trackerState.speed);
+        scene.setShowOrbits(trackerState.showOrbits);
     });
 
     onDestroy(() => {

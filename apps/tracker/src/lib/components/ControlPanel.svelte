@@ -1,5 +1,6 @@
 <script lang="ts">
-    import { SPEED_OPTIONS, sourceLabel, trackerState } from '$lib/state.svelte';
+    import { SPEED_OPTIONS, trackerState } from '$lib/state.svelte';
+    import { sourceLabel } from '$lib/utils';
 
     const SCRUB_RANGE_MS = 30 * 24 * 60 * 60 * 1000;
     const now = Date.now();
@@ -66,7 +67,7 @@
             step={60000}
             value={now}
             oninput={(e) => {
-                trackerState.setSimTime(Number(e.currentTarget.value));
+                trackerState.setSimTime?.(Number(e.currentTarget.value));
                 trackerState.speed = 0;
             }}
             class="w-full accent-brand-primary"
