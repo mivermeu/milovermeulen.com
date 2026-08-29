@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { gstime } from 'satellite.js';
 import { trackerState } from '$lib/state.svelte';
 import type { ParsedSatellite } from '$lib/satellites/types';
 
@@ -451,10 +450,6 @@ export class GlobeScene {
         }
 
         this.updatePositions();
-        const gmst = gstime(new Date(this.simTimeMs));
-        const eci = trackerState.referenceFrame === 'eci';
-        this.orbitMesh.rotation.z = eci ? -gmst : 0;
-        this.highlightMesh.rotation.z = eci ? -gmst : 0;
         if (this.points.visible) {
             const material = this.points.material as THREE.PointsMaterial;
             material.size = 0.25 * (this.camera.position.length() / 25);

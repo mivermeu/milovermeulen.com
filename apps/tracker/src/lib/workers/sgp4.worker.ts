@@ -40,10 +40,6 @@ function colorFor(rec: SatRec): number[] {
     return GEO_COLOR;
 }
 
-function toScene(p: { x: number; y: number; z: number }): [number, number, number] {
-    return [p.x * scale, p.y * scale, p.z * scale];
-}
-
 async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
     const buildId = ++orbitBuildId;
     const { requestId, epoch, pointsPerOrbit, frame } = message;
@@ -54,6 +50,11 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
     const ranges: number[] = [];
     const CHUNK = 100;
     const epochMs = epoch;
+
+    // For ECI orbits: compute in ECI, then rotate all points by a single
+    // -GMST(epoch) to align with ECF satellite dots without runtime rotation.
+    const cosR = frame === 'eci' ? Math.cos(-gstime(new Date(epochMs))) : 0;
+    const sinR = frame === 'eci' ? Math.sin(-gstime(new Date(epochMs))) : 0;
 
     for (let i = 0; i < total; i++) {
         const rec = satellites[i].rec;
@@ -77,7 +78,10 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
                 const ecf = eciToEcf(state.position as EciVec3<number>, gstime(date));
                 point = [ecf.x * scale, ecf.y * scale, ecf.z * scale];
             } else {
-                point = toScene(state.position as EciVec3<number>);
+                const eci = state.position as EciVec3<number>;
+                const x = eci.x * scale;
+                const y = eci.y * scale;
+                point = [x * cosR - y * sinR, x * sinR + y * cosR, eci.z * scale];
             }
             if (previous) {
                 positions[vertexCount++] = previous[0];
