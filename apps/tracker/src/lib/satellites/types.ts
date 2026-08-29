@@ -4,7 +4,7 @@ export interface ParsedSatellite {
     line2: string;
 }
 
-export type DataSource = 'loading' | 'celestrak' | 'sample' | 'error';
+export type DataSource = 'loading' | 'local-api' | 'celestrak' | 'sample' | 'error';
 
 export interface CatalogResult {
     satellites: ParsedSatellite[];

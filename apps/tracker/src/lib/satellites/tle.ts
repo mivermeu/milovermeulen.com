@@ -1,6 +1,10 @@
 import sampleTles from '$lib/satellites/data/sample-tles.txt?raw';
 import type { CatalogResult, ParsedSatellite } from './types';
 
+export const LOCAL_API_URL =
+    import.meta.env.VITE_SATELLITE_API_URL || 'http://localhost:8080/tles.json';
+const LOCAL_API_KEY = import.meta.env.VITE_SATELLITE_API_KEY || '';
+
 export const CELESTRAK_URL =
     'https://www.celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle';
 
@@ -35,11 +39,15 @@ export function parseTleText(text: string): ParsedSatellite[] {
     return satellites;
 }
 
-async function fetchWithTimeout(url: string, timeoutMs: number): Promise<string> {
+async function fetchWithTimeout(
+    url: string,
+    timeoutMs: number,
+    headers?: Record<string, string>
+): Promise<string> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-        const response = await fetch(url, { signal: controller.signal });
+        const response = await fetch(url, { signal: controller.signal, headers });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return await response.text();
     } finally {
@@ -47,7 +55,35 @@ async function fetchWithTimeout(url: string, timeoutMs: number): Promise<string>
     }
 }
 
+async function fetchLocalApi(): Promise<ParsedSatellite[] | null> {
+    if (!LOCAL_API_KEY) return null;
+    try {
+        const text = await fetchWithTimeout(LOCAL_API_URL, FETCH_TIMEOUT_MS, {
+            'X-API-Key': LOCAL_API_KEY
+        });
+        // Local API returns JSON array of {name, line1, line2}
+        const data = JSON.parse(text);
+        if (Array.isArray(data) && data.length > 0) {
+            return data.map((s: { name: string; line1: string; line2: string }) => ({
+                name: s.name,
+                line1: s.line1,
+                line2: s.line2
+            }));
+        }
+        return null;
+    } catch {
+        return null;
+    }
+}
+
 export async function loadCatalog(): Promise<CatalogResult> {
+    // 1. Try local API first
+    const local = await fetchLocalApi();
+    if (local && local.length > 0) {
+        return { satellites: local.slice(0, MAX_SATELLITES), source: 'local-api' };
+    }
+
+    // 2. Fall back to CelesTrak
     let liveError: string | undefined;
     try {
         const text = await fetchWithTimeout(CELESTRAK_URL, FETCH_TIMEOUT_MS);
@@ -60,6 +96,7 @@ export async function loadCatalog(): Promise<CatalogResult> {
         liveError = error instanceof Error ? error.message : String(error);
     }
 
+    // 3. Fall back to bundled sample
     const sample = parseTleText(sampleTles).slice(0, MAX_SATELLITES);
     if (sample.length === 0) {
         return { satellites: [], source: 'error', error: 'No satellite data available.' };
@@ -67,6 +104,6 @@ export async function loadCatalog(): Promise<CatalogResult> {
     return {
         satellites: sample,
         source: 'sample',
-        error: `Live CelesTrak fetch failed (${liveError}); using bundled sample catalog.`
+        error: `Local API and CelesTrak unavailable (${liveError}); using bundled sample catalog.`
     };
 }

@@ -2,4 +2,4 @@ node_modules
 .svelte-kit
 build
 oscillator-rs/target
-src/lib/wasm/pkg
+src/lib/wasm/pkg.env
