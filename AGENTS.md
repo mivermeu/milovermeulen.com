@@ -11,6 +11,10 @@ This is a **Turborepo monorepo** managed by **bun** containing multiple apps und
 
 All apps are built with **SvelteKit**, **Svelte 5**, and **Tailwind CSS v4**. The portfolio app emphasizes a high-end, polished aesthetic with custom components like `BracketedSection` and `Noise`.
 
+## Editor
+
+The primary editor is **Zed**. When configuring linter/formatter tooling, prefer LSP-based tools that integrate well with Zed's built-in support (e.g., basedpyright for Python, eslint for JS/TS, Svelte extension for .svelte files).
+
 ## Workspace Structure
 
 ```
