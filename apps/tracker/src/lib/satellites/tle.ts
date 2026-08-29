@@ -1,8 +1,7 @@
 import sampleTles from '$lib/satellites/data/sample-tles.txt?raw';
 import type { CatalogResult, ParsedSatellite } from './types';
 
-export const LOCAL_API_URL =
-    import.meta.env.VITE_SATELLITE_API_URL || 'http://localhost:8080/tles.json';
+const LOCAL_API_URL = import.meta.env.VITE_SATELLITE_API_URL || 'http://localhost:8080/tles.json';
 const LOCAL_API_KEY = import.meta.env.VITE_SATELLITE_API_KEY || '';
 
 export const CELESTRAK_URL =
@@ -84,16 +83,16 @@ export async function loadCatalog(): Promise<CatalogResult> {
     }
 
     // 2. Fall back to CelesTrak
-    let liveError: string | undefined;
+    let fallbackError: string | undefined;
     try {
         const text = await fetchWithTimeout(CELESTRAK_URL, FETCH_TIMEOUT_MS);
-        const live = parseTleText(text).slice(0, MAX_SATELLITES);
-        if (live.length > 0) {
-            return { satellites: live, source: 'celestrak' };
+        const celestrak = parseTleText(text).slice(0, MAX_SATELLITES);
+        if (celestrak.length > 0) {
+            return { satellites: celestrak, source: 'celestrak' };
         }
-        liveError = 'CelesTrak returned no TLE data.';
+        fallbackError = 'CelesTrak returned no TLE data.';
     } catch (error) {
-        liveError = error instanceof Error ? error.message : String(error);
+        fallbackError = error instanceof Error ? error.message : String(error);
     }
 
     // 3. Fall back to bundled sample
@@ -104,6 +103,6 @@ export async function loadCatalog(): Promise<CatalogResult> {
     return {
         satellites: sample,
         source: 'sample',
-        error: `Local API and CelesTrak unavailable (${liveError}); using bundled sample catalog.`
+        error: `Local API and CelesTrak unavailable (${fallbackError}); using bundled sample catalog.`
     };
 }
