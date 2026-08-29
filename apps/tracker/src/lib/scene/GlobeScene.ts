@@ -1,6 +1,10 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import { gstime } from 'satellite.js';
+import { base } from '$app/paths';
 import { trackerState } from '$lib/state.svelte';
 import type { ParsedSatellite } from '$lib/satellites/types';
 
@@ -42,8 +46,9 @@ export class GlobeScene {
     private positionArray: Float32Array;
     private readonly orbitMesh: THREE.LineSegments;
     private readonly orbitGeometry: THREE.BufferGeometry;
-    private readonly graticule: THREE.LineSegments;
     private readonly equatorRing: THREE.LineLoop;
+    private readonly landMesh: LineSegments2;
+    private readonly landGeometry: LineSegmentsGeometry;
     private readonly earth: THREE.Mesh;
     private readonly resizeObserver: ResizeObserver;
     private readonly highlightMesh: THREE.LineSegments;
@@ -122,10 +127,17 @@ export class GlobeScene {
         );
         this.scene.add(this.earth);
 
-        this.graticule = this.buildGraticule();
-        this.scene.add(this.graticule);
         this.equatorRing = this.buildEquatorRing();
         this.scene.add(this.equatorRing);
+
+        this.landGeometry = new LineSegmentsGeometry();
+        this.landMesh = new LineSegments2(
+            this.landGeometry,
+            new LineMaterial({ color: 0x6b8ab8, linewidth: 0.01, worldUnits: true })
+        );
+        this.landMesh.frustumCulled = false;
+        this.scene.add(this.landMesh);
+        this.loadLandmass();
 
         this.pointsGeometry = new THREE.BufferGeometry();
         this.positionArray = new Float32Array(satellites.length * 3);
@@ -204,34 +216,6 @@ export class GlobeScene {
         this.raf = requestAnimationFrame(() => this.loop());
     }
 
-    private buildGraticule(): THREE.LineSegments {
-        const vertices: number[] = [];
-        // Meridians
-        for (let lon = -180; lon < 180; lon += 15) {
-            let previous: THREE.Vector3 | null = null;
-            for (let lat = -80; lat <= 80; lat += 2) {
-                const point = latLonToVector(lat, lon, GLOBE_RADIUS);
-                if (previous) vertices.push(previous.x, previous.y, previous.z, point.x, point.y, point.z);
-                previous = point;
-            }
-        }
-        // Parallels (equator drawn separately)
-        for (let lat = -75; lat <= 75; lat += 15) {
-            let previous: THREE.Vector3 | null = null;
-            for (let lon = -180; lon <= 180; lon += 2) {
-                const point = latLonToVector(lat, lon, GLOBE_RADIUS);
-                if (previous) vertices.push(previous.x, previous.y, previous.z, point.x, point.y, point.z);
-                previous = point;
-            }
-        }
-        const geometry = new THREE.BufferGeometry();
-        geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-        return new THREE.LineSegments(
-            geometry,
-            new THREE.LineBasicMaterial({ color: 0x43597c, transparent: true, opacity: 0.75 })
-        );
-    }
-
     private buildEquatorRing(): THREE.LineLoop {
         const vertices: number[] = [];
         for (let lon = -180; lon <= 180; lon += 2) {
@@ -244,6 +228,21 @@ export class GlobeScene {
             geometry,
             new THREE.LineBasicMaterial({ color: 0x818cf8, transparent: true, opacity: 0.55 })
         );
+    }
+
+    private async loadLandmass(): Promise<void> {
+        try {
+            const resp = await fetch(`${base}/land-110m.json`);
+            if (!resp.ok) return;
+            const geojson = await resp.json();
+            const outline = buildLandmass(geojson, GLOBE_RADIUS);
+            if (outline.length > 0) {
+                const verts = new Float32Array(outline);
+                this.landGeometry.setPositions(verts);
+            }
+        } catch {
+            // silently ignore — globe renders fine without land
+        }
     }
 
     private handleResize(): void {
@@ -510,10 +509,10 @@ export class GlobeScene {
         (this.highlightMesh.material as THREE.Material).dispose();
         this.orbitGeometry.dispose();
         (this.orbitMesh.material as THREE.Material).dispose();
-        this.graticule.geometry.dispose();
-        (this.graticule.material as THREE.Material).dispose();
         this.equatorRing.geometry.dispose();
         (this.equatorRing.material as THREE.Material).dispose();
+        this.landGeometry.dispose();
+        (this.landMesh.material as THREE.Material).dispose();
         this.earth.geometry.dispose();
         (this.earth.material as THREE.Material).dispose();
         this.renderer.dispose();
@@ -549,4 +548,56 @@ function latLonToVector(latitudeDeg: number, longitudeDeg: number, radius: numbe
         radius * Math.cos(lat) * Math.sin(lon),
         radius * Math.sin(lat)
     );
+}
+
+function buildLandmass(geojson: GeoJSONFeatureCollection, radius: number): number[] {
+    const vertices: number[] = [];
+    for (const feature of geojson.features) {
+        const geom = feature.geometry;
+        if (geom.type === 'Polygon') {
+            addPolygon(geom.coordinates, vertices, radius);
+        } else if (geom.type === 'MultiPolygon') {
+            for (const polygon of geom.coordinates) {
+                addPolygon(polygon, vertices, radius);
+            }
+        }
+    }
+    return vertices;
+}
+
+function addPolygon(
+    coordinates: number[][][],
+    vertices: number[],
+    radius: number
+): void {
+    for (const ring of coordinates) {
+        let prev: THREE.Vector3 | null = null;
+        for (const coord of ring) {
+            if (coord[1] <= -89 || coord[1] >= 89) {
+                prev = null;
+                continue;
+            }
+            const point = latLonToVector(coord[1], coord[0], radius);
+            if (prev) {
+                vertices.push(prev.x, prev.y, prev.z, point.x, point.y, point.z);
+            }
+            prev = point;
+        }
+    }
+}
+
+interface GeoJSONFeatureCollection {
+    features: GeoJSONFeature[];
+}
+interface GeoJSONFeature {
+    geometry: GeoJSONGeometry;
+}
+type GeoJSONGeometry = GeoJSONPolygon | GeoJSONMultiPolygon;
+interface GeoJSONPolygon {
+    type: 'Polygon';
+    coordinates: number[][][];
+}
+interface GeoJSONMultiPolygon {
+    type: 'MultiPolygon';
+    coordinates: number[][][][];
 }
