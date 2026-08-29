@@ -21,9 +21,8 @@
         {sidebarOpen ? '✕' : '☰'}
     </button>
 
-    <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
     <a
-        href="/"
+        href={resolve('/')}
         aria-label="Portfolio"
         class="fixed top-3 right-3 z-50 inline-flex items-center justify-center overflow-hidden rounded-lg border border-brand-primary bg-transparent p-1.5 transition-colors duration-150 hover:bg-white/15 active:scale-[0.97]"
     >

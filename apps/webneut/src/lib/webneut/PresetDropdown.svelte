@@ -21,7 +21,7 @@
         >
             <span class="font-normal">{experimentPresets[0].name}</span>
         </button>
-        {#each categories as category}
+        {#each categories as category (category)}
             {@const group = experimentPresets.filter((p) => p.category === category)}
             <div class="mx-1 my-0.5 flex items-center gap-2">
                 <hr class="flex-1 border-t border-current opacity-20" />

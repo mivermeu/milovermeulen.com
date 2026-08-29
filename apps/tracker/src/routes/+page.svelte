@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { resolve } from '$app/paths';
     import ControlPanel from '$lib/components/ControlPanel.svelte';
     import SatelliteInfo from '$lib/components/SatelliteInfo.svelte';
     import SatelliteViewer from '$lib/components/SatelliteViewer.svelte';
@@ -18,9 +19,8 @@
         <h1 class="text-xl font-semibold text-brand-text-highlight">Satellite Tracker</h1>
         <div class="flex items-center gap-3">
             <span class="text-xs text-brand-text">{sourceLabel(trackerState.dataSource)}</span>
-            <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- cross-app link to portfolio root -->
             <a
-                href="/"
+                href={resolve('/')}
                 aria-label="Portfolio"
                 class="inline-flex items-center justify-center overflow-hidden rounded-lg border border-brand-primary bg-transparent p-1.5 transition-colors duration-150 hover:bg-white/15 active:scale-[0.97]"
             >

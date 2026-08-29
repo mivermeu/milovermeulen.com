@@ -26,9 +26,9 @@
     {#each NEUTRINO_OPTIONS as option, i (i)}
         <PanelSwitch bind:group={nuSelected} value={i}>
             {#if option.anti < 0}
-                {'\u03BD\u0305'}<sub>{option.flavor}</sub>
+                ν̄<sub>{option.flavor}</sub>
             {:else}
-                {'\u03BD'}<sub>{option.flavor}</sub>
+                ν<sub>{option.flavor}</sub>
             {/if}
         </PanelSwitch>
     {/each}

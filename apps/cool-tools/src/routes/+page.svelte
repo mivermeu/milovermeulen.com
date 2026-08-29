@@ -22,7 +22,7 @@
                     class="block rounded-lg border border-brand-secondary bg-brand-bg p-4 transition-colors hover:border-brand-primary hover:bg-white/5"
                 >
                     <h3
-                        class="!mt-0 !mb-1 !border-0 text-lg font-semibold text-brand-text-highlight"
+                        class="mt-0! mb-1! border-0! text-lg font-semibold text-brand-text-highlight"
                     >
                         {tool.name}
                     </h3>
