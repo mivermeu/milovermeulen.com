@@ -417,7 +417,11 @@ export class GlobeScene {
         const v = new THREE.Vector3();
 
         for (let i = 0; i < this.satellites.length; i++) {
-            v.set(this.positionArray[i * 3], this.positionArray[i * 3 + 1], this.positionArray[i * 3 + 2]);
+            v.set(
+                this.positionArray[i * 3],
+                this.positionArray[i * 3 + 1],
+                this.positionArray[i * 3 + 2]
+            );
 
             const dx = v.x - camPos.x;
             const dy = v.y - camPos.y;

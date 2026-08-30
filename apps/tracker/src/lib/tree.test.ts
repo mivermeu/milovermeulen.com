@@ -69,9 +69,13 @@ describe('extractPrefix', () => {
 describe('grouping', () => {
     it('Navigation: GPS, GLONASS, GALILEO as siblings', () => {
         const root = buildRoot([
-            sat('GPS BIIF-1'), sat('GPS BIIF-2'),
-            sat('GLONASS-M 761'), sat('GLONASS-M 762'),
-            sat('GALILEO-221'), sat('QZS-2'), sat('NAVIC-1G')
+            sat('GPS BIIF-1'),
+            sat('GPS BIIF-2'),
+            sat('GLONASS-M 761'),
+            sat('GLONASS-M 762'),
+            sat('GALILEO-221'),
+            sat('QZS-2'),
+            sat('NAVIC-1G')
         ]);
         const nav = root.children.find((c) => c.label === 'Navigation')!;
         const labels = nav.children.map((c) => c.label);
@@ -84,8 +88,10 @@ describe('grouping', () => {
 
     it('STARLINK subcategorized by batch', () => {
         const root = buildRoot([
-            sat('STARLINK-1001'), sat('STARLINK-1002'),
-            sat('STARLINK-3001'), sat('STARLINK-3002')
+            sat('STARLINK-1001'),
+            sat('STARLINK-1002'),
+            sat('STARLINK-3001'),
+            sat('STARLINK-3002')
         ]);
         const comms = root.children.find((c) => c.label === 'Communications')!;
         expect(findInChildren(comms.children, 'STARLINK-1')!.children.length).toBe(2);
@@ -94,7 +100,10 @@ describe('grouping', () => {
 
     it('SENTINEL grouped under Earth Observation', () => {
         const root = buildRoot([
-            sat('SENTINEL-2A'), sat('SENTINEL-2B'), sat('SENTINEL-3A'), sat('LANDSAT 8')
+            sat('SENTINEL-2A'),
+            sat('SENTINEL-2B'),
+            sat('SENTINEL-3A'),
+            sat('LANDSAT 8')
         ]);
         const eo = root.children.find((c) => c.label === 'Earth Observation')!;
         expect(findInChildren(eo.children, 'SENTINEL')!.children.length).toBe(3);
@@ -109,7 +118,10 @@ describe('grouping', () => {
 
     it('INMARSAT etc. under Communications', () => {
         const root = buildRoot([
-            sat('INMARSAT 6-F1'), sat('EUTELSAT 10B'), sat('SES-22'), sat('MOLNIYA-3-60')
+            sat('INMARSAT 6-F1'),
+            sat('EUTELSAT 10B'),
+            sat('SES-22'),
+            sat('MOLNIYA-3-60')
         ]);
         const comms = root.children.find((c) => c.label === 'Communications')!;
         expect(comms.children.map((c) => c.label)).toContain('INMARSAT');

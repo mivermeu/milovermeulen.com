@@ -38,15 +38,23 @@ export function categorize(name: string): { functionType: string; constellation:
     else if (/^(GPS|NAVSTAR|GALILEO|GLONASS|BEIDOU|QZS|NAVIC|IRNSS)/i.test(name))
         functionType = 'navigation';
     else if (/COSMOS.*GLONASS|GLONASS.*COSMOS/i.test(name)) functionType = 'navigation';
-    else if (/^(COSMOS|YAOGAN|GAOFEN|JILIN|TANCE|CSOH|USA-|KH-|LACROSSE|MISTY|ORION|MENTOR|SDS|QUASAR|SAR.LUPE|SAPPHIRE|PRAETORIAN|STSS|SBIRS)/i.test(name))
+    else if (
+        /^(COSMOS|YAOGAN|GAOFEN|JILIN|TANCE|CSOH|USA-|KH-|LACROSSE|MISTY|ORION|MENTOR|SDS|QUASAR|SAR.LUPE|SAPPHIRE|PRAETORIAN|STSS|SBIRS)/i.test(
+            name
+        )
+    )
         functionType = 'military';
     else if (
         /^(STARLINK|ONEWEB|IRIDIUM|GLOBALSTAR|FLOCK|SWARM|INMARSAT|INTELSAT|EUTELSAT|SES|TDRS|MOLNIYA|ASTRA|ORBCOMM|TELSAT|VIASAT|HUGHES|AMOS|HISPASAT|NILESAT|ARABSAT|THURAYA|ABS|MEXSAT|SIRIUM|XM-|SIRIUS|SKYNET|LUCH|GORIZONT|EXPRES|YAMAL|KUIPER|GUOWANG|QIANFAN)/i.test(
             name
-    )
+        )
     )
         functionType = 'communications';
-    else if (/^(ISS|TIANGONG|HST|JWST|CREW DRAGON|CYGNUS|PROGRESS|SOYUZ|SHENZHOU|TIANZHOU|CHANDRA|KEPLER|TESS|FERMI|WMAP|PLANCK|HERSCHEL|IXPE|NUSTAR|SDO|SORCE|CALIPSO|CLOUDSAT|OCO|AQUARIUS|SMOS|CFOSAT|SCATSAT|HY-)/i.test(name))
+    else if (
+        /^(ISS|TIANGONG|HST|JWST|CREW DRAGON|CYGNUS|PROGRESS|SOYUZ|SHENZHOU|TIANZHOU|CHANDRA|KEPLER|TESS|FERMI|WMAP|PLANCK|HERSCHEL|IXPE|NUSTAR|SDO|SORCE|CALIPSO|CLOUDSAT|OCO|AQUARIUS|SMOS|CFOSAT|SCATSAT|HY-)/i.test(
+            name
+        )
+    )
         functionType = 'science';
 
     return { functionType, constellation };
@@ -165,12 +173,12 @@ function buildTree(satellites: ParsedSatellite[]): TreeNode[] {
 
         for (const [groupPrefix, groupSats] of Object.entries(groups)) {
             if (groupSats.length === 1) {
-                    const sat = groupSats[0];
-                    const satIdx = satellites.indexOf(sat);
-                    funcChildren.push({
-                        id: `sat-${satIdx}`,
-                        label: groupPrefix,
-                        satelliteIndex: satIdx,
+                const sat = groupSats[0];
+                const satIdx = satellites.indexOf(sat);
+                funcChildren.push({
+                    id: `sat-${satIdx}`,
+                    label: groupPrefix,
+                    satelliteIndex: satIdx,
                     selected: isSelected,
                     triState: (isSelected ? 'all' : 'none') as TriState,
                     expanded: false,
