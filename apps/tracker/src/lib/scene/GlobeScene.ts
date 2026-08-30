@@ -55,8 +55,7 @@ export class GlobeScene {
     private readonly resizeObserver: ResizeObserver;
     private readonly highlightMesh: THREE.LineSegments;
     private readonly highlightGeometry: THREE.BufferGeometry;
-    private readonly raycaster = new THREE.Raycaster();
-    private readonly pointerNdc = new THREE.Vector2();
+
     private readonly onPointerMove: (event: PointerEvent) => void;
     private readonly onPointerDown: (event: PointerEvent) => void;
     private readonly onPointerUp: (event: PointerEvent) => void;
@@ -407,19 +406,50 @@ export class GlobeScene {
     private raycastSatellite(event: PointerEvent): number {
         const rect = this.canvas.getBoundingClientRect();
         if (rect.width === 0 || rect.height === 0) return -1;
-        this.pointerNdc.set(
-            ((event.clientX - rect.left) / rect.width) * 2 - 1,
-            -((event.clientY - rect.top) / rect.height) * 2 + 1
-        );
-        this.raycaster.setFromCamera(this.pointerNdc, this.camera);
-        const size = (this.points.material as THREE.PointsMaterial).size;
-        this.raycaster.params.Points.threshold = 3 * size;
+        const mx = event.clientX - rect.left;
+        const my = event.clientY - rect.top;
 
-        const earthHits = this.raycaster.intersectObject(this.earth, false);
-        const earthDist = earthHits.length > 0 ? earthHits[0].distance : Infinity;
-        const hits = this.raycaster.intersectObject(this.points, false);
-        if (hits.length === 0 || earthDist < hits[0].distance - 1e-3) return -1;
-        return hits[0].index ?? -1;
+        const camPos = this.camera.position;
+        const earthCenter = this.earth.position;
+        const earthR = GLOBE_RADIUS;
+        const threshold = 10;
+
+        let best = -1;
+        let bestDist = Infinity;
+        const v = new THREE.Vector3();
+
+        for (let i = 0; i < this.satellites.length; i++) {
+            v.set(this.positionArray[i * 3], this.positionArray[i * 3 + 1], this.positionArray[i * 3 + 2]);
+
+            const dx = v.x - camPos.x;
+            const dy = v.y - camPos.y;
+            const dz = v.z - camPos.z;
+            const oc = earthCenter;
+            const ex = camPos.x - oc.x;
+            const ey = camPos.y - oc.y;
+            const ez = camPos.z - oc.z;
+            const a = dx * dx + dy * dy + dz * dz;
+            const b = 2 * (ex * dx + ey * dy + ez * dz);
+            const c = ex * ex + ey * ey + ez * ez - earthR * earthR;
+            const disc = b * b - 4 * a * c;
+            if (disc >= 0) {
+                const t = (-b - Math.sqrt(disc)) / (2 * a);
+                if (t > 0 && t < 1) continue;
+            }
+
+            v.project(this.camera);
+            if (v.z > 1) continue;
+            const sx = ((v.x + 1) / 2) * rect.width;
+            const sy = ((-v.y + 1) / 2) * rect.height;
+            const dsx = sx - mx;
+            const dsy = sy - my;
+            const dist = dsx * dsx + dsy * dsy;
+            if (dist < threshold * threshold && dist < bestDist) {
+                bestDist = dist;
+                best = i;
+            }
+        }
+        return best;
     }
 
     showHighlight(index: number): void {
