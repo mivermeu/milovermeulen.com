@@ -40,7 +40,8 @@ export const trackerState = $state({
     hovered: null as HoverInfo | null,
     pinnedIndex: -1,
     tree: null as TreeNode | null,
-    activeIndices: [] as number[]
+    activeIndices: [] as number[],
+    searchQuery: ''
 });
 
 export function toggleNode(id: string): void {

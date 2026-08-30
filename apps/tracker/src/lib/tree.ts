@@ -250,3 +250,39 @@ export function toggleNodeInTree(root: TreeNode, id: string): number[] {
     collectLeaves(root, active);
     return active;
 }
+
+export function findMatchingNodeIds(
+    root: TreeNode,
+    query: string
+): { matching: Set<string>; expand: Set<string> } {
+    const matching = new Set<string>();
+    const expand = new Set<string>();
+    if (!query) return { matching, expand };
+    const lower = query.toLowerCase();
+
+    function walk(node: TreeNode): boolean {
+        let hasMatch = node.label.toLowerCase().includes(lower);
+        for (const child of node.children) {
+            if (walk(child)) {
+                expand.add(node.id);
+                hasMatch = true;
+            }
+        }
+        if (hasMatch) matching.add(node.id);
+        return hasMatch;
+    }
+
+    walk(root);
+    return { matching, expand };
+}
+
+export function saveExpanded(root: TreeNode, target: Map<string, boolean>): void {
+    target.set(root.id, root.expanded);
+    for (const child of root.children) saveExpanded(child, target);
+}
+
+export function restoreExpanded(root: TreeNode, saved: Map<string, boolean>): void {
+    const v = saved.get(root.id);
+    if (v !== undefined) root.expanded = v;
+    for (const child of root.children) restoreExpanded(child, saved);
+}
