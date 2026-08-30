@@ -109,7 +109,8 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
     }
 
     if (buildId !== orbitBuildId) return;
-    postMessage({ type: 'orbits', requestId, vertexCount, positions, ranges }, [positions.buffer]);
+    const trimmed = vertexCount < positions.length ? positions.slice(0, vertexCount) : positions;
+    postMessage({ type: 'orbits', requestId, vertexCount, positions: trimmed, ranges }, [trimmed.buffer]);
 }
 
 function handleMessage(event: MessageEvent<WorkerMessage>): void {
