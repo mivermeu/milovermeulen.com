@@ -22,6 +22,7 @@ export interface HoverInfo {
 export const trackerState = $state({
     satellites: [] as ParsedSatellite[],
     showOrbits: true,
+    showEquatorial: false,
     dataSource: 'loading' as DataSource,
     error: '',
     referenceFrame: 'ecf' as 'ecf' | 'eci',

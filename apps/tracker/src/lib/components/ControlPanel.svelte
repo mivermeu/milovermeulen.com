@@ -14,13 +14,22 @@
 
 <Panel title="Controls">
     <div class="space-y-3">
-        <label class="flex cursor-pointer items-center justify-between">
-            <span class="text-xs text-brand-text">Orbits</span>
+        <label class="flex cursor-pointer items-center gap-2">
             <input
                 type="checkbox"
                 bind:checked={trackerState.showOrbits}
                 class="h-3 w-3 accent-brand-primary"
             />
+            <span class="text-xs text-brand-text">Orbits</span>
+        </label>
+
+        <label class="flex cursor-pointer items-center gap-2">
+            <input
+                type="checkbox"
+                bind:checked={trackerState.showEquatorial}
+                class="h-3 w-3 accent-brand-primary"
+            />
+            <span class="text-xs text-brand-text">Equatorial plane</span>
         </label>
 
         <div>

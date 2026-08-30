@@ -52,6 +52,7 @@
     $effect(() => {
         if (!scene) return;
         scene.setShowOrbits(trackerState.showOrbits);
+        scene.setShowEquatorial(trackerState.showEquatorial);
     });
 
     $effect(() => {

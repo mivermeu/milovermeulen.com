@@ -48,6 +48,7 @@ export class GlobeScene {
     private readonly orbitMesh: THREE.LineSegments;
     private readonly orbitGeometry: THREE.BufferGeometry;
     private readonly equatorRing: THREE.LineLoop;
+    private readonly equatorialPlane: THREE.Mesh;
     private readonly landMesh: LineSegments2;
     private readonly landGeometry: LineSegmentsGeometry;
     private readonly earth: THREE.Mesh;
@@ -132,6 +133,18 @@ export class GlobeScene {
 
         this.equatorRing = this.buildEquatorRing();
         this.scene.add(this.equatorRing);
+
+        const planeGeo = new THREE.CircleGeometry(120, 96);
+        const equatorialMat = new THREE.MeshBasicMaterial({
+            color: 0x818cf8,
+            transparent: true,
+            opacity: 0.06,
+            side: THREE.DoubleSide,
+            depthWrite: false
+        });
+        this.equatorialPlane = new THREE.Mesh(planeGeo, equatorialMat);
+        this.equatorialPlane.visible = false;
+        this.scene.add(this.equatorialPlane);
 
         this.landGeometry = new LineSegmentsGeometry();
         this.landMesh = new LineSegments2(
@@ -479,6 +492,10 @@ export class GlobeScene {
         this.orbitMesh.visible = show && this.orbitsReady;
     }
 
+    setShowEquatorial(show: boolean): void {
+        this.equatorialPlane.visible = show;
+    }
+
     setFilter(filteredSatellites: ParsedSatellite[], activeIndices: number[]): void {
         this.hideHighlight();
         this.orbitsReady = false;
@@ -634,6 +651,8 @@ export class GlobeScene {
         (this.orbitMesh.material as THREE.Material).dispose();
         this.equatorRing.geometry.dispose();
         (this.equatorRing.material as THREE.Material).dispose();
+        this.equatorialPlane.geometry.dispose();
+        (this.equatorialPlane.material as THREE.Material).dispose();
         this.landGeometry.dispose();
         (this.landMesh.material as THREE.Material).dispose();
         this.earth.geometry.dispose();
