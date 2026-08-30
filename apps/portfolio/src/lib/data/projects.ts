@@ -40,5 +40,15 @@ export const projects: Project[] = [
         link: '/cool-tools',
         source_code: '',
         tags: ['Svelte', 'TypeScript', 'UI/UX', 'Web development']
+    },
+    {
+        name: 'Satellite Tracker',
+        description: `
+        Real-time 3D satellite globe tracker. SGP4 propagation,
+        three.js renderer, orbital visualization.
+        `,
+        link: '/tracker',
+        source_code: '',
+        tags: ['Physics', 'UI/UX', 'Web development']
     }
 ];
