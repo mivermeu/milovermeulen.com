@@ -40,9 +40,7 @@ export function categorize(name: string): { functionType: string; constellation:
         )
     )
         functionType = 'communications';
-    else if (
-        /^(ISS|TIANGONG|HST|CREW DRAGON|CYGNUS|PROGRESS|SOYUZ|SHENZHOU|TIANZHOU)/i.test(name)
-    )
+    else if (/^(ISS|TIANGONG|HST|CREW DRAGON|CYGNUS|PROGRESS|SOYUZ|SHENZHOU|TIANZHOU)/i.test(name))
         functionType = 'science';
 
     return { functionType, constellation };
@@ -59,10 +57,6 @@ export function labelFunction(f: string): string {
         other: 'Other'
     };
     return labels[f] ?? f;
-}
-
-export function labelConstellation(c: string): string {
-    return c.charAt(0).toUpperCase() + c.slice(1);
 }
 
 export function extractPrefix(name: string): string {
@@ -83,25 +77,6 @@ export function groupByPrefix(sats: ParsedSatellite[]): Record<string, ParsedSat
         groups[prefix].push(sat);
     }
     return groups;
-}
-
-function flattenSingleChild(nodes: TreeNode[]): TreeNode[] {
-    const result: TreeNode[] = [];
-    for (const node of nodes) {
-        const children = flattenSingleChild(node.children);
-        if (
-            children.length === 1 &&
-            children[0].satelliteIndex === undefined &&
-            children[0].label.toLowerCase() === node.label.toLowerCase()
-        ) {
-            node.children = children[0].children;
-            result.push(node);
-        } else {
-            node.children = children;
-            result.push(node);
-        }
-    }
-    return result;
 }
 
 function computeTriState(node: TreeNode): TriState {
@@ -155,14 +130,13 @@ export function collectLeaves(node: TreeNode, result: number[]): void {
 }
 
 function buildTree(satellites: ParsedSatellite[]): TreeNode[] {
-    const functions: Record<string, Record<string, ParsedSatellite[]>> = {};
+    const functions: Record<string, ParsedSatellite[]> = {};
 
     for (let i = 0; i < satellites.length; i++) {
         const sat = satellites[i];
-        const { functionType, constellation } = categorize(sat.name);
-        if (!functions[functionType]) functions[functionType] = {};
-        if (!functions[functionType][constellation]) functions[functionType][constellation] = [];
-        functions[functionType][constellation].push(sat);
+        const { functionType } = categorize(sat.name);
+        if (!functions[functionType]) functions[functionType] = [];
+        functions[functionType].push(sat);
     }
 
     const funcOrder = [
@@ -178,19 +152,28 @@ function buildTree(satellites: ParsedSatellite[]): TreeNode[] {
         (a, b) => funcOrder.indexOf(a[0]) - funcOrder.indexOf(b[0])
     );
 
-    const result = sortedFunctions.map(([funcType, constellations]) => {
+    const result = sortedFunctions.map(([funcType, sats]) => {
         const isSelected = funcType === 'science';
-        const constNodes: TreeNode[] = [];
+        const groups = groupByPrefix(sats);
+        const funcChildren: TreeNode[] = [];
 
-        for (const [constName, sats] of Object.entries(constellations)) {
-            const groups = groupByPrefix(sats);
-            const constChildren: TreeNode[] = [];
-
-            for (const [groupPrefix, groupSats] of Object.entries(groups)) {
-                if (groupSats.length === 1) {
+        for (const [groupPrefix, groupSats] of Object.entries(groups)) {
+            if (groupSats.length === 1) {
                     const sat = groupSats[0];
                     const satIdx = satellites.indexOf(sat);
-                    constChildren.push({
+                    funcChildren.push({
+                        id: `sat-${satIdx}`,
+                        label: groupPrefix,
+                        satelliteIndex: satIdx,
+                    selected: isSelected,
+                    triState: (isSelected ? 'all' : 'none') as TriState,
+                    expanded: false,
+                    children: []
+                });
+            } else {
+                const groupChildren: TreeNode[] = groupSats.map((sat) => {
+                    const satIdx = satellites.indexOf(sat);
+                    return {
                         id: `sat-${satIdx}`,
                         label: sat.name,
                         satelliteIndex: satIdx,
@@ -198,41 +181,15 @@ function buildTree(satellites: ParsedSatellite[]): TreeNode[] {
                         triState: (isSelected ? 'all' : 'none') as TriState,
                         expanded: false,
                         children: []
-                    });
-                } else {
-                    const groupChildren: TreeNode[] = groupSats.map((sat) => {
-                        const satIdx = satellites.indexOf(sat);
-                        return {
-                            id: `sat-${satIdx}`,
-                            label: sat.name,
-                            satelliteIndex: satIdx,
-                            selected: isSelected,
-                            triState: (isSelected ? 'all' : 'none') as TriState,
-                            expanded: false,
-                            children: []
-                        };
-                    });
-                    constChildren.push({
-                        id: `const-${funcType}-${constName}-${groupPrefix}`,
-                        label: groupPrefix,
-                        selected: isSelected,
-                        triState: (isSelected ? 'all' : 'none') as TriState,
-                        expanded: false,
-                        children: groupChildren
-                    });
-                }
-            }
-
-            if (constChildren.length === 1 && constChildren[0].satelliteIndex !== undefined) {
-                constNodes.push(constChildren[0]);
-            } else {
-                constNodes.push({
-                    id: `const-${funcType}-${constName}`,
-                    label: labelConstellation(constName),
+                    };
+                });
+                funcChildren.push({
+                    id: `group-${funcType}-${groupPrefix}`,
+                    label: groupPrefix,
                     selected: isSelected,
                     triState: (isSelected ? 'all' : 'none') as TriState,
                     expanded: false,
-                    children: constChildren
+                    children: groupChildren
                 });
             }
         }
@@ -243,11 +200,11 @@ function buildTree(satellites: ParsedSatellite[]): TreeNode[] {
             selected: isSelected,
             triState: (isSelected ? 'all' : 'none') as TriState,
             expanded: false,
-            children: constNodes
+            children: funcChildren
         };
     });
 
-    return flattenSingleChild(result);
+    return result;
 }
 
 export function buildRoot(satellites: ParsedSatellite[]): TreeNode {
