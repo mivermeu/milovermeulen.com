@@ -8,7 +8,8 @@
     <div class="mb-2 text-[10px] text-brand-text">
         Showing <span class="font-mono text-brand-text-highlight"
             >{trackerState.activeIndices.length}</span
-        > of {trackerState.satellites.length}
+        >
+        of {trackerState.satellites.length}
     </div>
 
     <div class="overflow-y-auto" style="max-height: calc(100vh - 280px)">
