@@ -31,6 +31,8 @@
             const nRadSec = satrec.no / 60;
             const aKm = Math.pow(398600.4418 / (nRadSec * nRadSec), 1 / 3);
 
+            const epochYear = 2000 + parseInt(sat.line1.substring(18, 20));
+
             return {
                 lat: degreesLat(geo.latitude),
                 lon: degreesLong(geo.longitude),
@@ -44,12 +46,50 @@
                 period: periodMin,
                 bstar: satrec.bstar,
                 apogee: aKm * (1 + satrec.ecco) - 6371,
-                perigee: aKm * (1 - satrec.ecco) - 6371
+                perigee: aKm * (1 - satrec.ecco) - 6371,
+                launchYear: epochYear
             };
         } catch {
             return null;
         }
     });
+
+    function detectOwner(name: string): string {
+        const n = name.toUpperCase();
+        if (/^GPS/i.test(n)) return 'USAF';
+        if (/^GLONASS/i.test(n)) return 'Roscosmos';
+        if (/^GALILEO/i.test(n)) return 'ESA';
+        if (/^BEIDOU/i.test(n)) return 'CNSA';
+        if (/^QZS/i.test(n)) return 'JAXA';
+        if (/^NAVIC|IRNSS/i.test(n)) return 'ISRO';
+        if (/^STARLINK/i.test(n)) return 'SpaceX';
+        if (/^ONEWEB/i.test(n)) return 'OneWeb';
+        if (/^IRIDIUM/i.test(n)) return 'Iridium';
+        if (/^GLOBALSTAR/i.test(n)) return 'Globalstar';
+        if (/^ISS/i.test(n)) return 'NASA/Roscosmos';
+        if (/^TIANGONG/i.test(n)) return 'CNSA';
+        if (/^HST/i.test(n)) return 'NASA';
+        if (/^NOAA|GOES|SUOMI|METOP/i.test(n)) return 'NOAA/EUMETSAT';
+        if (/^LANDSAT/i.test(n)) return 'NASA/USGS';
+        if (/^SENTINEL/i.test(n)) return 'ESA';
+        if (/^COSMOS/i.test(n)) return 'Roscosmos';
+        if (/^YAOGAN|GAOFEN|KAITUO/i.test(n)) return 'CNSA';
+        if (/^INMARSAT/i.test(n)) return 'Inmarsat';
+        if (/^INTELSAT/i.test(n)) return 'Intelsat';
+        if (/^EUTELSAT/i.test(n)) return 'Eutelsat';
+        if (/^SES/i.test(n)) return 'SES';
+        if (/^TDRS/i.test(n)) return 'NASA';
+        if (/^MOLNIYA/i.test(n)) return 'Roscosmos';
+        if (/^CREW DRAGON|FALCON/i.test(n)) return 'SpaceX';
+        if (/^CYGNUS/i.test(n)) return 'Northrop Grumman';
+        if (/^PROGRESS|SOYUZ/i.test(n)) return 'Roscosmos';
+        if (/^SHENZHOU|TIANZHOU/i.test(n)) return 'CNSA';
+        if (/^FLOCK/i.test(n)) return 'Planet Labs';
+        if (/^METEOSAT/i.test(n)) return 'EUMETSAT';
+        if (/^HIMAWARI/i.test(n)) return 'JAXA';
+        if (/^ARCTICA/i.test(n)) return 'Roscosmos';
+        return 'Unknown';
+    }
 
     function pad(n: number, w: number): string {
         return String(n).padStart(w, '0');
@@ -95,6 +135,13 @@
             >
                 ✕
             </button>
+        </div>
+
+        <div class="mb-3 flex gap-4 text-[10px] text-brand-text/70">
+            <span>{detectOwner(sat.name)}</span>
+            {#if orbitalData?.launchYear}
+                <span>{orbitalData.launchYear}</span>
+            {/if}
         </div>
 
         <dl class="space-y-1.5 text-xs">
