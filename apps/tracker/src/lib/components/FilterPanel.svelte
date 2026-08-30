@@ -14,7 +14,9 @@
 
     <div class="min-h-0 flex-1 overflow-y-auto">
         {#if trackerState.tree}
-            <TreeNode node={trackerState.tree} />
+            <div role="tree">
+                <TreeNode node={trackerState.tree} />
+            </div>
         {/if}
     </div>
 </Panel>

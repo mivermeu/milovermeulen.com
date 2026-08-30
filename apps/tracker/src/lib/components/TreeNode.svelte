@@ -7,6 +7,13 @@
 
     const hasChildren = $derived(node.children.length > 0);
     const indent = $derived(depth * 12);
+    let checkbox: HTMLInputElement | undefined = $state();
+
+    $effect(() => {
+        if (!checkbox) return;
+        checkbox.checked = node.triState === 'all';
+        checkbox.indeterminate = node.triState === 'some';
+    });
 
     function handleRowClick(e: MouseEvent) {
         if ((e.target as HTMLElement).tagName === 'INPUT') return;
@@ -27,27 +34,20 @@
             }
         }
     }
-
-    function handleCheck() {
-        if (node.triState === 'some') {
-            node.selected = false;
-        }
-        toggleNode(node.id);
-    }
 </script>
 
 <div style="padding-left: {indent}px">
     <div
+        role="treeitem"
+        aria-expanded={hasChildren ? node.expanded : undefined}
         class="flex cursor-pointer items-center gap-1 rounded px-1 py-0.5 hover:bg-white/10"
         onclick={handleRowClick}
         onkeydown={handleKeydown}
     >
         <input
             type="checkbox"
-            checked={node.triState === 'all'}
-            indeterminate={node.triState === 'some'}
-            onchange={handleCheck}
-            onclick={(e) => e.stopPropagation()}
+            bind:this={checkbox}
+            onchange={() => toggleNode(node.id)}
             class="accent-brand-primary"
         />
 
