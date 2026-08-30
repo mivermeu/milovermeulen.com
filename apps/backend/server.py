@@ -31,8 +31,14 @@ class SatelliteAPIHandler(SimpleHTTPRequestHandler):
     api_key: str | None = get_api_key()
     data_dir: Path = Path(os.environ.get("SATELLITE_DATA_DIR", "/var/www/satellite-api"))
 
+    def _send_cors(self) -> None:
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "X-API-Key")
+
     def do_OPTIONS(self) -> None:
         self.send_response(204)
+        self._send_cors()
         self.end_headers()
 
     def do_GET(self) -> None:
@@ -67,6 +73,7 @@ class SatelliteAPIHandler(SimpleHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
+        self._send_cors()
         self.end_headers()
         self.wfile.write(data)
 
@@ -75,6 +82,7 @@ class SatelliteAPIHandler(SimpleHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(data)))
+        self._send_cors()
         self.end_headers()
         self.wfile.write(data)
 
