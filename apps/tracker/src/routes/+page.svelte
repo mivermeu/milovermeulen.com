@@ -35,7 +35,9 @@
         <div class="pointer-events-none absolute inset-0 z-10">
             <SatelliteInfo />
         </div>
-        <div class="pointer-events-none absolute top-3 right-3 bottom-3 z-20 flex flex-col gap-3">
+        <div
+            class="pointer-events-none absolute top-3 right-3 bottom-3 z-20 flex w-80 flex-col gap-3"
+        >
             <div class="shrink-0">
                 <ControlPanel />
             </div>
