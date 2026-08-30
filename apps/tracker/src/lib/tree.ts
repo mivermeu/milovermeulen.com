@@ -26,7 +26,7 @@ export function categorize(name: string): { functionType: string; constellation:
     if (/^(NOAA|METOP|GOES|METEOSAT|HIMAWARI|SUOMI|FY-|ELEKTRO|ARCTICA)/i.test(name))
         functionType = 'weather';
     else if (
-        /^(LANDSAT|SENTINEL|TERRA|AQUA|SMAP|SWOT|ICESAT|GRACE|MODIS|ALOS|WORLDVIEW|PLANET)/i.test(
+        /^(LANDSAT|SENTINEL|TERRA|AQUA|SMAP|SWOT|ICESAT|GRACE|MODIS|ALOS|WORLDVIEW|PLANET|KAITUO)/i.test(
             name
         )
     )
@@ -35,12 +35,14 @@ export function categorize(name: string): { functionType: string; constellation:
         functionType = 'navigation';
     else if (/^(COSMOS|YAOGAN|GAOFEN|JILIN|TANCE|CSOH)/i.test(name)) functionType = 'military';
     else if (
-        /^(STARLINK|ONEWEB|IRIDIUM|GLOBALSTAR|FLOCK|SWARM|INMARSAT|INTELSAT|EUTELSAT|SES|TDRS|MOLNIYA)/i.test(
+        /^(STARLINK|ONEWEB|IRIDIUM|GLOBALSTAR|FLOCK|SWARM|INMARSAT|INTELSAT|EUTELSAT|SES|TDRS|MOLNIYA|ASTRA)/i.test(
             name
         )
     )
         functionType = 'communications';
-    else if (/^(ISS|TIANGONG|HST|CREW DRAGON|CYGNUS|PROGRESS|SOYUZ|SHENZHOU|TIANZHOU)/i.test(name))
+    else if (
+        /^(ISS|TIANGONG|HST|CREW DRAGON|CYGNUS|PROGRESS|SOYUZ|SHENZHOU|TIANZHOU)/i.test(name)
+    )
         functionType = 'science';
 
     return { functionType, constellation };
@@ -64,12 +66,13 @@ export function labelConstellation(c: string): string {
 }
 
 export function extractPrefix(name: string): string {
-    if (/^ISS\b/i.test(name)) return 'ISS';
-    return name
-        .replace(/\s*(DEB|R\/B)\b/gi, '')
-        .replace(/[-\s](FM|PFM|DM|SV|BLOCK|BIIF|BM|CM|SLBM|R\/B)\b/gi, '')
-        .replace(/[-\s]\d?[A-Z]$|[-\s]M\b|[-\s]?\d+[A-Z]?$|\s\d+$/gi, '')
-        .trim();
+    if (/^STARLINK-/i.test(name)) {
+        const m = name.match(/^STARLINK-(\d+)/i);
+        if (m) return `STARLINK-${Math.floor(parseInt(m[1]) / 1000)}`;
+        return 'STARLINK';
+    }
+    const m = name.match(/^\w+/);
+    return m ? m[0] : name;
 }
 
 export function groupByPrefix(sats: ParsedSatellite[]): Record<string, ParsedSatellite[]> {
@@ -82,11 +85,15 @@ export function groupByPrefix(sats: ParsedSatellite[]): Record<string, ParsedSat
     return groups;
 }
 
-export function flattenSingleChild(nodes: TreeNode[]): TreeNode[] {
+function flattenSingleChild(nodes: TreeNode[]): TreeNode[] {
     const result: TreeNode[] = [];
     for (const node of nodes) {
         const children = flattenSingleChild(node.children);
-        if (children.length === 1 && children[0].satelliteIndex === undefined) {
+        if (
+            children.length === 1 &&
+            children[0].satelliteIndex === undefined &&
+            children[0].label.toLowerCase() === node.label.toLowerCase()
+        ) {
             node.children = children[0].children;
             result.push(node);
         } else {
@@ -97,7 +104,7 @@ export function flattenSingleChild(nodes: TreeNode[]): TreeNode[] {
     return result;
 }
 
-export function computeTriState(node: TreeNode): TriState {
+function computeTriState(node: TreeNode): TriState {
     if (node.children.length === 0) return node.selected ? 'all' : 'none';
     const states = node.children.map(computeTriState);
     if (states.every((s) => s === 'all')) return 'all';
@@ -147,7 +154,7 @@ export function collectLeaves(node: TreeNode, result: number[]): void {
     }
 }
 
-export function buildTree(satellites: ParsedSatellite[]): TreeNode[] {
+function buildTree(satellites: ParsedSatellite[]): TreeNode[] {
     const functions: Record<string, Record<string, ParsedSatellite[]>> = {};
 
     for (let i = 0; i < satellites.length; i++) {
@@ -199,8 +206,8 @@ export function buildTree(satellites: ParsedSatellite[]): TreeNode[] {
                             id: `sat-${satIdx}`,
                             label: sat.name,
                             satelliteIndex: satIdx,
-                            selected: true,
-                            triState: 'all' as TriState,
+                            selected: isSelected,
+                            triState: (isSelected ? 'all' : 'none') as TriState,
                             expanded: false,
                             children: []
                         };
@@ -233,8 +240,8 @@ export function buildTree(satellites: ParsedSatellite[]): TreeNode[] {
         return {
             id: `func-${funcType}`,
             label: labelFunction(funcType),
-            selected: funcType === 'science',
-            triState: (funcType === 'science' ? 'all' : 'none') as TriState,
+            selected: isSelected,
+            triState: (isSelected ? 'all' : 'none') as TriState,
             expanded: false,
             children: constNodes
         };
