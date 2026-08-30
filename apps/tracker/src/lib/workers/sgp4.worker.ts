@@ -50,7 +50,11 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
     const buildId = ++orbitBuildId;
     const { requestId, epoch, pointsPerOrbit, frame } = message;
     const total = satellites.length;
-    const maxSegments = total * pointsPerOrbit;
+    // Scale points per orbit by eccentricity: more samples for elongated orbits.
+    const maxEcc = satellites.reduce((m, s) => Math.max(m, s.rec.ecco), 0);
+    const eccScale = 1 + Math.round(maxEcc * 4);
+    const scaledPoints = pointsPerOrbit * eccScale;
+    const maxSegments = total * scaledPoints;
     const positions = new Float32Array(maxSegments * 2 * 3);
     let vertexCount = 0;
     const ranges: number[] = [];
@@ -70,9 +74,9 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
 
         // ECI: sample one full period including endpoint (closes the ellipse).
         // ECF: sample one period excluding endpoint (open ground-track arc).
-        const samples = frame === 'ecf' ? pointsPerOrbit : pointsPerOrbit + 1;
+        const samples = frame === 'ecf' ? scaledPoints : scaledPoints + 1;
         for (let k = 0; k < samples; k++) {
-            const t = epochMs + (k / pointsPerOrbit) * periodMs;
+            const t = epochMs + (k / scaledPoints) * periodMs;
             const date = new Date(t);
             const state = propagate(rec, date);
             if (state.position === false || state.position === undefined) {
