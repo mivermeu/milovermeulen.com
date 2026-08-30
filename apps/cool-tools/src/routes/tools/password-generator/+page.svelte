@@ -16,7 +16,10 @@
             [digits, '0123456789'],
             [symbols, '!@#$%^&*()_+-=[]{}|;:,.<>?']
         ] as const;
-        const chars = sets.filter(([enabled]) => enabled).map(([, cs]) => cs).join('');
+        const chars = sets
+            .filter(([enabled]) => enabled)
+            .map(([, cs]) => cs)
+            .join('');
         if (!chars) return;
         const rand = new Uint8Array(length);
         crypto.getRandomValues(rand);
@@ -39,7 +42,10 @@
     });
 </script>
 
-<ToolShell title="Password Generator" desc="Cryptographically secure passwords via crypto.getRandomValues().">
+<ToolShell
+    title="Password Generator"
+    desc="Cryptographically secure passwords via crypto.getRandomValues()."
+>
     <div class="mb-4 flex items-center gap-3">
         <label class="text-sm text-brand-text" for="plen">Length:</label>
         <input id="plen" type="number" min="4" max="128" bind:value={length} class="w-20" />
@@ -57,11 +63,19 @@
     </div>
 
     {#if password}
-        <div class="mb-2 break-all rounded border border-brand-secondary bg-white/5 p-3 font-mono text-lg tracking-wider text-brand-text-highlight select-all">
+        <div
+            class="mb-2 rounded border border-brand-secondary bg-white/5 p-3 font-mono text-lg tracking-wider break-all text-brand-text-highlight select-all"
+        >
             {password}
         </div>
         <div class="text-sm text-brand-text">
-            Strength: <span class="capitalize {strength === 'very strong' || strength === 'strong' ? 'text-green-400' : strength === 'fair' ? 'text-yellow-400' : 'text-red-400'}">{strength}</span>
+            Strength: <span
+                class="capitalize {strength === 'very strong' || strength === 'strong'
+                    ? 'text-green-400'
+                    : strength === 'fair'
+                      ? 'text-yellow-400'
+                      : 'text-red-400'}">{strength}</span
+            >
         </div>
     {/if}
 </ToolShell>

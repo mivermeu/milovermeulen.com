@@ -1,7 +1,13 @@
 <script lang="ts">
     import type { Snippet } from 'svelte';
 
-    let { children, title, desc, max = 'max-w-2xl', cls = '' }: {
+    let {
+        children,
+        title,
+        desc,
+        max = 'max-w-2xl',
+        cls = ''
+    }: {
         children: Snippet;
         title: string;
         desc: string;

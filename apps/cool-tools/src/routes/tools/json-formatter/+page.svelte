@@ -31,10 +31,7 @@
 </script>
 
 <ToolShell title="JSON Formatter" desc="Format, validate, and minify JSON.">
-    <textarea
-        placeholder="Paste JSON here..."
-        bind:value={input}
-        class="mb-3 h-32 w-full"
+    <textarea placeholder="Paste JSON here..." bind:value={input} class="mb-3 h-32 w-full"
     ></textarea>
 
     <div class="mb-4 flex flex-wrap gap-3">

@@ -15,7 +15,10 @@
     }
 
     function convert() {
-        if (!input) { output = ''; return; }
+        if (!input) {
+            output = '';
+            return;
+        }
         try {
             output = mode === 'encode' ? encodeUtf8(input) : decodeUtf8(input);
         } catch {
@@ -37,11 +40,17 @@
     }
 </script>
 
-<ToolShell title="Base64 Encoder / Decoder" desc="Encode text or files to Base64, or decode Base64 back to text.">
+<ToolShell
+    title="Base64 Encoder / Decoder"
+    desc="Encode text or files to Base64, or decode Base64 back to text."
+>
     <div class="mb-4 flex items-center gap-3">
         <Toggle
             value={mode}
-            options={[{ value: 'encode', label: 'Encode' }, { value: 'decode', label: 'Decode' }]}
+            options={[
+                { value: 'encode', label: 'Encode' },
+                { value: 'decode', label: 'Decode' }
+            ]}
             onpick={onPick}
         />
         <FilePick onfile={onFile} />
@@ -57,10 +66,5 @@
     <div class="mb-1 flex justify-end">
         <CopyButton value={output} />
     </div>
-    <textarea
-        readonly
-        value={output}
-        placeholder="Output"
-        class="h-32 w-full"
-    ></textarea>
+    <textarea readonly value={output} placeholder="Output" class="h-32 w-full"></textarea>
 </ToolShell>

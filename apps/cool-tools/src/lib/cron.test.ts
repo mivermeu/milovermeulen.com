@@ -28,10 +28,14 @@ describe('parseField', () => {
 
 describe('describeCron', () => {
     it('describes a star schedule', () => {
-        expect(describeCron(['*', '*', '*', '*', '*'])).toBe('every minute, every hour, every day of month, every month, every day of week');
+        expect(describeCron(['*', '*', '*', '*', '*'])).toBe(
+            'every minute, every hour, every day of month, every month, every day of week'
+        );
     });
     it('describes a step schedule', () => {
-        expect(describeCron(['*/5', '*', '*', '*', '*'])).toBe('every 5 minutes, every hour, every day of month, every month, every day of week');
+        expect(describeCron(['*/5', '*', '*', '*', '*'])).toBe(
+            'every 5 minutes, every hour, every day of month, every month, every day of week'
+        );
     });
     it('rejects fewer than 5 fields', () => {
         expect(describeCron(['*', '*'])).toBe('Invalid: need 5 fields');

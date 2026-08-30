@@ -18,7 +18,15 @@ describe('computeTransfers', () => {
     it('produces one transfer between two people for the net difference', () => {
         const transfers = computeTransfers(
             [alice, bob],
-            [{ paidBy: 'a', amount: 40, splitAmong: ['a', 'b'], desc: 'groceries', currency: 'USD' }],
+            [
+                {
+                    paidBy: 'a',
+                    amount: 40,
+                    splitAmong: ['a', 'b'],
+                    desc: 'groceries',
+                    currency: 'USD'
+                }
+            ],
             'USD'
         );
         expect(transfers).toEqual([{ from: 'b', to: 'a', amount: 20 }]);
@@ -49,7 +57,13 @@ describe('computeTransfers', () => {
         const transfers = computeTransfers(
             [alice, bob, carol],
             [
-                { paidBy: 'a', amount: 60, splitAmong: ['a', 'b', 'c'], desc: 'x', currency: 'USD' },
+                {
+                    paidBy: 'a',
+                    amount: 60,
+                    splitAmong: ['a', 'b', 'c'],
+                    desc: 'x',
+                    currency: 'USD'
+                },
                 { paidBy: 'b', amount: 30, splitAmong: ['a', 'b', 'c'], desc: 'y', currency: 'USD' }
             ],
             'USD'

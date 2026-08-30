@@ -10,9 +10,15 @@
     let hasHeader = $state(true);
 
     function convert() {
-        if (!input.trim()) { output = ''; return; }
+        if (!input.trim()) {
+            output = '';
+            return;
+        }
         try {
-            output = mode === 'csv-to-json' ? csvToJson(input, delimiter, hasHeader) : jsonToCsv(input, delimiter);
+            output =
+                mode === 'csv-to-json'
+                    ? csvToJson(input, delimiter, hasHeader)
+                    : jsonToCsv(input, delimiter);
         } catch (e) {
             output = 'Error: ' + (e as Error).message;
         }
@@ -23,8 +29,11 @@
     <div class="mb-4 flex flex-wrap items-center gap-3">
         <Toggle
             value={mode}
-            options={[{ value: 'csv-to-json', label: 'CSV → JSON' }, { value: 'json-to-csv', label: 'JSON → CSV' }]}
-            onpick={(v) => mode = v as 'csv-to-json' | 'json-to-csv'}
+            options={[
+                { value: 'csv-to-json', label: 'CSV → JSON' },
+                { value: 'json-to-csv', label: 'JSON → CSV' }
+            ]}
+            onpick={(v) => (mode = v as 'csv-to-json' | 'json-to-csv')}
         />
         {#if mode === 'csv-to-json'}
             <label class="text-sm text-brand-text" for="delim">Delimiter:</label>

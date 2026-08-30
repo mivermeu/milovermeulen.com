@@ -2,7 +2,9 @@
 
 ## Overview
 
-A new SvelteKit app at `/cool-tools` containing 16 free, client-side utilities. No backend, no sign-up, no tracking. All tools run entirely in the browser using native APIs and lightweight JS libraries.
+A new SvelteKit app at `/cool-tools` containing 16 free, client-side utilities. No backend, no
+sign-up, no tracking. All tools run entirely in the browser using native APIs and lightweight JS
+libraries.
 
 ## Tech Stack
 
@@ -14,17 +16,19 @@ A new SvelteKit app at `/cool-tools` containing 16 free, client-side utilities. 
 
 ## Dependencies (only 3)
 
-| Package | Size | Used by |
-|---------|------|---------|
+| Package  | Size   | Used by           |
+| -------- | ------ | ----------------- |
 | `qrcode` | ~135KB | QR Code Generator |
-| `marked` | ~50KB | Markdown Editor |
-| `diff` | ~30KB | Text Diff Viewer |
+| `marked` | ~50KB  | Markdown Editor   |
+| `diff`   | ~30KB  | Text Diff Viewer  |
 
-Everything else uses native APIs (`crypto.subtle`, `crypto.randomUUID`, `btoa`/`atob`, `File`, Canvas).
+Everything else uses native APIs (`crypto.subtle`, `crypto.randomUUID`, `btoa`/`atob`, `File`,
+Canvas).
 
 ## Tools (16)
 
 ### 1. Settle Up — Expense Splitter
+
 - Add people and expenses (who paid, how much, for whom)
 - Compute minimum-transfers using greedy debt simplification algorithm
 - localStorage persistence
@@ -33,6 +37,7 @@ Everything else uses native APIs (`crypto.subtle`, `crypto.randomUUID`, `btoa`/`
 - **Deps**: none
 
 ### 2. QR Code Generator
+
 - Text/URL input → QR code rendered as canvas/SVG
 - Download as PNG or SVG
 - Configurable size, error correction level
@@ -40,6 +45,7 @@ Everything else uses native APIs (`crypto.subtle`, `crypto.randomUUID`, `btoa`/`
 - **Deps**: `qrcode`
 
 ### 3. JSON Formatter / Validator
+
 - Paste JSON → formatted output with indentation
 - Validation with error messages (line/column)
 - Collapsible tree view (optional, add later)
@@ -47,6 +53,7 @@ Everything else uses native APIs (`crypto.subtle`, `crypto.randomUUID`, `btoa`/`
 - **Deps**: none (native `JSON.parse`/`JSON.stringify`)
 
 ### 4. Regex Tester
+
 - Input regex pattern + flags
 - Test string with live match highlighting
 - Show match groups
@@ -54,6 +61,7 @@ Everything else uses native APIs (`crypto.subtle`, `crypto.randomUUID`, `btoa`/`
 - **Deps**: none (native `RegExp`)
 
 ### 5. Color Palette Generator
+
 - Input hex/RGB/HSL → convert between formats
 - Generate complementary, analogous, triadic, split-complementary palettes
 - Copy individual colors
@@ -61,6 +69,7 @@ Everything else uses native APIs (`crypto.subtle`, `crypto.randomUUID`, `btoa`/`
 - **Deps**: none (HSL math)
 
 ### 6. Password Generator
+
 - Configurable length, character sets (uppercase, lowercase, digits, symbols)
 - Cryptographically secure via `crypto.getRandomValues()`
 - Copy button, strength indicator
@@ -68,12 +77,14 @@ Everything else uses native APIs (`crypto.subtle`, `crypto.randomUUID`, `btoa`/`
 - **Deps**: none
 
 ### 7. Markdown Editor
+
 - Split-pane: editor left, preview right
 - Live rendering via `marked`
 - **Complexity**: medium
 - **Deps**: `marked`
 
 ### 8. Base64 Encoder / Decoder
+
 - Text input → Base64 and vice versa
 - File support (read as ArrayBuffer, encode)
 - Handle UTF-8 properly (`TextEncoder`/`TextDecoder`)
@@ -81,6 +92,7 @@ Everything else uses native APIs (`crypto.subtle`, `crypto.randomUUID`, `btoa`/`
 - **Deps**: none
 
 ### 9. UUID Generator
+
 - Generate v4 UUIDs via `crypto.randomUUID()`
 - Batch generate (1–100)
 - Copy individual or all
@@ -88,6 +100,7 @@ Everything else uses native APIs (`crypto.subtle`, `crypto.randomUUID`, `btoa`/`
 - **Deps**: none
 
 ### 10. JWT Decoder
+
 - Paste JWT → split into header, payload, signature
 - Base64url-decode and pretty-print JSON
 - Show expiry, issued-at if present
@@ -95,6 +108,7 @@ Everything else uses native APIs (`crypto.subtle`, `crypto.randomUUID`, `btoa`/`
 - **Deps**: none
 
 ### 11. Cron Expression Visualizer
+
 - Input cron string (5 or 6 fields)
 - Show human-readable description
 - List next N execution times
@@ -102,6 +116,7 @@ Everything else uses native APIs (`crypto.subtle`, `crypto.randomUUID`, `btoa`/`
 - **Deps**: `cron-parser`
 
 ### 12. Text Diff Viewer
+
 - Two text areas (left/right)
 - Side-by-side diff with line-level highlighting
 - Additions in green, deletions in red
@@ -109,6 +124,7 @@ Everything else uses native APIs (`crypto.subtle`, `crypto.randomUUID`, `btoa`/`
 - **Deps**: `diff`
 
 ### 13. Hash Generator
+
 - Text or file input
 - Output SHA-256, SHA-1, SHA-512, MD5
 - Uses `crypto.subtle.digest()` (native)
@@ -116,6 +132,7 @@ Everything else uses native APIs (`crypto.subtle`, `crypto.randomUUID`, `btoa`/`
 - **Deps**: none
 
 ### 14. CSV ↔ JSON Converter
+
 - Paste CSV → JSON array of objects
 - Paste JSON array → CSV
 - Configurable delimiter, header row toggle
@@ -123,6 +140,7 @@ Everything else uses native APIs (`crypto.subtle`, `crypto.randomUUID`, `btoa`/`
 - **Deps**: none (simple parser)
 
 ### 15. CSS Gradient Generator
+
 - Visual editor with draggable color stops
 - Angle control for linear gradients
 - Radial gradient support
@@ -131,6 +149,7 @@ Everything else uses native APIs (`crypto.subtle`, `crypto.randomUUID`, `btoa`/`
 - **Deps**: none
 
 ### 16. WCAG Contrast Checker
+
 - Pick foreground and background colors
 - Show contrast ratio
 - AA/AAA pass/fail for normal and large text
@@ -173,7 +192,8 @@ apps/cool-tools/
             └── contrast-checker/+page.svelte
 ```
 
-Each tool is a self-contained `+page.svelte`. No shared `src/lib/` initially — extract shared components (copy button, textarea wrapper) only when 3+ tools duplicate the same UI pattern.
+Each tool is a self-contained `+page.svelte`. No shared `src/lib/` initially — extract shared
+components (copy button, textarea wrapper) only when 3+ tools duplicate the same UI pattern.
 
 ## Layout
 
@@ -186,11 +206,12 @@ Each tool is a self-contained `+page.svelte`. No shared `src/lib/` initially —
 1. **Scaffold** — config files, package.json, app.css, layout, landing page ← DONE
 2. **Layout** — sidebar navigation, responsive design, tool cards on landing page
 3. **Simple tools** (low complexity):
-   - UUID Generator → Password Generator → Base64 → Hash Generator → JWT Decoder
+    - UUID Generator → Password Generator → Base64 → Hash Generator → JWT Decoder
 4. **Medium tools**:
-   - JSON Formatter → Regex Tester → Color Palette → Contrast Checker → CSV↔JSON → Cron Visualizer → CSS Gradient Generator
+    - JSON Formatter → Regex Tester → Color Palette → Contrast Checker → CSV↔JSON → Cron Visualizer
+      → CSS Gradient Generator
 5. **Complex tools**:
-   - QR Code Generator → Markdown Editor → Text Diff Viewer → Settle Up
+    - QR Code Generator → Markdown Editor → Text Diff Viewer → Settle Up
 6. **Polish** — consistent UI, copy buttons, responsive layout
 
 ## Design Decisions
@@ -199,7 +220,8 @@ Each tool is a self-contained `+page.svelte`. No shared `src/lib/` initially —
 - **No shared lib initially**: Each tool is a single page. Extract only when duplication appears.
 - **Sidebar layout**: `+layout.svelte` renders sidebar + content. Responsive hamburger on mobile.
 - **Landing page**: Grid of tool cards, not a blank page.
-- **Consistent UI**: Each tool follows the same pattern: title, description, input area, action button, output area. Uses shared-config theme tokens.
+- **Consistent UI**: Each tool follows the same pattern: title, description, input area, action
+  button, output area. Uses shared-config theme tokens.
 
 ## Skipped (add when needed)
 

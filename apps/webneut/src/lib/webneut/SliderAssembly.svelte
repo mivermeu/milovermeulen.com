@@ -1,12 +1,14 @@
 <script lang="ts">
     import RangeSlider from '$lib/webneut/RangeSlider.svelte';
-    import { animatingParameter, makeRange as doMakeRange, setValue } from '$lib/webneut/state.svelte';
+    import {
+        animatingParameter,
+        makeRange as doMakeRange,
+        setValue
+    } from '$lib/webneut/state.svelte';
     import type { Parameter } from '$lib/webneut/types';
 
-    let {
-        parameter,
-        action_buttons = false
-    }: { parameter: Parameter; action_buttons?: boolean } = $props();
+    let { parameter, action_buttons = false }: { parameter: Parameter; action_buttons?: boolean } =
+        $props();
 
     function make_range() {
         doMakeRange(parameter);

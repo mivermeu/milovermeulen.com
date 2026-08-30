@@ -15,7 +15,12 @@
     let pctRight = $derived(
         Math.min(
             100,
-            Math.max(0, parameter.values.length > 1 ? ((parameter.values[1] - min) / (max - min)) * 100 : 100)
+            Math.max(
+                0,
+                parameter.values.length > 1
+                    ? ((parameter.values[1] - min) / (max - min)) * 100
+                    : 100
+            )
         )
     );
 
@@ -86,7 +91,9 @@
         cursor: pointer;
         pointer-events: auto;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
-        transition: background-color 0.15s, border-color 0.15s;
+        transition:
+            background-color 0.15s,
+            border-color 0.15s;
     }
 
     .thumb-input:hover::-webkit-slider-thumb,
@@ -103,7 +110,9 @@
         cursor: pointer;
         pointer-events: auto;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
-        transition: background-color 0.15s, border-color 0.15s;
+        transition:
+            background-color 0.15s,
+            border-color 0.15s;
     }
 
     .thumb-input:hover::-moz-range-thumb,

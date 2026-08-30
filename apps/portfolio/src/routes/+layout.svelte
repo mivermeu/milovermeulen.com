@@ -7,7 +7,10 @@
 
 <svelte:head>
     <title>Milo Vermeulen</title>
-    <meta name="description" content="Full-stack engineer. Particle physics PhD. CERN, ESA, proton therapy, web." />
+    <meta
+        name="description"
+        content="Full-stack engineer. Particle physics PhD. CERN, ESA, proton therapy, web."
+    />
     <link rel="icon" href={favicon} />
 </svelte:head>
 

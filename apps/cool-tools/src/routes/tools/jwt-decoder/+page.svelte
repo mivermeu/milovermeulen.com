@@ -11,24 +11,37 @@
     let error = $state('');
 
     function decode() {
-        error = ''; header = ''; payload = ''; signature = ''; expiry = '';
+        error = '';
+        header = '';
+        payload = '';
+        signature = '';
+        expiry = '';
         if (!token.trim()) return;
         const parts = token.trim().split('.');
-        if (parts.length !== 3) { error = 'Invalid JWT: expected 3 parts separated by dots.'; return; }
+        if (parts.length !== 3) {
+            error = 'Invalid JWT: expected 3 parts separated by dots.';
+            return;
+        }
         try {
             header = JSON.stringify(b64urlToJson(parts[0]), null, 2);
             const p = b64urlToJson(parts[1]) as Record<string, unknown>;
             payload = JSON.stringify(p, null, 2);
             signature = parts[2];
             if (p.exp) expiry = `Expires: ${new Date(Number(p.exp) * 1000).toISOString()}`;
-            if (p.iat) expiry += (expiry ? ' | ' : '') + `Issued: ${new Date(Number(p.iat) * 1000).toISOString()}`;
+            if (p.iat)
+                expiry +=
+                    (expiry ? ' | ' : '') +
+                    `Issued: ${new Date(Number(p.iat) * 1000).toISOString()}`;
         } catch (e) {
             error = 'Failed to decode: ' + (e as Error).message;
         }
     }
 </script>
 
-<ToolShell title="JWT Decoder" desc="Decode and inspect JSON Web Tokens (client-side only, no validation).">
+<ToolShell
+    title="JWT Decoder"
+    desc="Decode and inspect JSON Web Tokens (client-side only, no validation)."
+>
     <textarea
         placeholder="Paste JWT here..."
         bind:value={token}
