@@ -23,10 +23,14 @@ export function categorize(name: string): { functionType: string; constellation:
     else if (/^BEIDOU/i.test(name)) constellation = 'beidou';
 
     let functionType = 'other';
-    if (/^(NOAA|METOP|GOES|METEOSAT|HIMAWARI|SUOMI|FY-|ELEKTRO|ARCTICA)/i.test(name))
+    if (
+        /^(NOAA|METOP|GOES|METEOSAT|HIMAWARI|SUOMI|FY-|ELEKTRO|ARCTICA|MTSAT|INSAT|TIROS|NPP|JPSS|GCOM|COSPAS|MSG)/i.test(
+            name
+        )
+    )
         functionType = 'weather';
     else if (
-        /^(LANDSAT|SENTINEL|TERRA|AQUA|SMAP|SWOT|ICESAT|GRACE|MODIS|ALOS|WORLDVIEW|PLANET|KAITUO)/i.test(
+        /^(LANDSAT|SENTINEL|TERRA|AQUA|SMAP|SWOT|ICESAT|GRACE|MODIS|ALOS|WORLDVIEW|PLANET|KAITUO|SPOT|RADARSAT|CBERS|PROBA|ENVISAT|ERS|JASON|KOMPSAT|COSMO-SKYMED|TERRASAR|TANDEM|QUICKBIRD|IKONOS|OCEANSAT|RISAT|CAPELLA|ICEYE|BLACKSKY|ALBEDO|PIXXEL|GHGSAT|ORORATECH|BIOMASS|SAOCOM|DEIMOS|DMC|MEGHA|SHIZUKU|SHIKISAI)/i.test(
             name
         )
     )
@@ -34,14 +38,15 @@ export function categorize(name: string): { functionType: string; constellation:
     else if (/^(GPS|NAVSTAR|GALILEO|GLONASS|BEIDOU|QZS|NAVIC|IRNSS)/i.test(name))
         functionType = 'navigation';
     else if (/COSMOS.*GLONASS|GLONASS.*COSMOS/i.test(name)) functionType = 'navigation';
-    else if (/^(COSMOS|YAOGAN|GAOFEN|JILIN|TANCE|CSOH)/i.test(name)) functionType = 'military';
+    else if (/^(COSMOS|YAOGAN|GAOFEN|JILIN|TANCE|CSOH|USA-|KH-|LACROSSE|MISTY|ORION|MENTOR|SDS|QUASAR|SAR.LUPE|SAPPHIRE|PRAETORIAN|STSS|SBIRS)/i.test(name))
+        functionType = 'military';
     else if (
-        /^(STARLINK|ONEWEB|IRIDIUM|GLOBALSTAR|FLOCK|SWARM|INMARSAT|INTELSAT|EUTELSAT|SES|TDRS|MOLNIYA|ASTRA)/i.test(
+        /^(STARLINK|ONEWEB|IRIDIUM|GLOBALSTAR|FLOCK|SWARM|INMARSAT|INTELSAT|EUTELSAT|SES|TDRS|MOLNIYA|ASTRA|ORBCOMM|TELSAT|VIASAT|HUGHES|AMOS|HISPASAT|NILESAT|ARABSAT|THURAYA|ABS|MEXSAT|SIRIUM|XM-|SIRIUS|SKYNET|LUCH|GORIZONT|EXPRES|YAMAL|KUIPER|GUOWANG|QIANFAN)/i.test(
             name
-        )
+    )
     )
         functionType = 'communications';
-    else if (/^(ISS|TIANGONG|HST|CREW DRAGON|CYGNUS|PROGRESS|SOYUZ|SHENZHOU|TIANZHOU)/i.test(name))
+    else if (/^(ISS|TIANGONG|HST|JWST|CREW DRAGON|CYGNUS|PROGRESS|SOYUZ|SHENZHOU|TIANZHOU|CHANDRA|KEPLER|TESS|FERMI|WMAP|PLANCK|HERSCHEL|IXPE|NUSTAR|SDO|SORCE|CALIPSO|CLOUDSAT|OCO|AQUARIUS|SMOS|CFOSAT|SCATSAT|HY-)/i.test(name))
         functionType = 'science';
 
     return { functionType, constellation };
