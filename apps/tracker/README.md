@@ -1,6 +1,8 @@
 # Satellite Tracker
 
-A real-time 3D satellite globe tracker built with SvelteKit, three.js, and satellite.js. Renders ~16,000 active satellites on an interactive globe with live positions, orbits, and hover/click info panels.
+A real-time 3D satellite globe tracker built with SvelteKit, three.js, and satellite.js. Renders
+~16,000 active satellites on an interactive globe with live positions, orbits, and hover/click info
+panels.
 
 **Live at:** [/tracker](https://milovermeulen.com/tracker)
 
@@ -36,10 +38,10 @@ VITE_SATELLITE_API_URL=http://localhost:8081/tles.json
 VITE_SATELLITE_API_KEY=your-api-key
 ```
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `VITE_SATELLITE_API_URL` | No | URL of the local TLE API server. Falls back to CelesTrak if unset. |
-| `VITE_SATELLITE_API_KEY` | No | API key for the local server. Falls back to CelesTrak if unset. |
+| Variable                 | Required | Description                                                        |
+| ------------------------ | -------- | ------------------------------------------------------------------ |
+| `VITE_SATELLITE_API_URL` | No       | URL of the local TLE API server. Falls back to CelesTrak if unset. |
+| `VITE_SATELLITE_API_KEY` | No       | API key for the local server. Falls back to CelesTrak if unset.    |
 
 Without these, the app fetches TLE data directly from CelesTrak (public, no auth needed).
 
@@ -59,7 +61,8 @@ bun run build           # local dev build
 bun run build:prod      # production build (bakes in API URL + key from .env)
 ```
 
-The production build reads the API key from `.env` and embeds it in the client bundle. This is acceptable for a personal project; for sensitive data, use a backend proxy.
+The production build reads the API key from `.env` and embeds it in the client bundle. This is
+acceptable for a personal project; for sensitive data, use a backend proxy.
 
 ### Other Commands
 
@@ -91,20 +94,22 @@ src/
 
 ### Key Design Decisions
 
-- **All positions computed in ECI** (inertial). ECF display achieved by rotating earth/graticule by `-gmst` while dots and orbits stay in ECI.
+- **All positions computed in ECI** (inertial). ECF display achieved by rotating earth/graticule by
+  `-gmst` while dots and orbits stay in ECI.
 - **Single draw call** for all satellite dots (radial gradient texture, vertex colors).
 - **Zoom-adaptive point size** — dots scale relative to the globe as you zoom in.
-- **Orbit ellipses** sampled over one full period in ECI (closed loops), rotated by delta GMST for ECF display.
+- **Orbit ellipses** sampled over one full period in ECI (closed loops), rotated by delta GMST for
+  ECF display.
 - **Hover highlight** extracts one satellite's orbit from the shared buffer; pin persists it.
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Framework | SvelteKit + Svelte 5 (runes) |
-| 3D Rendering | three.js |
-| Orbital Mechanics | satellite.js (SGP4/SDP4) |
-| Styling | Tailwind CSS v4 |
-| Build | Vite + Turborepo |
-| Compute Offload | Web Worker (SGP4 propagation) |
-| Data | Natural Earth 110m (coastlines) |
+| Layer             | Technology                      |
+| ----------------- | ------------------------------- |
+| Framework         | SvelteKit + Svelte 5 (runes)    |
+| 3D Rendering      | three.js                        |
+| Orbital Mechanics | satellite.js (SGP4/SDP4)        |
+| Styling           | Tailwind CSS v4                 |
+| Build             | Vite + Turborepo                |
+| Compute Offload   | Web Worker (SGP4 propagation)   |
+| Data              | Natural Earth 110m (coastlines) |

@@ -16,20 +16,37 @@
                 onError: (message: string) => {
                     trackerState.error = message;
                 },
-                onHover: (index: number, name: string | null, screenX: number, screenY: number) => {
-                    if (index < 0 || !name) {
+                onHover: (
+                    filteredIndex: number,
+                    name: string | null,
+                    screenX: number,
+                    screenY: number
+                ) => {
+                    if (!scene || filteredIndex < 0 || !name) {
                         trackerState.hovered = null;
                     } else {
-                        trackerState.hovered = { index, name, screenX, screenY };
+                        const origIdx = scene.getOriginalIndex(filteredIndex);
+                        trackerState.hovered = {
+                            originalIndex: origIdx,
+                            name,
+                            screenX,
+                            screenY
+                        };
                     }
                 },
-                onSelect: (index: number) => {
-                    if (index < 0) {
-                        trackerState.pinnedIndex = -1;
-                    } else if (trackerState.pinnedIndex === index) {
+                onSelect: (filteredIndex: number) => {
+                    if (!scene) return;
+                    if (filteredIndex < 0) {
                         trackerState.pinnedIndex = -1;
                     } else {
-                        trackerState.pinnedIndex = index;
+                        const origIdx = scene.getOriginalIndex(filteredIndex);
+                        if (origIdx < 0) {
+                            trackerState.pinnedIndex = -1;
+                        } else if (trackerState.pinnedIndex === origIdx) {
+                            trackerState.pinnedIndex = -1;
+                        } else {
+                            trackerState.pinnedIndex = origIdx;
+                        }
                     }
                 }
             }) ?? undefined;
@@ -43,12 +60,25 @@
 
     $effect(() => {
         if (!scene) return;
+        const indices = trackerState.activeIndices;
+        const sats = trackerState.satellites;
+        if (sats.length === 0) return;
+        const filtered = indices.map((i) => sats[i]);
+        trackerState.hovered = null;
+        trackerState.pinnedIndex = -1;
+        scene.setFilter(filtered, indices);
+    });
+
+    $effect(() => {
+        if (!scene) return;
         const pi = trackerState.pinnedIndex;
         const hv = trackerState.hovered;
         if (pi >= 0) {
-            scene.showHighlight(pi);
+            const filteredIdx = trackerState.activeIndices.indexOf(pi);
+            if (filteredIdx >= 0) scene.showHighlight(filteredIdx);
         } else if (hv) {
-            scene.showHighlight(hv.index);
+            const filteredIdx = trackerState.activeIndices.indexOf(hv.originalIndex);
+            if (filteredIdx >= 0) scene.showHighlight(filteredIdx);
         } else {
             scene.hideHighlight();
         }

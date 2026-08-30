@@ -1,6 +1,8 @@
 # Satellite Tracker Backend
 
-TLE data fetcher and API server for the [Satellite Tracker](../tracker/) app. Fetches orbital data from Space-Track (with CelesTrak fallback), persists it to disk, and serves it over HTTP with API key authentication.
+TLE data fetcher and API server for the [Satellite Tracker](../tracker/) app. Fetches orbital data
+from Space-Track (with CelesTrak fallback), persists it to disk, and serves it over HTTP with API
+key authentication.
 
 Zero external Python dependencies — stdlib only.
 
@@ -19,10 +21,10 @@ Space-Track / CelesTrak
 
 Two independent components that share a JSON file on disk:
 
-| Component | Purpose | Runs |
-|-----------|---------|------|
-| `fetch.py` | Fetches TLE data, merges with existing, writes atomically | Cron / systemd timer (every 6h) |
-| `server.py` | Serves `tles.json` with API key auth | systemd service (always-on) |
+| Component   | Purpose                                                   | Runs                            |
+| ----------- | --------------------------------------------------------- | ------------------------------- |
+| `fetch.py`  | Fetches TLE data, merges with existing, writes atomically | Cron / systemd timer (every 6h) |
+| `server.py` | Serves `tles.json` with API key auth                      | systemd service (always-on)     |
 
 ## Quick Start (Local Development)
 
@@ -103,12 +105,12 @@ curl -H "X-API-Key: $(cat ~/.config/satellite-api/key)" http://localhost:8081/tl
 
 ## Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `SATELLITE_API_HOST` | `127.0.0.1` | Server bind address |
-| `SATELLITE_API_PORT` | `8081` | Server port |
-| `SATELLITE_DATA_DIR` | `/var/www/satellite-api` | Directory to serve files from |
-| `SATELLITE_API_KEY_FILE` | `~/.config/satellite-api/key` | Path to API key file |
+| Variable                 | Default                       | Description                   |
+| ------------------------ | ----------------------------- | ----------------------------- |
+| `SATELLITE_API_HOST`     | `127.0.0.1`                   | Server bind address           |
+| `SATELLITE_API_PORT`     | `8081`                        | Server port                   |
+| `SATELLITE_DATA_DIR`     | `/var/www/satellite-api`      | Directory to serve files from |
+| `SATELLITE_API_KEY_FILE` | `~/.config/satellite-api/key` | Path to API key file          |
 
 ## Frontend Integration
 

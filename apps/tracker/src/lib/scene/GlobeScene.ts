@@ -82,6 +82,7 @@ export class GlobeScene {
     private lastPointerMoveWall = 0;
     private pointerDownX = 0;
     private pointerDownY = 0;
+    private filteredToOriginal = new Map<number, number>();
 
     private prevPositions: Float32Array | null = null;
     private nextPositions: Float32Array | null = null;
@@ -108,11 +109,12 @@ export class GlobeScene {
 
     private constructor(
         canvas: HTMLCanvasElement,
-        private readonly satellites: ParsedSatellite[],
+        private satellites: ParsedSatellite[],
         private readonly callbacks: GlobeSceneCallbacks,
         renderer: THREE.WebGLRenderer
     ) {
         this.renderer = renderer;
+        this.filteredToOriginal = new Map();
 
         this.scene = new THREE.Scene();
         this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
@@ -305,6 +307,7 @@ export class GlobeScene {
             this.callbacks.onError?.('No propagable satellites found in catalog.');
             return;
         }
+        this.callbacks.onError?.('');
         this.requestPositions();
         if (this.showOrbits) this.requestOrbits();
     }
@@ -453,6 +456,43 @@ export class GlobeScene {
         this.showOrbits = show;
         if (show && this.ready && !this.orbitsReady) this.requestOrbits();
         this.orbitMesh.visible = show && this.orbitsReady;
+    }
+
+    setFilter(filteredSatellites: ParsedSatellite[], activeIndices: number[]): void {
+        this.hideHighlight();
+        this.orbitsReady = false;
+        this.orbitPositions = null;
+        this.orbitRanges = [];
+        this.orbitMesh.visible = false;
+        this.orbitGeometry.setAttribute(
+            'position',
+            new THREE.BufferAttribute(new Float32Array(0), 3)
+        );
+        this.ready = false;
+        this.positionRequestPending = false;
+        this.satellites = filteredSatellites;
+        this.filteredToOriginal.clear();
+        for (let i = 0; i < activeIndices.length; i++) {
+            this.filteredToOriginal.set(i, activeIndices[i]);
+        }
+        this.positionArray = new Float32Array(filteredSatellites.length * 3);
+        this.pointsGeometry.setAttribute(
+            'position',
+            new THREE.BufferAttribute(this.positionArray, 3)
+        );
+        this.worker.postMessage({
+            type: 'init',
+            satellites: filteredSatellites.map(({ name, line1, line2 }) => ({
+                name,
+                line1,
+                line2
+            })),
+            scale: SCALE
+        });
+    }
+
+    getOriginalIndex(filteredIndex: number): number {
+        return this.filteredToOriginal.get(filteredIndex) ?? -1;
     }
 
     private requestPositions(): void {
