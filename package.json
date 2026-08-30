@@ -8,7 +8,7 @@
     ],
     "scripts": {
         "dev": "turbo dev",
-        "build": "turbo build",
+        "build": "turbo build && ./scripts/build-tracker-prod.sh",
         "lint": "turbo lint",
         "format": "prettier --write .",
         "check": "turbo check",
