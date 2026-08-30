@@ -14,16 +14,28 @@
     let pinnedIndex = $derived(trackerState.pinnedIndex);
     let hovered = $derived(trackerState.hovered);
     let sat = $derived(pinnedIndex >= 0 ? trackerState.satellites[pinnedIndex] : null);
+    let now = $state(Date.now());
+
+    $effect(() => {
+        let raf: number;
+        const tick = () => {
+            now = Date.now();
+            raf = requestAnimationFrame(tick);
+        };
+        raf = requestAnimationFrame(tick);
+        return () => cancelAnimationFrame(raf);
+    });
 
     let orbitalData = $derived.by(() => {
         if (!sat) return null;
+        const _t = now;
         try {
             const satrec = twoline2satrec(sat.line1, sat.line2);
-            const now = new Date();
-            const pv = propagate(satrec, now);
+            const date = new Date(_t);
+            const pv = propagate(satrec, date);
             if (!pv.position || typeof pv.position === 'boolean') return null;
 
-            const gmst = gstime(now);
+            const gmst = gstime(date);
             const geo = eciToGeodetic(pv.position, gmst);
 
             const periodMin = (2 * Math.PI) / satrec.no / ((2 * Math.PI) / 1440);

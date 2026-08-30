@@ -112,7 +112,7 @@ export class GlobeScene {
         this.filteredToOriginal = new Map();
 
         this.scene = new THREE.Scene();
-        this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
+        this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 10000);
         this.camera.position.set(0, 25, 0);
         this.camera.up.set(0, 0, 1);
 
@@ -121,7 +121,7 @@ export class GlobeScene {
         this.controls.dampingFactor = 0.08;
         this.controls.enablePan = false;
         this.controls.minDistance = 9;
-        this.controls.maxDistance = 90;
+        this.controls.maxDistance = 500;
         this.controls.listenToKeyEvents(canvas);
 
         this.earth = new THREE.Mesh(
