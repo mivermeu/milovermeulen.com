@@ -12,14 +12,6 @@ import {
 
 export type { TreeNode, TriState } from '$lib/tree';
 
-export const SPEED_OPTIONS = [
-    { label: 'Pause', value: 0 },
-    { label: '1×', value: 1 },
-    { label: '5×', value: 5 },
-    { label: '15×', value: 15 },
-    { label: '60×', value: 60 }
-] as const;
-
 export interface HoverInfo {
     originalIndex: number;
     name: string;
@@ -30,12 +22,8 @@ export interface HoverInfo {
 export const trackerState = $state({
     satellites: [] as ParsedSatellite[],
     showOrbits: true,
-    speed: 1,
     dataSource: 'loading' as DataSource,
     error: '',
-    simDateTime: '',
-    simTimeMs: Date.now(),
-    setSimTime: null as ((ms: number) => void) | null,
     referenceFrame: 'ecf' as 'ecf' | 'eci',
     hovered: null as HoverInfo | null,
     pinnedIndex: -1,

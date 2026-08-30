@@ -51,7 +51,6 @@
 
     $effect(() => {
         if (!scene) return;
-        scene.setSpeed(trackerState.speed);
         scene.setShowOrbits(trackerState.showOrbits);
     });
 

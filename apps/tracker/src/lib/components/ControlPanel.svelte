@@ -1,9 +1,15 @@
 <script lang="ts">
-    import { SPEED_OPTIONS, trackerState } from '$lib/state.svelte';
+    import { trackerState } from '$lib/state.svelte';
     import Panel from './Panel.svelte';
 
-    const SCRUB_RANGE_MS = 30 * 24 * 60 * 60 * 1000;
-    const now = Date.now();
+    let now = $state(new Date());
+
+    $effect(() => {
+        const id = setInterval(() => (now = new Date()), 1000);
+        return () => clearInterval(id);
+    });
+
+    const utcString = $derived(now.toISOString().replace('T', ' ').slice(0, 19) + ' UTC');
 </script>
 
 <Panel title="Controls">
@@ -16,23 +22,6 @@
                 class="h-3 w-3 accent-brand-primary"
             />
         </label>
-
-        <div>
-            <p class="mb-1 text-[10px] text-brand-text">Speed</p>
-            <div class="flex flex-wrap gap-1">
-                {#each SPEED_OPTIONS as option (option.value)}
-                    <button
-                        type="button"
-                        class="speed-btn"
-                        class:active={trackerState.speed === option.value}
-                        aria-pressed={trackerState.speed === option.value}
-                        onclick={() => (trackerState.speed = option.value)}
-                    >
-                        {option.label}
-                    </button>
-                {/each}
-            </div>
-        </div>
 
         <div>
             <p class="mb-1 text-[10px] text-brand-text">Frame</p>
@@ -60,21 +49,9 @@
 
         <div>
             <p class="mb-1 text-[10px] text-brand-text">Time</p>
-            <p class="mb-1 font-mono text-[10px] text-brand-text-highlight">
-                {trackerState.simDateTime || '—'}
+            <p class="font-mono text-[10px] text-brand-text-highlight">
+                {utcString}
             </p>
-            <input
-                type="range"
-                min={now - SCRUB_RANGE_MS}
-                max={now + SCRUB_RANGE_MS}
-                step={60000}
-                value={now}
-                oninput={(e) => {
-                    trackerState.setSimTime?.(Number(e.currentTarget.value));
-                    trackerState.speed = 0;
-                }}
-                class="w-full accent-brand-primary"
-            />
         </div>
     </div>
 </Panel>

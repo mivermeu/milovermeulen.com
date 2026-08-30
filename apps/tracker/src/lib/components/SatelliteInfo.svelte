@@ -17,10 +17,9 @@
 
     let orbitalData = $derived.by(() => {
         if (!sat) return null;
-        const _t = trackerState.simTimeMs;
         try {
             const satrec = twoline2satrec(sat.line1, sat.line2);
-            const now = new Date(_t);
+            const now = new Date();
             const pv = propagate(satrec, now);
             if (!pv.position || typeof pv.position === 'boolean') return null;
 

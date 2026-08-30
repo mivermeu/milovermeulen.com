@@ -60,13 +60,10 @@ export class GlobeScene {
     private readonly onPointerUp: (event: PointerEvent) => void;
     private readonly canvas: HTMLCanvasElement;
 
-    private speed = 1;
     private ready = false;
-    private simTimeMs = Date.now();
     private lastFrameWall = performance.now();
     private lastRequestWall = 0;
     private lastOrbitBuildWall = 0;
-    private lastDateTimeUpdate = 0;
     private lastReferenceFrame: 'ecf' | 'eci' = 'ecf';
     private positionRequestPending = false;
     private positionRequestSeq = 0;
@@ -222,10 +219,6 @@ export class GlobeScene {
             scale: SCALE
         });
 
-        trackerState.setSimTime = (ms: number) => {
-            this.simTimeMs = ms;
-        };
-
         this.raf = requestAnimationFrame(() => this.loop());
     }
 
@@ -312,7 +305,7 @@ export class GlobeScene {
     private onPositions(message: WorkerResponse): void {
         this.positionRequestPending = false;
         const positions = message.positions;
-        const epoch = message.epoch ?? this.simTimeMs;
+        const epoch = message.epoch ?? Date.now();
         if (!positions) return;
         if (epoch <= this.nextEpoch && this.nextPositions) return;
         this.prevPositions = this.nextPositions;
@@ -334,7 +327,7 @@ export class GlobeScene {
         if (!positions || vertexCount === 0) return;
         this.orbitPositions = positions;
         this.orbitRanges = message.ranges ?? [];
-        this.orbitBuildGmst = gstime(new Date(this.simTimeMs));
+        this.orbitBuildGmst = gstime(new Date());
         this.orbitsReady = true;
         this.applyOrbitGeometry();
         if (this.highlightIndex >= 0) this.showHighlight(this.highlightIndex);
@@ -480,10 +473,6 @@ export class GlobeScene {
         this.applyOrbitGeometry();
     }
 
-    setSpeed(speed: number): void {
-        this.speed = speed;
-    }
-
     setShowOrbits(show: boolean): void {
         this.showOrbits = show;
         if (show && this.ready && !this.orbitsReady) this.requestOrbits();
@@ -533,7 +522,7 @@ export class GlobeScene {
         this.positionRequestSeq++;
         this.worker.postMessage({
             type: 'propagate',
-            epoch: Math.round(this.simTimeMs + this.speed * POSITION_CADENCE_MS),
+            epoch: Math.round(Date.now() + POSITION_CADENCE_MS),
             requestId: this.positionRequestSeq
         });
     }
@@ -543,7 +532,7 @@ export class GlobeScene {
         this.orbitRequestSeq++;
         this.worker.postMessage({
             type: 'buildOrbits',
-            epoch: Math.round(this.simTimeMs),
+            epoch: Math.round(Date.now()),
             requestId: this.orbitRequestSeq,
             pointsPerOrbit: ORBIT_POINTS_PER_SAT,
             frame: trackerState.referenceFrame
@@ -553,20 +542,13 @@ export class GlobeScene {
     private loop = (): void => {
         if (this.disposed) return;
         const now = performance.now();
-        const deltaSeconds = Math.min((now - this.lastFrameWall) / 1000, 0.1);
         this.lastFrameWall = now;
-
-        if (this.speed > 0) {
-            this.simTimeMs += deltaSeconds * this.speed * 1000;
-            trackerState.simTimeMs = this.simTimeMs;
-        }
 
         if (this.positionRequestPending && now - this.lastRequestWall > 3 * POSITION_CADENCE_MS) {
             this.positionRequestPending = false;
         }
 
         if (
-            this.speed > 0 &&
             this.ready &&
             !this.positionRequestPending &&
             now - this.lastRequestWall >= POSITION_CADENCE_MS
@@ -581,11 +563,6 @@ export class GlobeScene {
             now - this.lastOrbitBuildWall >= ORBIT_REBUILD_INTERVAL_MS
         ) {
             this.requestOrbits();
-        }
-
-        if (now - this.lastDateTimeUpdate > 1000) {
-            this.lastDateTimeUpdate = now;
-            trackerState.simDateTime = formatUtc(this.simTimeMs);
         }
 
         if (trackerState.referenceFrame !== this.lastReferenceFrame) {
@@ -611,7 +588,7 @@ export class GlobeScene {
             this.callbacks.onHover?.(this.highlightIndex, sat?.name ?? null, sx, sy);
         }
 
-        const gmst = gstime(new Date(this.simTimeMs));
+        const gmst = gstime(new Date());
         const eci = trackerState.referenceFrame === 'eci';
         const orbitDelta = eci ? this.orbitBuildGmst - gmst : 0;
         this.orbitMesh.rotation.z = orbitDelta;
@@ -628,7 +605,7 @@ export class GlobeScene {
     private updatePositions(): void {
         if (!this.nextPositions || !this.prevPositions) return;
         const span = this.nextEpoch - this.prevEpoch;
-        let blend = span > 0 ? (this.simTimeMs - this.prevEpoch) / span : 1;
+        let blend = span > 0 ? (Date.now() - this.prevEpoch) / span : 1;
         if (blend < 0) blend = 0;
         if (blend > 1) blend = 1;
         const target = this.nextPositions;
@@ -687,10 +664,6 @@ function buildCircleTexture(): THREE.Texture {
         ctx.fillRect(0, 0, size, size);
     }
     return new THREE.CanvasTexture(canvas);
-}
-
-function formatUtc(ms: number): string {
-    return new Date(ms).toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
 }
 
 function latLonToVector(latitudeDeg: number, longitudeDeg: number, radius: number): THREE.Vector3 {
