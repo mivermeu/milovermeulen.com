@@ -31,8 +31,9 @@ export function categorize(name: string): { functionType: string; constellation:
         )
     )
         functionType = 'earth-observation';
-    else if (/^(GPS|GALILEO|GLONASS|BEIDOU|QZS|NAVIC|IRNSS)/i.test(name))
+    else if (/^(GPS|NAVSTAR|GALILEO|GLONASS|BEIDOU|QZS|NAVIC|IRNSS)/i.test(name))
         functionType = 'navigation';
+    else if (/COSMOS.*GLONASS|GLONASS.*COSMOS/i.test(name)) functionType = 'navigation';
     else if (/^(COSMOS|YAOGAN|GAOFEN|JILIN|TANCE|CSOH)/i.test(name)) functionType = 'military';
     else if (
         /^(STARLINK|ONEWEB|IRIDIUM|GLOBALSTAR|FLOCK|SWARM|INMARSAT|INTELSAT|EUTELSAT|SES|TDRS|MOLNIYA|ASTRA)/i.test(
