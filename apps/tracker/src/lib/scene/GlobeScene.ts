@@ -19,7 +19,6 @@ const ORBIT_REBUILD_INTERVAL_MS = 5000;
 const POINTER_THROTTLE_MS = 66;
 
 export interface GlobeSceneCallbacks {
-    onSatCount?: (count: number) => void;
     onError?: (message: string) => void;
     onHover?: (index: number, name: string | null, screenX: number, screenY: number) => void;
     onSelect?: (index: number) => void;
@@ -301,7 +300,6 @@ export class GlobeScene {
             'color',
             new THREE.Float32BufferAttribute(message.colors ?? new Float32Array(0), 3)
         );
-        this.callbacks.onSatCount?.(count);
         if (count === 0) {
             this.callbacks.onError?.('No propagable satellites found in catalog.');
             return;

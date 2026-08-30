@@ -10,9 +10,6 @@
         if (trackerState.satellites.length === 0 || scene) return;
         scene =
             GlobeScene.create(canvas, trackerState.satellites, {
-                onSatCount: (count: number) => {
-                    trackerState.renderedCount = count;
-                },
                 onError: (message: string) => {
                     trackerState.error = message;
                 },

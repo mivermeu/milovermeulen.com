@@ -31,7 +31,6 @@ export const trackerState = $state({
     satellites: [] as ParsedSatellite[],
     showOrbits: true,
     speed: 1,
-    renderedCount: 0,
     dataSource: 'loading' as DataSource,
     error: '',
     simDateTime: '',

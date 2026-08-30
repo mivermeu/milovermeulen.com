@@ -76,11 +76,6 @@
                 class="w-full accent-brand-primary"
             />
         </div>
-
-        <div class="flex justify-between text-[10px] text-brand-text">
-            <span>Sats</span>
-            <span class="font-mono text-brand-text-highlight">{trackerState.renderedCount}</span>
-        </div>
     </div>
 </Panel>
 
