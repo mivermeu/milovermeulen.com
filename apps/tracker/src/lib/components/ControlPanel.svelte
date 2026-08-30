@@ -20,7 +20,7 @@
                 bind:checked={trackerState.showOrbits}
                 class="h-3 w-3 accent-brand-primary"
             />
-            <span class="text-xs text-brand-text">Orbits</span>
+            <span class="text-xs text-brand-text">All orbits</span>
         </label>
 
         <label class="flex cursor-pointer items-center gap-2">

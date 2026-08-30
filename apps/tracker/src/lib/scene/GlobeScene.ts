@@ -49,6 +49,8 @@ export class GlobeScene {
     private readonly orbitGeometry: THREE.BufferGeometry;
     private readonly equatorRing: THREE.LineLoop;
     private readonly equatorialPlane: THREE.Mesh;
+    private readonly ascendingNode: THREE.LineLoop;
+    private readonly descendingNode: THREE.LineLoop;
     private readonly landMesh: LineSegments2;
     private readonly landGeometry: LineSegmentsGeometry;
     private readonly earth: THREE.Mesh;
@@ -70,6 +72,7 @@ export class GlobeScene {
     private positionRequestSeq = 0;
     private orbitRequestSeq = 0;
     private showOrbits = true;
+    private orbitsAutoDisabled = false;
     private orbitsReady = false;
     private orbitRanges: number[] = [];
     private orbitPositions: Float32Array | null = null;
@@ -145,6 +148,38 @@ export class GlobeScene {
         this.equatorialPlane = new THREE.Mesh(planeGeo, equatorialMat);
         this.equatorialPlane.visible = false;
         this.scene.add(this.equatorialPlane);
+
+        const nodeVerts: number[] = [];
+        for (let a = 0; a <= 360; a += 15) {
+            const rad = (a * Math.PI) / 180;
+            nodeVerts.push(Math.cos(rad) * 0.15, Math.sin(rad) * 0.15, 0);
+        }
+        const nodeGeo = new THREE.BufferGeometry();
+        nodeGeo.setAttribute('position', new THREE.Float32BufferAttribute(nodeVerts, 3));
+
+        this.ascendingNode = new THREE.LineLoop(
+            nodeGeo,
+            new THREE.LineBasicMaterial({
+                color: 0x22c55e,
+                transparent: true,
+                opacity: 0.8,
+                depthWrite: false
+            })
+        );
+        this.ascendingNode.visible = false;
+        this.scene.add(this.ascendingNode);
+
+        this.descendingNode = new THREE.LineLoop(
+            nodeGeo.clone(),
+            new THREE.LineBasicMaterial({
+                color: 0xef4444,
+                transparent: true,
+                opacity: 0.8,
+                depthWrite: false
+            })
+        );
+        this.descendingNode.visible = false;
+        this.scene.add(this.descendingNode);
 
         this.landGeometry = new LineSegmentsGeometry();
         this.landMesh = new LineSegments2(
@@ -362,14 +397,16 @@ export class GlobeScene {
         }
         this.orbitGeometry.setAttribute('position', new THREE.BufferAttribute(array, 3));
         this.orbitGeometry.setDrawRange(0, array.length / 3);
-        this.orbitMesh.visible = this.showOrbits;
+        this.orbitMesh.visible = this.showOrbits && this.orbitsReady;
+        // Highlight mesh stays visible when focused, regardless of showOrbits.
+        this.highlightMesh.visible = this.highlightIndex >= 0 && this.orbitsReady;
     }
 
     private handlePointerMove(event: PointerEvent): void {
         const now = performance.now();
         if (now - this.lastPointerMoveWall < POINTER_THROTTLE_MS) return;
         this.lastPointerMoveWall = now;
-        if (!this.ready || !this.points.visible || !this.showOrbits) {
+        if (!this.ready || !this.points.visible) {
             this.callbacks.onHover?.(-1, null, 0, 0);
             return;
         }
@@ -399,7 +436,7 @@ export class GlobeScene {
     }
 
     private handlePointerUp(event: PointerEvent): void {
-        if (!this.ready || !this.points.visible || !this.showOrbits) return;
+        if (!this.ready || !this.points.visible) return;
         const dx = event.clientX - this.pointerDownX;
         const dy = event.clientY - this.pointerDownY;
         if (dx * dx + dy * dy > 25) return;
@@ -462,7 +499,9 @@ export class GlobeScene {
 
     showHighlight(index: number): void {
         if (index < 0 || index * 2 + 1 >= this.orbitRanges.length) {
-            this.hideHighlight();
+            // No orbit data yet — request it so we can show the highlight.
+            if (index >= 0 && this.ready && !this.orbitsReady) this.requestOrbits();
+            this.highlightIndex = index;
             return;
         }
         const start = this.orbitRanges[index * 2];
@@ -476,6 +515,7 @@ export class GlobeScene {
         this.highlightGeometry.setAttribute('position', new THREE.BufferAttribute(array, 3));
         this.highlightMesh.visible = true;
         this.highlightIndex = index;
+        this.updateNodeMarkers(array);
         this.applyOrbitGeometry();
     }
 
@@ -483,11 +523,68 @@ export class GlobeScene {
         if (this.highlightIndex === -1) return;
         this.highlightIndex = -1;
         this.highlightMesh.visible = false;
+        this.ascendingNode.visible = false;
+        this.descendingNode.visible = false;
         this.applyOrbitGeometry();
+    }
+
+    private updateNodeMarkers(positions: Float32Array): void {
+        // Only show nodes when equatorial plane is visible.
+        if (!this.equatorialPlane.visible) {
+            this.ascendingNode.visible = false;
+            this.descendingNode.visible = false;
+            return;
+        }
+        // Orbit data is line segments: [v0x,v0y,v0z, v1x,v1y,v1z, v1x,v1y,v1z, v2x,v2y,v2z, ...]
+        // Extract the vertex chain (first vertex + every second vertex after).
+        const chain: number[] = [];
+        if (positions.length >= 3) {
+            chain.push(positions[0], positions[1], positions[2]);
+            for (let i = 6; i < positions.length; i += 6) {
+                chain.push(positions[i], positions[i + 1], positions[i + 2]);
+            }
+            // Last segment endpoint.
+            const last = positions.length - 3;
+            if (
+                last > 0 &&
+                (chain.length < 3 ||
+                    chain[chain.length - 3] !== positions[last] ||
+                    chain[chain.length - 2] !== positions[last + 1] ||
+                    chain[chain.length - 1] !== positions[last + 2])
+            ) {
+                chain.push(positions[last], positions[last + 1], positions[last + 2]);
+            }
+        }
+        let ascPoint: [number, number, number] | null = null;
+        let descPoint: [number, number, number] | null = null;
+        for (let i = 3; i < chain.length; i += 3) {
+            const z0 = chain[i - 1];
+            const z1 = chain[i + 2];
+            if (z0 * z1 < 0) {
+                const t = Math.abs(z0) / (Math.abs(z0) + Math.abs(z1));
+                const x = chain[i - 3] + (chain[i] - chain[i - 3]) * t;
+                const y = chain[i - 2] + (chain[i + 1] - chain[i - 2]) * t;
+                if (z0 < 0 && z1 > 0 && !ascPoint) ascPoint = [x, y, 0];
+                if (z0 > 0 && z1 < 0 && !descPoint) descPoint = [x, y, 0];
+            }
+        }
+        if (ascPoint) {
+            this.ascendingNode.position.set(ascPoint[0], ascPoint[1], ascPoint[2]);
+            this.ascendingNode.visible = true;
+        } else {
+            this.ascendingNode.visible = false;
+        }
+        if (descPoint) {
+            this.descendingNode.position.set(descPoint[0], descPoint[1], descPoint[2]);
+            this.descendingNode.visible = true;
+        } else {
+            this.descendingNode.visible = false;
+        }
     }
 
     setShowOrbits(show: boolean): void {
         this.showOrbits = show;
+        this.orbitsAutoDisabled = false;
         if (show && this.ready && !this.orbitsReady) this.requestOrbits();
         this.orbitMesh.visible = show && this.orbitsReady;
     }
@@ -508,6 +605,21 @@ export class GlobeScene {
         );
         this.ready = false;
         this.positionRequestPending = false;
+
+        // Auto-disable orbits for large catalogs; restore when count drops.
+        const ORBIT_AUTO_DISABLE = 5000;
+        if (activeIndices.length > ORBIT_AUTO_DISABLE) {
+            if (this.showOrbits) {
+                this.showOrbits = false;
+                this.orbitsAutoDisabled = true;
+                trackerState.showOrbits = false;
+            }
+        } else if (this.orbitsAutoDisabled) {
+            this.showOrbits = true;
+            this.orbitsAutoDisabled = false;
+            trackerState.showOrbits = true;
+        }
+
         this.satellites = filteredSatellites;
         this.filteredToOriginal.clear();
         for (let i = 0; i < activeIndices.length; i++) {
@@ -575,7 +687,7 @@ export class GlobeScene {
         }
 
         if (
-            this.showOrbits &&
+            (this.showOrbits || this.highlightIndex >= 0) &&
             this.ready &&
             now - this.lastOrbitBuildWall >= ORBIT_REBUILD_INTERVAL_MS
         ) {
@@ -585,7 +697,7 @@ export class GlobeScene {
         if (trackerState.referenceFrame !== this.lastReferenceFrame) {
             this.lastReferenceFrame = trackerState.referenceFrame;
             this.positionRequestPending = false;
-            if (this.showOrbits && this.ready) this.requestOrbits();
+            if ((this.showOrbits || this.highlightIndex >= 0) && this.ready) this.requestOrbits();
         }
 
         this.updatePositions();
@@ -653,6 +765,10 @@ export class GlobeScene {
         (this.equatorRing.material as THREE.Material).dispose();
         this.equatorialPlane.geometry.dispose();
         (this.equatorialPlane.material as THREE.Material).dispose();
+        this.ascendingNode.geometry.dispose();
+        (this.ascendingNode.material as THREE.Material).dispose();
+        this.descendingNode.geometry.dispose();
+        (this.descendingNode.material as THREE.Material).dispose();
         this.landGeometry.dispose();
         (this.landMesh.material as THREE.Material).dispose();
         this.earth.geometry.dispose();
