@@ -30,14 +30,18 @@
         </div>
     </header>
 
-    <div class="relative flex-1 overflow-hidden">
+    <div class="relative h-full w-full flex-1 overflow-hidden">
         <SatelliteViewer />
         <div class="pointer-events-none absolute inset-0 z-10">
             <SatelliteInfo />
         </div>
-        <div class="pointer-events-none absolute top-3 right-3 z-20 flex flex-col gap-3">
-            <ControlPanel />
-            <FilterPanel />
+        <div class="pointer-events-none absolute top-3 right-3 bottom-3 z-20 flex flex-col gap-3">
+            <div class="shrink-0">
+                <ControlPanel />
+            </div>
+            <div class="flex min-h-0 flex-col">
+                <FilterPanel />
+            </div>
         </div>
     </div>
 </div>

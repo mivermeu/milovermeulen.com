@@ -12,7 +12,7 @@
         of {trackerState.satellites.length}
     </div>
 
-    <div class="overflow-y-auto" style="max-height: calc(100vh - 280px)">
+    <div class="min-h-0 flex-1 overflow-y-auto">
         {#if trackerState.tree}
             <TreeNode node={trackerState.tree} />
         {/if}
