@@ -127,30 +127,15 @@ Without these, the frontend falls back to CelesTrak → bundled samples.
 
 ### nginx
 
-Put nginx in front of the API server for rate limiting, CORS, and header hiding:
+The config is in `nginx.conf`. Copy it to `/etc/nginx/sites-available/satellite-api` and symlink
+to `sites-enabled`. Requires a `limit_req_zone` directive in the `http` block of
+`/etc/nginx/nginx.conf`:
 
 ```nginx
-server {
-    listen 8080;
-    server_name _;
-
-    # Rate limiting
-    limit_req zone=api burst=10 nodelay;
-
-    # CORS for the tracker frontend
-    add_header Access-Control-Allow-Origin "https://your-domain.com" always;
-    add_header Access-Control-Allow-Headers "X-API-Key" always;
-
-    # Hide server header
-    server_tokens off;
-
-    location / {
-        proxy_pass http://127.0.0.1:8081;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
-}
+limit_req_zone $binary_remote_addr zone=satellite_api:10m rate=10r/s;
 ```
+
+CORS is handled by the Python server directly (`server.py`), not nginx.
 
 ### systemd
 
