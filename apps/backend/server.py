@@ -1,40 +1,27 @@
 """
 Satellite TLE API server.
 
-Serves TLE JSON data with API key authentication.
-Designed to run behind nginx reverse proxy (localhost only).
+Serves TLE JSON data. Designed to run behind nginx reverse proxy (localhost only).
 """
 
 from __future__ import annotations
 
 import json
 import os
-import sys
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from typing import Any
 
 
-def get_api_key() -> str | None:
-    """Read API key from file. Returns None if not found."""
-    key_file = Path(os.environ.get("SATELLITE_API_KEY_FILE", ""))
-    if not key_file:
-        key_file = Path.home() / ".config" / "satellite-api" / "key"
-    if key_file.is_file():
-        return key_file.read_text().strip()
-    return None
-
-
 class SatelliteAPIHandler(SimpleHTTPRequestHandler):
-    """HTTP handler that serves TLE JSON with API key auth."""
+    """HTTP handler that serves TLE JSON."""
 
-    api_key: str | None = get_api_key()
     data_dir: Path = Path(os.environ.get("SATELLITE_DATA_DIR", "/var/www/satellite-api"))
 
     def _send_cors(self) -> None:
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "X-API-Key")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
 
     def do_OPTIONS(self) -> None:
         self.send_response(204)
@@ -45,15 +32,6 @@ class SatelliteAPIHandler(SimpleHTTPRequestHandler):
         if self.path == "/health":
             self._send_json(200, {"status": "ok"})
             return
-
-        if self.api_key:
-            provided = self.headers.get("X-API-Key", "")
-            if provided != self.api_key:
-                self._send_json(
-                    403,
-                    {"error": "Forbidden", "message": "Valid X-API-Key header required"},
-                )
-                return
 
         # Resolve and validate path — prevent traversal outside data_dir
         rel = self.path.lstrip("/")
@@ -93,9 +71,6 @@ class SatelliteAPIHandler(SimpleHTTPRequestHandler):
 def main() -> None:
     host = os.environ.get("SATELLITE_API_HOST", "127.0.0.1")
     port = int(os.environ.get("SATELLITE_API_PORT", "8081"))
-
-    if not get_api_key():
-        print("Warning: No API key file found", file=sys.stderr)
 
     server = HTTPServer((host, port), SatelliteAPIHandler)
     print(f"Satellite API listening on {host}:{port}")

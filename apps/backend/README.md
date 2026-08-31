@@ -1,8 +1,7 @@
 # Satellite Tracker Backend
 
 TLE data fetcher and API server for the [Satellite Tracker](../tracker/) app. Fetches orbital data
-from Space-Track (with CelesTrak fallback), persists it to disk, and serves it over HTTP with API
-key authentication.
+from Space-Track (with CelesTrak fallback), persists it to disk, and serves it over HTTP.
 
 Zero external Python dependencies — stdlib only.
 
@@ -91,37 +90,29 @@ python3 apps/backend/server.py
 # Satellite API listening on 127.0.0.1:8081
 ```
 
-### 5. Generate an API key
+### 5. Test it
 
 ```bash
-openssl rand -hex 32 > ~/.config/satellite-api/key
-```
-
-### 6. Test it
-
-```bash
-curl -H "X-API-Key: $(cat ~/.config/satellite-api/key)" http://localhost:8081/tles.json | head -c 200
+curl http://localhost:8081/tles.json | head -c 200
 ```
 
 ## Environment Variables
 
-| Variable                 | Default                       | Description                   |
-| ------------------------ | ----------------------------- | ----------------------------- |
-| `SATELLITE_API_HOST`     | `127.0.0.1`                   | Server bind address           |
-| `SATELLITE_API_PORT`     | `8081`                        | Server port                   |
-| `SATELLITE_DATA_DIR`     | `/var/www/satellite-api`      | Directory to serve files from |
-| `SATELLITE_API_KEY_FILE` | `~/.config/satellite-api/key` | Path to API key file          |
+| Variable             | Default                  | Description                   |
+| -------------------- | ------------------------ | ----------------------------- |
+| `SATELLITE_API_HOST` | `127.0.0.1`              | Server bind address           |
+| `SATELLITE_API_PORT` | `8081`                   | Server port                   |
+| `SATELLITE_DATA_DIR` | `/var/www/satellite-api` | Directory to serve files from |
 
 ## Frontend Integration
 
-The tracker app looks for these Vite env vars (set in `.env` or via `--env`):
+The tracker app looks for this Vite env var (set in `.env` or via `--env`):
 
 ```
-VITE_SATELLITE_API_URL=http://localhost:8081/tles.json
-VITE_SATELLITE_API_KEY=<your-key>
+VITE_SATELLITE_API_URL=https://thehuis.tail4fbfb1.ts.net/tles.json
 ```
 
-Without these, the frontend falls back to CelesTrak → bundled samples.
+Without this, the frontend falls back to CelesTrak → bundled samples.
 
 ## Production Deployment
 

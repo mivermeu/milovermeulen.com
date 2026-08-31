@@ -1,8 +1,7 @@
 import sampleTles from '$lib/satellites/data/sample-tles.txt?raw';
 import type { CatalogResult, ParsedSatellite } from './types';
 
-const LOCAL_API_URL = import.meta.env.VITE_SATELLITE_API_URL || 'http://localhost:8080/tles.json';
-const LOCAL_API_KEY = import.meta.env.VITE_SATELLITE_API_KEY || '';
+const LOCAL_API_URL = import.meta.env.VITE_SATELLITE_API_URL || 'https://thehuis.tail4fbfb1.ts.net/tles.json';
 
 export const CELESTRAK_URL =
     'https://www.celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle';
@@ -38,15 +37,11 @@ export function parseTleText(text: string): ParsedSatellite[] {
     return satellites;
 }
 
-async function fetchWithTimeout(
-    url: string,
-    timeoutMs: number,
-    headers?: Record<string, string>
-): Promise<string> {
+async function fetchWithTimeout(url: string, timeoutMs: number): Promise<string> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-        const response = await fetch(url, { signal: controller.signal, headers });
+        const response = await fetch(url, { signal: controller.signal });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return await response.text();
     } finally {
@@ -55,11 +50,8 @@ async function fetchWithTimeout(
 }
 
 async function fetchLocalApi(): Promise<ParsedSatellite[] | null> {
-    if (!LOCAL_API_KEY) return null;
     try {
-        const text = await fetchWithTimeout(LOCAL_API_URL, FETCH_TIMEOUT_MS, {
-            'X-API-Key': LOCAL_API_KEY
-        });
+        const text = await fetchWithTimeout(LOCAL_API_URL, FETCH_TIMEOUT_MS);
         // Local API returns JSON array of {name, line1, line2}
         const data = JSON.parse(text);
         if (Array.isArray(data) && data.length > 0) {
