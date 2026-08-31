@@ -1,5 +1,4 @@
 <script lang="ts">
-    import { resolve } from '$app/paths';
     import ControlPanel from '$lib/components/ControlPanel.svelte';
     import FilterPanel from '$lib/components/FilterPanel.svelte';
     import SatelliteInfo from '$lib/components/SatelliteInfo.svelte';
@@ -24,13 +23,15 @@
         <h1 class="text-lg font-semibold text-brand-text-highlight">Satellite Tracker</h1>
         <div class="flex items-center gap-3">
             <span class="text-xs text-brand-text">{sourceLabel(trackerState.dataSource)}</span>
+            <!-- eslint-disable svelte/no-navigation-without-resolve -->
             <a
-                href={resolve('/')}
+                href="/"
                 aria-label="Portfolio"
                 class="inline-flex items-center justify-center overflow-hidden rounded-lg border border-brand-primary bg-transparent p-1 transition-colors duration-150 hover:bg-white/15 active:scale-[0.97]"
             >
                 <img src={favicon} alt="Portfolio" class="h-5 w-5" />
             </a>
+            <!-- eslint-enable svelte/no-navigation-without-resolve -->
         </div>
     </header>
 
