@@ -86,7 +86,7 @@
 
 {#if hovered}
     <div
-        class="pointer-events-none absolute top-0 left-0 z-30 -translate-x-1/2 -translate-y-full pb-2 text-xs font-medium text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]"
+        class="pointer-events-none absolute top-0 left-0 z-20 -translate-x-1/2 -translate-y-full pb-2 text-xs font-medium text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]"
         style="left:{hovered.screenX}px;top:{hovered.screenY}px"
     >
         {hovered.name}
@@ -94,7 +94,7 @@
 {/if}
 
 {#if sat && orbitalData}
-    <div class="pointer-events-auto absolute top-4 left-4 w-72">
+    <div class="pointer-events-auto absolute top-4 left-4 z-30 w-72">
         <Panel title={sat.name}>
             {#snippet actions()}
                 <button
