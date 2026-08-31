@@ -23,7 +23,7 @@ if [ -z "$API_KEY" ]; then
     exit 0
 fi
 
-API_URL="http://thehuis.tail4fbfb1.ts.net:8080/tles.json"
+API_URL="https://thehuis.tail4fbfb1.ts.net:8080/tles.json"
 
 echo "Building tracker for production..."
 echo "  API URL: $API_URL"
