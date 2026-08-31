@@ -23,16 +23,14 @@ if [ -z "$API_KEY" ]; then
     exit 0
 fi
 
-API_URL="https://thehuis.tail4fbfb1.ts.net:8080/tles.json"
+API_URL=$(grep '^VITE_SATELLITE_API_URL=' "$ENV_FILE" | cut -d= -f2-)
+if [ -z "$API_URL" ]; then
+    echo "Skipping tracker prod build: no VITE_SATELLITE_API_URL in $ENV_FILE"
+    exit 0
+fi
 
 echo "Building tracker for production..."
 echo "  API URL: $API_URL"
-
-# Create production .env
-cat > "$ENV_FILE" << EOF
-VITE_SATELLITE_API_URL=$API_URL
-VITE_SATELLITE_API_KEY=$API_KEY
-EOF
 
 # Build
 cd apps/tracker
