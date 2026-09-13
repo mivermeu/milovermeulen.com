@@ -22,7 +22,11 @@
     >
         <h1 class="text-lg font-semibold text-brand-text-highlight">Satellite Tracker</h1>
         <div class="flex items-center gap-3">
-            <span class="text-xs text-brand-text">{sourceLabel(trackerState.dataSource)}</span>
+            <span class="text-xs text-brand-text"
+                >{sourceLabel(trackerState.dataSource)}{trackerState.staleHidden > 0
+                    ? ` · ${trackerState.staleHidden} stale hidden`
+                    : ''}</span
+            >
             <!-- eslint-disable svelte/no-navigation-without-resolve -->
             <a
                 href="/"

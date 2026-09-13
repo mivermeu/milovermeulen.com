@@ -14,7 +14,6 @@ export const SCALE = GLOBE_RADIUS / EARTH_RADIUS_KM;
 
 const DEG2RAD = Math.PI / 180;
 const POSITION_CADENCE_MS = 120;
-const ORBIT_POINTS_PER_SAT = 96;
 const ORBIT_REBUILD_INTERVAL_MS = 5000;
 const POINTER_THROTTLE_MS = 66;
 
@@ -28,7 +27,6 @@ interface WorkerResponse {
     type: string;
     requestId?: number;
     count?: number;
-    vertexCount?: number;
     epoch?: number;
     colors?: Float32Array;
     positions?: Float32Array;
@@ -371,8 +369,7 @@ export class GlobeScene {
     private onOrbits(message: WorkerResponse): void {
         if (message.requestId !== this.orbitRequestSeq) return;
         const positions = message.positions;
-        const vertexCount = message.vertexCount ?? 0;
-        if (!positions || vertexCount === 0) return;
+        if (!positions || positions.length === 0) return;
         this.orbitPositions = positions;
         this.orbitRanges = message.ranges ?? [];
         this.orbitBuildGmst = gstime(new Date());
@@ -663,7 +660,6 @@ export class GlobeScene {
             type: 'buildOrbits',
             epoch: Math.round(Date.now()),
             requestId: this.orbitRequestSeq,
-            pointsPerOrbit: ORBIT_POINTS_PER_SAT,
             frame: trackerState.referenceFrame
         });
     }

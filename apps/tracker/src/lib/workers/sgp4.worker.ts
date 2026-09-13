@@ -12,7 +12,6 @@ type BuildOrbitsMessage = {
     type: 'buildOrbits';
     epoch: number;
     requestId: number;
-    pointsPerOrbit: number;
     frame: Frame;
 };
 
@@ -20,6 +19,40 @@ type WorkerMessage = InitMessage | PropagateMessage | BuildOrbitsMessage;
 
 interface PreparedSatellite {
     rec: SatRec;
+}
+
+const TAU = Math.PI * 2;
+// Per-sat adaptive sampling; uniform-in-nu clusters near perigee.
+const BASE_POINTS = 64;
+const ECC_CUBIC_POINTS = 640;
+const MAX_GRID_POINTS = 600;
+const MAX_PTS_PER_SAT = 16384;
+const MAX_SUBDIVIDE_SWEEPS = 20;
+const MAX_CHORD_ECI = 1.0;
+const MAX_CHORD_ECF = 0.4;
+
+type Vec3 = [number, number, number];
+
+// Mean anomaly of an ECI position (NaN for e >= 1). J2-drifted elements add
+// <1° error — fine for sample placement (only decides where points cluster,
+// not their values).
+function meanAnomaly(rec: SatRec, p: Vec3): number {
+    const e = rec.ecco;
+    if (!(e < 1)) return NaN;
+    const cO = Math.cos(rec.nodeo);
+    const sO = Math.sin(rec.nodeo);
+    const ci = Math.cos(rec.inclo);
+    const si = Math.sin(rec.inclo);
+    const cw = Math.cos(rec.argpo);
+    const sw = Math.sin(rec.argpo);
+    const nu = Math.atan2(
+        p[0] * (-cO * sw - sO * cw * ci) + p[1] * (-sO * sw + cO * cw * ci) + p[2] * (cw * si),
+        p[0] * (cO * cw - sO * sw * ci) + p[1] * (sO * cw + cO * sw * ci) + p[2] * (sw * si)
+    );
+    const f = Math.sqrt((1 - e) / (1 + e));
+    let E = 2 * Math.atan(f * Math.tan(nu / 2));
+    if (nu < 0) E += TAU;
+    return E - e * Math.sin(E);
 }
 
 const LEO_COLOR = [0.50588, 0.54902, 0.97255]; // #818cf8
@@ -48,63 +81,173 @@ function colorFor(rec: SatRec): number[] {
 
 async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
     const buildId = ++orbitBuildId;
-    const { requestId, epoch, pointsPerOrbit, frame } = message;
+    const { requestId, epoch, frame } = message;
     const total = satellites.length;
-    // Scale points per orbit by eccentricity: more samples for elongated orbits.
-    const maxEcc = satellites.reduce((m, s) => Math.max(m, s.rec.ecco), 0);
-    const eccScale = 1 + Math.round(maxEcc * 4);
-    const scaledPoints = pointsPerOrbit * eccScale;
-    const maxSegments = total * scaledPoints;
-    const positions = new Float32Array(maxSegments * 2 * 3);
-    let vertexCount = 0;
+    const inertial = frame === 'eci';
+    const chordLimit2 = (inertial ? MAX_CHORD_ECI : MAX_CHORD_ECF) ** 2;
+    const out: number[] = [];
     const ranges: number[] = [];
     const CHUNK = 100;
     const epochMs = epoch;
 
     // For ECI orbits: compute in ECI, then rotate all points by a single
     // -GMST(epoch) to align with ECF satellite dots without runtime rotation.
-    const cosR = frame === 'eci' ? Math.cos(-gstime(new Date(epochMs))) : 0;
-    const sinR = frame === 'eci' ? Math.sin(-gstime(new Date(epochMs))) : 0;
+    const cosR = inertial ? Math.cos(-gstime(new Date(epochMs))) : 0;
+    const sinR = inertial ? Math.sin(-gstime(new Date(epochMs))) : 0;
+
+    const project = (p: Vec3, t: number): Vec3 => {
+        if (frame === 'ecf') {
+            const ecf = eciToEcf(
+                { x: p[0], y: p[1], z: p[2] } as EciVec3<number>,
+                gstime(new Date(t))
+            );
+            return [ecf.x * scale, ecf.y * scale, ecf.z * scale];
+        }
+        const x = p[0] * scale;
+        const y = p[1] * scale;
+        return [x * cosR - y * sinR, x * sinR + y * cosR, p[2] * scale];
+    };
+    const sgp4At = (rec: SatRec, t: number): Vec3 | null => {
+        const state = propagate(rec, new Date(t));
+        if (state.position === false || state.position === undefined) return null;
+        const p = state.position as EciVec3<number>;
+        if (!isFinite(p.x + p.y + p.z)) return null;
+        return [p.x, p.y, p.z];
+    };
+    // Split long chords at SGP4 mid-times until a full sweep splits nothing.
+    const refine = (rec: SatRec, t: number[], p: Vec3[], maxPts: number): [number[], Vec3[]] => {
+        let sweep = 0;
+        let split = true;
+        let T = t;
+        let P = p;
+        while (split && sweep < MAX_SUBDIVIDE_SWEEPS && T.length < maxPts) {
+            sweep++;
+            split = false;
+            const oT: number[] = [T[0]];
+            const oP: Vec3[] = [P[0]];
+            for (let j = 0; j + 1 < T.length && oT.length < maxPts; j++) {
+                const a = P[j];
+                const b = P[j + 1];
+                const dx = a[0] - b[0];
+                const dy = a[1] - b[1];
+                const dz = a[2] - b[2];
+                const tm = (T[j] + T[j + 1]) / 2;
+                if (dx * dx + dy * dy + dz * dz > chordLimit2) {
+                    const se = sgp4At(rec, tm);
+                    if (se) {
+                        oT.push(tm);
+                        oP.push(project(se, tm));
+                        split = true;
+                    }
+                }
+                oT.push(T[j + 1]);
+                oP.push(P[j + 1]);
+            }
+            T = oT;
+            P = oP;
+        }
+        return [T, P];
+    };
 
     for (let i = 0; i < total; i++) {
         const rec = satellites[i].rec;
-        const periodMs = ((2 * Math.PI) / rec.no) * 60000;
-        let previous: [number, number, number] | null = null;
-        const rangeStart = vertexCount;
+        const rangeStart = out.length;
+        const ecc = rec.ecco;
+        // Hyperbolic/parabolic elements (e.g. translunar coast TLEs) have no
+        // closed period to sample — skip orbit drawing rather than garbage.
+        if (!(ecc < 1)) {
+            ranges.push(rangeStart, rangeStart);
+            continue;
+        }
+        const count = Math.min(
+            MAX_GRID_POINTS,
+            BASE_POINTS + Math.round(ECC_CUBIC_POINTS * ecc ** 3)
+        );
+        const meanMotionRadPerMs = rec.no / 60000;
+        if (!(meanMotionRadPerMs > 0)) {
+            ranges.push(rangeStart, rangeStart);
+            continue;
+        }
+        const periodMs = TAU / meanMotionRadPerMs;
+        const eFactor = Math.sqrt((1 - ecc) / (1 + ecc));
+        // Live phase: solve the current mean anomaly from SGP4 at epoch.
+        // rec.mo is stale (TLE epoch, days old) and would rotate the whole
+        // density pattern away from the true perigee on eccentric orbits.
+        const nowPos = sgp4At(rec, epochMs);
+        const m0 = nowPos ? meanAnomaly(rec, nowPos) : rec.mo;
+        // Uniform-in-nu grid over one period, rotated so node 0 is exactly
+        // the satellite's current position (arcs must start at the sat).
+        const dts: number[] = new Array(count);
+        for (let k = 0; k < count; k++) {
+            const nu = (k / count) * TAU;
+            const eAnom = 2 * Math.atan(eFactor * Math.tan(nu / 2)) + (k * 2 > count ? TAU : 0);
+            const m = eAnom - ecc * Math.sin(eAnom);
+            dts[k] = ((((m - m0) % TAU) + TAU) % TAU) / meanMotionRadPerMs;
+        }
+        let kMin = 0;
+        for (let k = 1; k < count; k++) if (dts[k] < dts[kMin]) kMin = k;
+        dts[kMin] = 0;
 
-        // ECI: sample one full period including endpoint (closes the ellipse).
-        // ECF: sample one period excluding endpoint (open ground-track arc).
-        const samples = frame === 'ecf' ? scaledPoints : scaledPoints + 1;
-        for (let k = 0; k < samples; k++) {
-            const t = epochMs + (k / scaledPoints) * periodMs;
-            const date = new Date(t);
-            const state = propagate(rec, date);
-            if (state.position === false || state.position === undefined) {
-                previous = null;
+        // Pass 1: SGP4 grid in ECI km (null where SGP4 errors).
+        let tArr: number[] = new Array(count);
+        let eArr: Array<Vec3 | null> = new Array(count);
+        for (let s = 0; s < count; s++) {
+            const t = epochMs + dts[(kMin + s) % count];
+            tArr[s] = t;
+            eArr[s] = s === 0 ? nowPos : sgp4At(rec, t);
+        }
+        // Re-anchor on the first good node (inertial) or trim unknowns
+        // (ECF). Runs of SGP4 failures stay open (honest gaps) — loops are
+        // never closed, so no chord is ever drawn across unknown spans.
+        {
+            let first = -1;
+            let last = -1;
+            for (let s = 0; s < count; s++) {
+                if (eArr[s]) {
+                    if (first < 0) first = s;
+                    last = s;
+                }
+            }
+            if (first < 0) {
+                ranges.push(rangeStart, rangeStart);
                 continue;
             }
-            let point: [number, number, number];
-            if (frame === 'ecf') {
-                const ecf = eciToEcf(state.position as EciVec3<number>, gstime(date));
-                point = [ecf.x * scale, ecf.y * scale, ecf.z * scale];
+            if (inertial) {
+                if (first > 0) {
+                    tArr = tArr.slice(first).concat(tArr.slice(0, first));
+                    eArr = eArr.slice(first).concat(eArr.slice(0, first));
+                }
+                for (let s = 1; s < tArr.length; s++) {
+                    if (tArr[s] < tArr[s - 1]) tArr[s] += periodMs;
+                }
             } else {
-                const eci = state.position as EciVec3<number>;
-                const x = eci.x * scale;
-                const y = eci.y * scale;
-                point = [x * cosR - y * sinR, x * sinR + y * cosR, eci.z * scale];
+                tArr = tArr.slice(first, last + 1);
+                eArr = eArr.slice(first, last + 1);
             }
-            if (previous) {
-                positions[vertexCount++] = previous[0];
-                positions[vertexCount++] = previous[1];
-                positions[vertexCount++] = previous[2];
-                positions[vertexCount++] = point[0];
-                positions[vertexCount++] = point[1];
-                positions[vertexCount++] = point[2];
-            }
-            previous = point;
         }
 
-        ranges.push(rangeStart, vertexCount);
+        // Emit per good run; split long chords at mid-times (SGP4 only —
+        // a failed midpoint keeps the whole chord, never an invented point).
+        let totalPts = 0;
+        let runStart = 0;
+        while (runStart < eArr.length) {
+            while (runStart < eArr.length && !eArr[runStart]) runStart++;
+            if (runStart >= eArr.length) break;
+            let runEnd = runStart;
+            while (runEnd + 1 < eArr.length && eArr[runEnd + 1]) runEnd++;
+            let rT = tArr.slice(runStart, runEnd + 1);
+            let rP: Vec3[] = [];
+            for (let s = runStart; s <= runEnd; s++) rP.push(project(eArr[s] as Vec3, tArr[s]));
+            [rT, rP] = refine(rec, rT, rP, MAX_PTS_PER_SAT - totalPts);
+            for (let j = 0; j + 1 < rP.length; j++) {
+                const a = rP[j];
+                const b = rP[j + 1];
+                out.push(a[0], a[1], a[2], b[0], b[1], b[2]);
+            }
+            totalPts += rT.length;
+            runStart = runEnd + 1;
+        }
+        ranges.push(rangeStart, out.length);
 
         if ((i + 1) % CHUNK === 0) {
             if (buildId !== orbitBuildId) return;
@@ -113,10 +256,8 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
     }
 
     if (buildId !== orbitBuildId) return;
-    const trimmed = vertexCount < positions.length ? positions.slice(0, vertexCount) : positions;
-    postMessage({ type: 'orbits', requestId, vertexCount, positions: trimmed, ranges }, [
-        trimmed.buffer
-    ]);
+    const positions = new Float32Array(out);
+    postMessage({ type: 'orbits', requestId, positions, ranges }, [positions.buffer]);
 }
 
 function handleMessage(event: MessageEvent<WorkerMessage>): void {

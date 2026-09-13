@@ -10,4 +10,5 @@ export interface CatalogResult {
     satellites: ParsedSatellite[];
     source: Exclude<DataSource, 'loading'>;
     error?: string;
+    staleHidden?: number;
 }

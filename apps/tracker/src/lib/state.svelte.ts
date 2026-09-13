@@ -24,6 +24,7 @@ export const trackerState = $state({
     showOrbits: true,
     showEquatorial: false,
     dataSource: 'loading' as DataSource,
+    staleHidden: 0,
     error: '',
     referenceFrame: 'ecf' as 'ecf' | 'eci',
     hovered: null as HoverInfo | null,
@@ -63,9 +64,10 @@ export function initTree(satellites: ParsedSatellite[]): void {
 }
 
 if (browser) {
-    loadCatalog().then(({ satellites, source, error }) => {
+    loadCatalog().then(({ satellites, source, error, staleHidden }) => {
         trackerState.satellites = satellites;
         trackerState.dataSource = source;
+        trackerState.staleHidden = staleHidden ?? 0;
         trackerState.error = error ?? '';
         initTree(satellites);
     });
