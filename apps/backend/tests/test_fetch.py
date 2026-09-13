@@ -3,10 +3,27 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
+import time
 from pathlib import Path
 
-from ..fetch import TleRecord, load_existing, merge_tles, parse_tle_text, save_json
+from ..fetch import (
+    DECAY_REFRESH_INTERVAL_S,
+    SPACETRACK_DECAY_FULL_URL,
+    SPACETRACK_DECAY_RECENT_URL,
+    TleRecord,
+    drop_decayed,
+    load_decay_ids,
+    load_existing,
+    merge_tles,
+    norad_id,
+    parse_decay_ids,
+    parse_tle_text,
+    refresh_decay_ids,
+    save_decay_ids,
+    save_json,
+)
 
 SAMPLE_TLE = """\
 ISS (ZARYA)
@@ -118,3 +135,98 @@ def test_save_json_atomic() -> None:
         assert len(loaded) == 1
         # Temp file should not exist
         assert not path.with_suffix(".json.tmp").exists()
+
+
+def test_norad_id() -> None:
+    assert norad_id("1 68319U 26058A   26241.65974551  .00005709  00000-0  11198-3 0  9999") == "68319"
+    assert norad_id("1 25544U 98067A   24001.50000000  .00016717  00000-0  10270-3 0  9990") == "25544"
+    assert norad_id("1 A0000U 25001A   26250.50000000  .00000000  00000-0  00000-0 0  9991") == "100000"
+    assert norad_id("1 E8493U 25001A   26250.50000000  .00000000  00000-0  00000-0 0  9991") == "148493"
+    assert norad_id("nope") is None
+    assert norad_id(None) is None  # type: ignore[arg-type]
+
+
+def test_parse_decay_ids() -> None:
+    records = [
+        {"NORAD_CAT_ID": 68319, "MSG_EPOCH": "2026-09-01", "DECAY_EPOCH": "2026-09-01"},
+        {"NORAD_CAT_ID": "25544"},
+        {"nope": True},
+        {"NORAD_CAT_ID": None},
+    ]
+    assert parse_decay_ids(records) == {"68319", "25544"}
+
+
+def test_decay_ids_roundtrip() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "decayed-ids.json"
+        assert load_decay_ids(path) == set()
+        save_decay_ids(path, {"68319", "25544"})
+        assert load_decay_ids(path) == {"68319", "25544"}
+        path.write_text("corrupt{{{")
+        assert load_decay_ids(path) == set()
+
+
+def test_drop_decayed() -> None:
+    merged: dict[str, TleRecord] = {
+        "MS-33": {
+            "name": "MS-33",
+            "line1": "1 68319U 26058A   26241.65974551  .00005709  00000-0  11198-3 0  9999",
+            "line2": "2 68319",
+        },
+        "ISS": {
+            "name": "ISS",
+            "line1": "1 25544U 98067A   24001.50000000  .00016717  00000-0  10270-3 0  9990",
+            "line2": "2 25544",
+        },
+        "JUNK": {"name": "JUNK", "line1": "nope", "line2": "nope"},
+    }
+    kept, dropped = drop_decayed(merged, {"68319"})
+    assert list(kept) == ["ISS", "JUNK"]
+    assert dropped == 1
+
+
+def backdate(path: Path, seconds_old: float) -> None:
+    old = time.time() - seconds_old
+    os.utime(path, (old, old))
+
+
+def test_refresh_decay_ids_bootstraps_then_incremental() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "decayed-ids.json"
+        calls: list[str] = []
+
+        def stub_fetch(opener: object, url: str) -> set[str]:
+            calls.append(url)
+            return {"68319"}
+
+        assert refresh_decay_ids(None, path, fetch=stub_fetch) == {"68319"}  # type: ignore[arg-type]
+        assert calls == [SPACETRACK_DECAY_FULL_URL]
+
+        save_decay_ids(path, {"11111"})
+        backdate(path, DECAY_REFRESH_INTERVAL_S + 3600)
+        assert refresh_decay_ids(None, path, fetch=stub_fetch) == {"11111", "68319"}  # type: ignore[arg-type]
+        assert calls[1:] == [SPACETRACK_DECAY_RECENT_URL]
+        assert load_decay_ids(path) == {"11111", "68319"}
+
+
+def test_refresh_decay_ids_skips_when_fresh() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "decayed-ids.json"
+        save_decay_ids(path, {"11111"})
+
+        def stub_boom(opener: object, url: str) -> set[str]:
+            raise AssertionError("must not fetch")
+
+        assert refresh_decay_ids(None, path, fetch=stub_boom) == {"11111"}  # type: ignore[arg-type]
+
+
+def test_refresh_decay_ids_fetch_failure_keeps_stored() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "decayed-ids.json"
+        save_decay_ids(path, {"11111"})
+        backdate(path, DECAY_REFRESH_INTERVAL_S + 3600)
+
+        def stub_fail(opener: object, url: str) -> None:
+            return None
+
+        assert refresh_decay_ids(None, path, fetch=stub_fail) == {"11111"}  # type: ignore[arg-type]
