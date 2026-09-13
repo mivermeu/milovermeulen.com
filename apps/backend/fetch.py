@@ -14,6 +14,7 @@ import json
 import ssl
 import urllib.parse
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, TypedDict
 
@@ -177,3 +178,49 @@ def save_json(satellites: list[TleRecord], tle_path: Path) -> None:
     tmp = tle_path.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(satellites, indent=None))
     tmp.rename(tle_path)
+
+
+SPACETRACK_AUTH_URL = "https://www.space-track.org/ajaxauth/login"
+SPACETRACK_GP_URL = (
+    "https://www.space-track.org/basicspacedata/query/class/gp"
+    "/EPOCH/%3Enow-1/orderby/OBJECT_NAME/format/json"
+)
+CELESTRAK_URL = "https://www.celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle"
+TLE_PATH = Path("/var/www/satellite-api/tles.json")
+CREDS_PATH = Path.home() / ".config" / "satellite-api" / "spacetrack-creds"
+
+
+def main() -> None:
+    existing = load_existing(TLE_PATH)
+    new: list[TleRecord] | None = None
+    source = "none"
+
+    try:
+        username, _, password = CREDS_PATH.read_text().strip().partition(":")
+    except Exception:
+        username, password = "", ""
+    if username and password:
+        opener, ok = make_spacetrack_opener(username, password, SPACETRACK_AUTH_URL)
+        if ok:
+            new = fetch_gp_json(opener, SPACETRACK_GP_URL)
+            if new:
+                source = "space-track"
+    if not new:
+        new = fetch_celestrak(CELESTRAK_URL)
+        if new:
+            source = "celestrak"
+
+    if not new:
+        print("fetch-tles: all sources failed, keeping existing data")
+        raise SystemExit(1)
+
+    merged = merge_tles(existing, new)
+    save_json(list(merged.values()), TLE_PATH)
+    TLE_PATH.parent.joinpath("last-updated.json").write_text(
+        json.dumps({"count": len(merged), "source": source, "updated": datetime.now(timezone.utc).isoformat()})
+    )
+    print(f"fetch-tles: {source}, +{len(new)} fetched, {len(merged)} total")
+
+
+if __name__ == "__main__":
+    main()
