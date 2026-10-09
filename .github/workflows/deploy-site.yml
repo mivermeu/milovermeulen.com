@@ -1,0 +1,193 @@
+name: Deploy site
+
+# Builds the static apps and uploads them to the web host over FTPS.
+#
+# Required repository secrets (Settings > Secrets and variables > Actions):
+#   FTPS_HOST      - hostname or IP of the web host
+#   FTPS_USER      - FTPS username
+#   FTPS_PASSWORD  - FTPS password
+# Optional repository variables:
+#   FTPS_PORT                   - default 21 (use 990 for implicit FTPS)
+#   FTPS_MODE                   - "explicit" (default, AUTH TLS on port 21) or "implicit"
+#   FTPS_VERIFY_CERT            - default true; set false for hosts with an incomplete chain
+#   FTPS_REMOTE_DIR_TRACKER     - remote directory that /tracker maps to
+#   FTPS_REMOTE_DIR_PORTFOLIO   - remote directory for the root site
+#   FTPS_REMOTE_DIR_WEBNEUT     - remote directory for /webneut
+#   VITE_SATELLITE_API_URL      - TLE API endpoint baked into the tracker bundle
+#
+# An app is skipped when its remote directory variable is empty.
+# Uploads never delete: content-hashed assets change names, so the remote keeps
+# stale files. Switch `mirror` to `mirror --delete` only on a directory that the
+# app fully owns.
+
+on:
+    workflow_dispatch:
+        inputs:
+            apps:
+                description: 'Apps to deploy, space separated (portfolio webneut tracker)'
+                type: string
+                default: tracker
+    push:
+        branches: [main]
+        paths:
+            - 'apps/**'
+            - 'packages/**'
+            - 'package.json'
+            - 'bun.lock'
+            - '.github/workflows/deploy-site.yml'
+
+concurrency:
+    group: deploy-${{ github.ref }}
+    cancel-in-progress: false
+
+jobs:
+    plan:
+        name: Plan
+        runs-on: ubuntu-latest
+        outputs:
+            matrix: ${{ steps.plan.outputs.matrix }}
+        steps:
+            - id: plan
+              env:
+                  EVENT: ${{ github.event_name }}
+                  REQUESTED: ${{ inputs.apps }}
+              run: |
+                  set -euo pipefail
+                  if [ "$EVENT" = "push" ]; then
+                    requested="tracker portfolio webneut"
+                  else
+                    requested="${REQUESTED:-tracker}"
+                  fi
+                  matrix=$(python3 -c 'import json,sys
+                  all_apps=["tracker","portfolio","webneut"]
+                  req=sys.argv[1].split()
+                  bad=[a for a in req if a not in all_apps]
+                  if bad: sys.exit("unknown app(s): "+" ".join(bad))
+                  print(json.dumps({"app":[a for a in all_apps if a in req]}))' "$requested")
+                  echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+                  echo "Deploying: $matrix"
+
+    build:
+        name: Build ${{ matrix.app }}
+        needs: plan
+        runs-on: ubuntu-latest
+        strategy:
+            fail-fast: false
+            matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: oven-sh/setup-bun@v2
+              with:
+                  bun-version: latest
+
+            - name: Install dependencies
+              run: bun install --frozen-lockfile
+
+            # webneut's build compiles oscillator-rs to WASM; the runner has rustup but
+            # needs the wasm target and wasm-pack.
+            - name: Prepare Rust toolchain
+              if: matrix.app == 'webneut'
+              run: |
+                  rustup target add wasm32-unknown-unknown
+                  cargo install wasm-pack --locked
+
+            - name: Build ${{ matrix.app }}
+              env:
+                  VITE_SATELLITE_API_URL:
+                      ${{ vars.VITE_SATELLITE_API_URL ||
+                      'https://thehuis.tail4fbfb1.ts.net/tles.json' }}
+              run: bun run build
+              working-directory: apps/${{ matrix.app }}
+
+            - name: Upload build artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: build-${{ matrix.app }}
+                  path: apps/${{ matrix.app }}/build
+                  if-no-files-found: error
+
+    deploy:
+        name: Deploy ${{ matrix.app }}
+        needs: [plan, build]
+        runs-on: ubuntu-latest
+        strategy:
+            fail-fast: false
+            matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+        steps:
+            - name: Check credentials
+              env:
+                  FTPS_HOST: ${{ secrets.FTPS_HOST }}
+                  FTPS_USER: ${{ secrets.FTPS_USER }}
+                  FTPS_PASSWORD: ${{ secrets.FTPS_PASSWORD }}
+              run: |
+                  missing=""
+                  [ -n "$FTPS_HOST" ] || missing="$missing FTPS_HOST"
+                  [ -n "$FTPS_USER" ] || missing="$missing FTPS_USER"
+                  [ -n "$FTPS_PASSWORD" ] || missing="$missing FTPS_PASSWORD"
+                  if [ -n "$missing" ]; then
+                    echo "::error::Missing repository secrets:$missing"
+                    exit 1
+                  fi
+
+            - name: Install lftp
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y --no-install-recommends lftp
+
+            - uses: actions/download-artifact@v4
+              with:
+                  name: build-${{ matrix.app }}
+                  path: build
+
+            - name: Upload over FTPS
+              env:
+                  FTPS_HOST: ${{ secrets.FTPS_HOST }}
+                  FTPS_USER: ${{ secrets.FTPS_USER }}
+                  FTPS_PASSWORD: ${{ secrets.FTPS_PASSWORD }}
+                  FTPS_PORT: ${{ vars.FTPS_PORT || '21' }}
+                  FTPS_MODE: ${{ vars.FTPS_MODE || 'explicit' }}
+                  FTPS_VERIFY_CERT: ${{ vars.FTPS_VERIFY_CERT || 'true' }}
+                  APP: ${{ matrix.app }}
+                  REMOTE_TRACKER: ${{ vars.FTPS_REMOTE_DIR_TRACKER }}
+                  REMOTE_PORTFOLIO: ${{ vars.FTPS_REMOTE_DIR_PORTFOLIO }}
+                  REMOTE_WEBNEUT: ${{ vars.FTPS_REMOTE_DIR_WEBNEUT }}
+              run: |
+                  set -euo pipefail
+                  case "$APP" in
+                    tracker)   REMOTE="$REMOTE_TRACKER" ;;
+                    portfolio) REMOTE="$REMOTE_PORTFOLIO" ;;
+                    webneut)   REMOTE="$REMOTE_WEBNEUT" ;;
+                    *) echo "::error::Unknown app: $APP"; exit 1 ;;
+                  esac
+                  if [ -z "$REMOTE" ]; then
+                    echo "No remote directory configured for $APP, skipping."
+                    exit 0
+                  fi
+
+                  # 990 is implicit FTPS (TLS from the first byte); anything else is
+                  # explicit FTPS (AUTH TLS on port 21).
+                  PORT="${FTPS_PORT:-21}"
+                  MODE="${FTPS_MODE:-explicit}"
+                  VERIFY_CERT="${FTPS_VERIFY_CERT:-true}"
+                  if [ "$MODE" = "implicit" ]; then
+                    SCHEME="ftps"
+                  else
+                    SCHEME="ftp"
+                  fi
+
+                  lftp -c "
+                    set ftp:ssl-force true;
+                    set ftp:ssl-protect-data true;
+                    set ftp:ssl-protect-list true;
+                    set ssl:verify-certificate $VERIFY_CERT;
+                    set ftp:passive-mode true;
+                    set ftp:use-feat true;
+                    set net:timeout 30;
+                    set net:max-retries 3;
+                    set net:reconnect-interval-base 5;
+                    set mirror:parallel-transfer-count 4;
+                    set xfer:clobber true;
+                    open -u \"$FTPS_USER\",\"$FTPS_PASSWORD\" $SCHEME://$FTPS_HOST:$PORT;
+                    mirror -R --no-perms --verbose build \"$REMOTE\";
+                  "
