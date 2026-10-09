@@ -1,14 +1,7 @@
 import { browser } from '$app/environment';
 import { loadCatalog } from '$lib/satellites/tle';
 import type { DataSource, ParsedSatellite } from '$lib/satellites/types';
-import {
-    type TreeNode,
-    buildRoot,
-    computeTriStates,
-    setDescendants,
-    findNode,
-    collectLeaves
-} from '$lib/tree';
+import { type TreeNode, buildRoot, toggleNodeInTree, findNode, collectLeaves } from '$lib/tree';
 
 export type { TreeNode, TriState } from '$lib/tree';
 
@@ -35,15 +28,10 @@ export const trackerState = $state({
 });
 
 export function toggleNode(id: string): void {
-    const node = findNode(trackerState.tree, id);
-    if (!node) return;
+    const tree = trackerState.tree;
+    if (!tree) return;
 
-    node.selected = !node.selected;
-    setDescendants(node, node.selected);
-    if (trackerState.tree) computeTriStates(trackerState.tree);
-
-    const active: number[] = [];
-    if (trackerState.tree) collectLeaves(trackerState.tree, active);
+    const active = toggleNodeInTree(tree, id);
     trackerState.activeIndices = active;
 
     if (trackerState.pinnedIndex >= 0 && !active.includes(trackerState.pinnedIndex)) {

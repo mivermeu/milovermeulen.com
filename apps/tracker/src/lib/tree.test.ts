@@ -50,6 +50,22 @@ describe('tree building', () => {
         toggleNodeInTree(root, science.children[0].id);
         expect(science.triState).toBe('some');
     });
+
+    it('clicking a partial group turns it off before selecting all', () => {
+        const root = buildRoot([sat('ISS (ZARYA)'), sat('HST')]);
+        const science = root.children.find((c) => c.label === 'Science')!;
+
+        toggleNodeInTree(root, science.children[0].id);
+        expect(science.triState).toBe('some');
+
+        toggleNodeInTree(root, science.id);
+        expect(science.triState).toBe('none');
+        expect(getActive(root)).toHaveLength(0);
+
+        toggleNodeInTree(root, science.id);
+        expect(science.triState).toBe('all');
+        expect(getActive(root)).toHaveLength(2);
+    });
 });
 
 describe('extractPrefix', () => {
