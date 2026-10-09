@@ -77,14 +77,17 @@ async function fetchWithTimeout(url: string, timeoutMs: number): Promise<string>
 async function fetchLocalApi(): Promise<ParsedSatellite[] | null> {
     try {
         const text = await fetchWithTimeout(LOCAL_API_URL, FETCH_TIMEOUT_MS);
-        // Local API returns JSON array of {name, line1, line2}
+        // Local API returns JSON array of {name, line1, line2, objectType?}
         const data = JSON.parse(text);
         if (Array.isArray(data) && data.length > 0) {
-            return data.map((s: { name: string; line1: string; line2: string }) => ({
-                name: s.name,
-                line1: s.line1,
-                line2: s.line2
-            }));
+            return data.map(
+                (s: { name: string; line1: string; line2: string; objectType?: string }) => ({
+                    name: s.name,
+                    line1: s.line1,
+                    line2: s.line2,
+                    objectType: s.objectType
+                })
+            );
         }
         return null;
     } catch {

@@ -160,3 +160,28 @@ describe('grouping', () => {
         expect(comms.children.map((c) => c.label)).toContain('EUTELSAT');
     });
 });
+
+describe('object type metadata', () => {
+    it('uses SATCAT objectType to classify debris and rocket bodies', () => {
+        const root = buildRoot([
+            { ...sat('ISS (ZARYA)'), objectType: 'debris' },
+            { ...sat('NAVSTAR 80'), objectType: 'rocket-body' }
+        ]);
+        const debris = root.children.find((c) => c.label === 'Debris')!;
+        expect(debris.children.map((c) => c.label).sort()).toEqual(['ISS', 'NAVSTAR']);
+    });
+
+    it('trusts an authoritative payload over a debris-looking name', () => {
+        const root = buildRoot([{ ...sat('COSMOS 2251 DEB'), objectType: 'payload' }]);
+        expect(root.children.find((c) => c.label === 'Debris')).toBeUndefined();
+        expect(root.children.find((c) => c.label === 'Military')).toBeDefined();
+    });
+
+    it('falls back to the name when objectType is absent or unknown', () => {
+        const root = buildRoot([
+            sat('COSMOS 2251 DEB'),
+            { ...sat('ARIANE 5 R/B'), objectType: 'unknown' }
+        ]);
+        expect(root.children.find((c) => c.label === 'Debris')).toBeDefined();
+    });
+});

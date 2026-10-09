@@ -12,10 +12,14 @@ export interface TreeNode {
     children: TreeNode[];
 }
 
-export function categorize(name: string): string {
-    // Debris and rocket bodies are name suffixes; check first so a payload
-    // prefix (e.g. COSMOS) doesn't absorb them.
-    if (/\bDEB\b|\bR\/B\b|\bROCKET BODY\b/i.test(name)) return 'debris';
+export function categorize(name: string, objectType?: string): string {
+    if (objectType === 'debris' || objectType === 'rocket-body') return 'debris';
+
+    // SATCAT 'payload' is authoritative; anything else (missing, unknown, null)
+    // falls back to the name suffix heuristic.
+    if (objectType !== 'payload' && /\bDEB\b|\bR\/B\b|\bROCKET BODY\b/i.test(name)) {
+        return 'debris';
+    }
 
     let functionType = 'other';
     if (
@@ -144,7 +148,7 @@ function buildTree(satellites: ParsedSatellite[]): TreeNode[] {
 
     for (let i = 0; i < satellites.length; i++) {
         const sat = satellites[i];
-        const functionType = categorize(sat.name);
+        const functionType = categorize(sat.name, sat.objectType);
         if (!functions[functionType]) functions[functionType] = [];
         functions[functionType].push(sat);
     }
