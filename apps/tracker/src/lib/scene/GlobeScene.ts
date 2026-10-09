@@ -13,7 +13,9 @@ export const GLOBE_RADIUS = 6.4;
 export const SCALE = GLOBE_RADIUS / EARTH_RADIUS_KM;
 
 const DEG2RAD = Math.PI / 180;
-const POSITION_CADENCE_MS = 120;
+const MIN_POSITION_CADENCE_MS = 120;
+const MAX_POSITION_CADENCE_MS = 600;
+const PROPAGATION_THROUGHPUT_PER_MS = 100;
 const ORBIT_REBUILD_INTERVAL_MS = 5000;
 const POINTER_THROTTLE_MS = 66;
 
@@ -647,13 +649,18 @@ export class GlobeScene {
         return this.filteredToOriginal.get(filteredIndex) ?? -1;
     }
 
+    private positionCadenceMs(): number {
+        const scaled = this.satellites.length / PROPAGATION_THROUGHPUT_PER_MS;
+        return Math.min(MAX_POSITION_CADENCE_MS, Math.max(MIN_POSITION_CADENCE_MS, scaled));
+    }
+
     private requestPositions(): void {
         if (!this.ready || this.positionRequestPending) return;
         this.positionRequestPending = true;
         this.positionRequestSeq++;
         this.worker.postMessage({
             type: 'propagate',
-            epoch: Math.round(Date.now() + POSITION_CADENCE_MS),
+            epoch: Math.round(Date.now() + this.positionCadenceMs()),
             requestId: this.positionRequestSeq
         });
     }
@@ -674,15 +681,13 @@ export class GlobeScene {
         const now = performance.now();
         this.lastFrameWall = now;
 
-        if (this.positionRequestPending && now - this.lastRequestWall > 3 * POSITION_CADENCE_MS) {
+        const cadence = this.positionCadenceMs();
+
+        if (this.positionRequestPending && now - this.lastRequestWall > 3 * cadence) {
             this.positionRequestPending = false;
         }
 
-        if (
-            this.ready &&
-            !this.positionRequestPending &&
-            now - this.lastRequestWall >= POSITION_CADENCE_MS
-        ) {
+        if (this.ready && !this.positionRequestPending && now - this.lastRequestWall >= cadence) {
             this.lastRequestWall = now;
             this.requestPositions();
         }

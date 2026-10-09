@@ -8,9 +8,6 @@ export const CELESTRAK_URL =
     'https://www.celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle';
 
 const FETCH_TIMEOUT_MS = 8000;
-// Covers the full active CelesTrak catalog (~16k) with headroom. Rendering is one
-// GPU draw call for all dots, so this is cheap; only worker propagation scales with it.
-const MAX_SATELLITES = 20000;
 
 // TLEs older than this are dropped from live sources: SGP4 error growth makes
 // them misleading, and ancient extras (lunar sets, 1960s debris) draw fantasy
@@ -102,7 +99,7 @@ export async function loadCatalog(): Promise<CatalogResult> {
         const { fresh, stale } = partitionFresh(local, Date.now());
         if (fresh.length > 0) {
             return {
-                satellites: fresh.slice(0, MAX_SATELLITES),
+                satellites: fresh,
                 source: 'local-api',
                 staleHidden: stale
             };
@@ -118,7 +115,7 @@ export async function loadCatalog(): Promise<CatalogResult> {
             const { fresh, stale } = partitionFresh(parsed, Date.now());
             if (fresh.length > 0) {
                 return {
-                    satellites: fresh.slice(0, MAX_SATELLITES),
+                    satellites: fresh,
                     source: 'celestrak',
                     staleHidden: stale
                 };
@@ -132,7 +129,7 @@ export async function loadCatalog(): Promise<CatalogResult> {
     }
 
     // 3. Fall back to bundled sample (synthetic, zero-drag — exempt from aging).
-    const sample = parseTleText(sampleTles).slice(0, MAX_SATELLITES);
+    const sample = parseTleText(sampleTles);
     if (sample.length === 0) {
         return { satellites: [], source: 'error', error: 'No satellite data available.' };
     }
