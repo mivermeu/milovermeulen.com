@@ -349,6 +349,7 @@ export class GlobeScene {
     }
 
     private onPositions(message: WorkerResponse): void {
+        if (!this.ready) return;
         this.positionRequestPending = false;
         const positions = message.positions;
         const epoch = message.epoch ?? Date.now();
@@ -602,6 +603,10 @@ export class GlobeScene {
         );
         this.ready = false;
         this.positionRequestPending = false;
+        // Hide dots until onReady installs the new catalog's buffers.
+        this.points.visible = false;
+        this.prevPositions = null;
+        this.nextPositions = null;
 
         // Auto-disable orbits for large catalogs; restore when count drops.
         const ORBIT_AUTO_DISABLE = 5000;
