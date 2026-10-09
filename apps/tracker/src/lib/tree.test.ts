@@ -127,9 +127,25 @@ describe('grouping', () => {
     });
 
     it('COSMOS grouped under Military', () => {
-        const root = buildRoot([sat('COSMOS 2553'), sat('COSMOS 2251 DEB')]);
+        const root = buildRoot([sat('COSMOS 2553'), sat('COSMOS 2251')]);
         const mil = root.children.find((c) => c.label === 'Military')!;
         expect(findInChildren(mil.children, 'COSMOS')!.children.length).toBe(2);
+    });
+
+    it('debris and rocket bodies are separated from payloads', () => {
+        const root = buildRoot([
+            sat('COSMOS 2251 DEB'),
+            sat('FENGYUN 1C DEB'),
+            sat('ARIANE 5 R/B'),
+            sat('COSMOS 2553')
+        ]);
+
+        const debris = root.children.find((c) => c.label === 'Debris')!;
+        expect(debris.children.map((c) => c.label).sort()).toEqual(['ARIANE', 'COSMOS', 'FENGYUN']);
+        expect(findInChildren(debris.children, 'COSMOS')!.satelliteIndex).toBe(0);
+
+        const mil = root.children.find((c) => c.label === 'Military')!;
+        expect(findInChildren(mil.children, 'COSMOS')!.satelliteIndex).toBe(3);
     });
 
     it('INMARSAT etc. under Communications', () => {

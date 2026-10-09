@@ -13,6 +13,10 @@ export interface TreeNode {
 }
 
 export function categorize(name: string): string {
+    // Debris and rocket bodies are name suffixes; check first so a payload
+    // prefix (e.g. COSMOS) doesn't absorb them.
+    if (/\bDEB\b|\bR\/B\b|\bROCKET BODY\b/i.test(name)) return 'debris';
+
     let functionType = 'other';
     if (
         /^(NOAA|METOP|GOES|METEOSAT|HIMAWARI|SUOMI|FY-|ELEKTRO|ARCTICA|MTSAT|INSAT|TIROS|NPP|JPSS|GCOM|COSPAS|MSG)/i.test(
@@ -59,6 +63,7 @@ export function labelFunction(f: string): string {
         weather: 'Weather',
         science: 'Science',
         military: 'Military',
+        debris: 'Debris',
         other: 'Other'
     };
     return labels[f] ?? f;
@@ -151,6 +156,7 @@ function buildTree(satellites: ParsedSatellite[]): TreeNode[] {
         'weather',
         'communications',
         'military',
+        'debris',
         'other'
     ];
     const sortedFunctions = Object.entries(functions).sort(
