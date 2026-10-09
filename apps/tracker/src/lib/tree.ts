@@ -12,16 +12,7 @@ export interface TreeNode {
     children: TreeNode[];
 }
 
-export function categorize(name: string): { functionType: string; constellation: string } {
-    let constellation = 'other';
-    if (/^STARLINK/i.test(name)) constellation = 'starlink';
-    else if (/^ONEWEB/i.test(name)) constellation = 'oneweb';
-    else if (/^IRIDIUM/i.test(name)) constellation = 'iridium';
-    else if (/^GPS/i.test(name)) constellation = 'gps';
-    else if (/^GALILEO/i.test(name)) constellation = 'galileo';
-    else if (/^GLONASS/i.test(name)) constellation = 'glonass';
-    else if (/^BEIDOU/i.test(name)) constellation = 'beidou';
-
+export function categorize(name: string): string {
     let functionType = 'other';
     if (
         /^(NOAA|METOP|GOES|METEOSAT|HIMAWARI|SUOMI|FY-|ELEKTRO|ARCTICA|MTSAT|INSAT|TIROS|NPP|JPSS|GCOM|COSPAS|MSG)/i.test(
@@ -57,7 +48,7 @@ export function categorize(name: string): { functionType: string; constellation:
     )
         functionType = 'science';
 
-    return { functionType, constellation };
+    return functionType;
 }
 
 export function labelFunction(f: string): string {
@@ -148,7 +139,7 @@ function buildTree(satellites: ParsedSatellite[]): TreeNode[] {
 
     for (let i = 0; i < satellites.length; i++) {
         const sat = satellites[i];
-        const { functionType } = categorize(sat.name);
+        const functionType = categorize(sat.name);
         if (!functions[functionType]) functions[functionType] = [];
         functions[functionType].push(sat);
     }
