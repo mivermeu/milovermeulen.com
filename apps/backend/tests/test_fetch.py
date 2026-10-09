@@ -10,19 +10,27 @@ from pathlib import Path
 
 from ..fetch import (
     DECAY_REFRESH_INTERVAL_S,
+    OBJECT_TYPE_REFRESH_INTERVAL_S,
     SPACETRACK_DECAY_FULL_URL,
     SPACETRACK_DECAY_RECENT_URL,
+    SPACETRACK_SATCAT_URL,
     TleRecord,
     drop_decayed,
+    enrich_object_types,
     load_decay_ids,
     load_existing,
+    load_object_types,
     merge_tles,
     norad_id,
+    normalize_object_type,
     parse_decay_ids,
+    parse_object_types,
     parse_tle_text,
     refresh_decay_ids,
+    refresh_object_types,
     save_decay_ids,
     save_json,
+    save_object_types,
 )
 
 SAMPLE_TLE = """\
@@ -138,10 +146,20 @@ def test_save_json_atomic() -> None:
 
 
 def test_norad_id() -> None:
-    assert norad_id("1 68319U 26058A   26241.65974551  .00005709  00000-0  11198-3 0  9999") == "68319"
-    assert norad_id("1 25544U 98067A   24001.50000000  .00016717  00000-0  10270-3 0  9990") == "25544"
-    assert norad_id("1 A0000U 25001A   26250.50000000  .00000000  00000-0  00000-0 0  9991") == "100000"
-    assert norad_id("1 E8493U 25001A   26250.50000000  .00000000  00000-0  00000-0 0  9991") == "148493"
+    assert (
+        norad_id("1 68319U 26058A   26241.65974551  .00005709  00000-0  11198-3 0  9999") == "68319"
+    )
+    assert (
+        norad_id("1 25544U 98067A   24001.50000000  .00016717  00000-0  10270-3 0  9990") == "25544"
+    )
+    assert (
+        norad_id("1 A0000U 25001A   26250.50000000  .00000000  00000-0  00000-0 0  9991")
+        == "100000"
+    )
+    assert (
+        norad_id("1 E8493U 25001A   26250.50000000  .00000000  00000-0  00000-0 0  9991")
+        == "148493"
+    )
     assert norad_id("nope") is None
     assert norad_id(None) is None  # type: ignore[arg-type]
 
@@ -230,3 +248,104 @@ def test_refresh_decay_ids_fetch_failure_keeps_stored() -> None:
             return None
 
         assert refresh_decay_ids(None, path, fetch=stub_fail) == {"11111"}  # type: ignore[arg-type]
+
+
+def test_normalize_object_type() -> None:
+    assert normalize_object_type("PAYLOAD") == "payload"
+    assert normalize_object_type("ROCKET BODY") == "rocket-body"
+    assert normalize_object_type("DEBRIS") == "debris"
+    assert normalize_object_type("TBA") == "unknown"
+    assert normalize_object_type("") == "unknown"
+    assert normalize_object_type(None) == "unknown"
+
+
+def test_parse_object_types() -> None:
+    records = [
+        {"NORAD_CAT_ID": 25544, "OBJECT_TYPE": "PAYLOAD"},
+        {"NORAD_CAT_ID": "68319", "OBJECT_TYPE": "DEBRIS"},
+        {"NORAD_CAT_ID": "1", "OBJECT_TYPE": "ROCKET BODY"},
+        {"NORAD_CAT_ID": None, "OBJECT_TYPE": "PAYLOAD"},
+        {"nope": True},
+    ]
+    assert parse_object_types(records) == {
+        "25544": "payload",
+        "68319": "debris",
+        "1": "rocket-body",
+    }
+
+
+def test_object_types_roundtrip() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "object-types.json"
+        assert load_object_types(path) == {}
+        save_object_types(path, {"25544": "payload", "68319": "debris"})
+        assert load_object_types(path) == {"25544": "payload", "68319": "debris"}
+        path.write_text("corrupt{{{")
+        assert load_object_types(path) == {}
+        path.write_text("[1, 2]")
+        assert load_object_types(path) == {}
+
+
+def test_enrich_object_types() -> None:
+    merged: dict[str, TleRecord] = {
+        "MS-33": {
+            "name": "MS-33",
+            "line1": "1 68319U 26058A   26241.65974551  .00005709  00000-0  11198-3 0  9999",
+            "line2": "2 68319",
+        },
+        "ISS": {
+            "name": "ISS",
+            "line1": "1 25544U 98067A   24001.50000000  .00016717  00000-0  10270-3 0  9990",
+            "line2": "2 25544",
+        },
+        "JUNK": {"name": "JUNK", "line1": "nope", "line2": "nope"},
+    }
+    enriched = enrich_object_types(merged, {"68319": "debris", "25544": "payload"})
+    assert enriched["MS-33"].get("objectType") == "debris"
+    assert enriched["ISS"].get("objectType") == "payload"
+    assert "objectType" not in enriched["JUNK"]
+
+
+def test_refresh_object_types_merges_and_caches() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "object-types.json"
+        calls: list[str] = []
+
+        def stub_fetch(opener: object, url: str) -> dict[str, str]:
+            calls.append(url)
+            return {"25544": "payload"}
+
+        assert refresh_object_types(None, path, fetch=stub_fetch) == {"25544": "payload"}  # type: ignore[arg-type]
+        assert calls == [SPACETRACK_SATCAT_URL]
+
+        # Fresh values win over stored ones; other stored entries are kept.
+        save_object_types(path, {"68319": "debris", "25544": "unknown"})
+        backdate(path, OBJECT_TYPE_REFRESH_INTERVAL_S + 3600)
+        assert refresh_object_types(None, path, fetch=stub_fetch) == {  # type: ignore[arg-type]
+            "68319": "debris",
+            "25544": "payload",
+        }
+        assert load_object_types(path) == {"68319": "debris", "25544": "payload"}
+
+
+def test_refresh_object_types_skips_when_fresh() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "object-types.json"
+        save_object_types(path, {"25544": "payload"})
+
+        def stub_boom(opener: object, url: str) -> dict[str, str]:
+            raise AssertionError("must not fetch")
+
+        assert refresh_object_types(None, path, fetch=stub_boom) == {"25544": "payload"}  # type: ignore[arg-type]
+
+
+def test_refresh_object_types_fetch_failure_keeps_stored() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "object-types.json"
+        save_object_types(path, {"25544": "payload"})
+        backdate(path, OBJECT_TYPE_REFRESH_INTERVAL_S + 3600)
+
+        def stub_fail(opener: object, url: str) -> None:
+            return None
+
+        assert refresh_object_types(None, path, fetch=stub_fail) == {"25544": "payload"}  # type: ignore[arg-type]

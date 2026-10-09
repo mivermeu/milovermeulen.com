@@ -9,20 +9,27 @@ Implements incremental updates per Space-Track best practices:
 
 from __future__ import annotations
 
+import contextlib
 import http.cookiejar
 import json
 import ssl
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable, TypedDict
+from typing import Any, TypedDict
 
 
-class TleRecord(TypedDict):
+class _TleRequired(TypedDict):
     name: str
     line1: str
     line2: str
+
+
+class TleRecord(_TleRequired, total=False):
+    # Attached by enrich_object_types() when SATCAT metadata is available.
+    objectType: str
 
 
 class SpacetrackRecord(TleRecord, total=False):
@@ -192,16 +199,25 @@ SPACETRACK_GP_URL = (
     "https://www.space-track.org/basicspacedata/query/class/gp"
     "/EPOCH/%3Enow-1/decay_date/null-val/orderby/OBJECT_NAME/format/json"
 )
-SPACETRACK_DECAY_FULL_URL = "https://www.space-track.org/basicspacedata/query/class/decay/format/json"
+SPACETRACK_SATCAT_URL = (
+    "https://www.space-track.org/basicspacedata/query/class/satcat"
+    "/decay/null-val/orderby/NORAD_CAT_ID/format/json"
+)
+SPACETRACK_DECAY_FULL_URL = (
+    "https://www.space-track.org/basicspacedata/query/class/decay/format/json"
+)
 SPACETRACK_DECAY_RECENT_URL = (
     "https://www.space-track.org/basicspacedata/query/class/decay/MSG_EPOCH/%3Enow-1/format/json"
 )
 CELESTRAK_URL = "https://www.celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle"
 TLE_PATH = Path("/var/www/satellite-api/tles.json")
 DECAY_IDS_PATH = Path("/var/www/satellite-api/decayed-ids.json")
+OBJECT_TYPES_PATH = Path("/var/www/satellite-api/object-types.json")
 # Space-Track allows the decay class once per day; skip the refresh when the
-# stored set is newer than this (the GP fetch itself may run hourly).
+# stored set is newer than this (the GP fetch itself may run hourly). The SATCAT
+# query is bulk (one row per on-orbit object), so it is throttled the same way.
 DECAY_REFRESH_INTERVAL_S = 20 * 3600
+OBJECT_TYPE_REFRESH_INTERVAL_S = 20 * 3600
 CREDS_PATH = Path.home() / ".config" / "satellite-api" / "spacetrack-creds"
 
 
@@ -280,7 +296,7 @@ def refresh_decay_ids(
     known = load_decay_ids(ids_path)
     if ids_path.exists():
         try:
-            age_s = datetime.now(timezone.utc).timestamp() - ids_path.stat().st_mtime
+            age_s = datetime.now(UTC).timestamp() - ids_path.stat().st_mtime
         except OSError:
             age_s = float("inf")
         if age_s < DECAY_REFRESH_INTERVAL_S:
@@ -290,14 +306,14 @@ def refresh_decay_ids(
     if fresh is None:
         return known
     known |= fresh
-    try:
+    with contextlib.suppress(Exception):
         save_decay_ids(ids_path, known)
-    except Exception:
-        pass
     return known
 
 
-def drop_decayed(merged: dict[str, TleRecord], decayed_ids: set[str]) -> tuple[dict[str, TleRecord], int]:
+def drop_decayed(
+    merged: dict[str, TleRecord], decayed_ids: set[str]
+) -> tuple[dict[str, TleRecord], int]:
     """Remove merged records whose NORAD ID decayed. Unparsable IDs are kept."""
     kept = {
         name: tle
@@ -305,6 +321,95 @@ def drop_decayed(merged: dict[str, TleRecord], decayed_ids: set[str]) -> tuple[d
         if (cat_id := norad_id(tle["line1"])) is None or cat_id not in decayed_ids
     }
     return kept, len(merged) - len(kept)
+
+
+def normalize_object_type(raw: Any) -> str:
+    """Lowercase, hyphenated SATCAT object type ('ROCKET BODY' -> 'rocket-body')."""
+    if raw is None:
+        return "unknown"
+    value = str(raw).strip().lower().replace(" ", "-")
+    return "unknown" if value in ("", "tba") else value
+
+
+def parse_object_types(records: list[dict[str, Any]]) -> dict[str, str]:
+    """NORAD ID -> object type from SATCAT records (unparsable rows skipped)."""
+    types: dict[str, str] = {}
+    for rec in records:
+        try:
+            norad = str(int(rec["NORAD_CAT_ID"]))  # type: ignore[arg-type]
+        except (KeyError, TypeError, ValueError):
+            continue
+        types[norad] = normalize_object_type(rec.get("OBJECT_TYPE", ""))
+    return types
+
+
+def fetch_object_types(opener: urllib.request.OpenerDirector, url: str) -> dict[str, str] | None:
+    """Fetch SATCAT object types. None on failure (caller keeps old data)."""
+    data = fetch_json(opener, url)
+    if not isinstance(data, list):
+        return None
+    try:
+        return parse_object_types(data)
+    except Exception:
+        return None
+
+
+def load_object_types(path: Path) -> dict[str, str]:
+    """Load stored object types; empty map when missing or corrupt."""
+    try:
+        raw = json.loads(path.read_text())
+    except Exception:
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    return {str(k): str(v) for k, v in raw.items()}
+
+
+def save_object_types(path: Path, types: dict[str, str]) -> None:
+    """Atomically write object types as JSON."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(types, sort_keys=True))
+    tmp.rename(path)
+
+
+def refresh_object_types(
+    opener: urllib.request.OpenerDirector,
+    path: Path,
+    fetch: Callable[[urllib.request.OpenerDirector, str], dict[str, str] | None] | None = None,
+) -> dict[str, str]:
+    """Merge stored object types with a fresh SATCAT pull (new values win).
+
+    Skips the pull when the stored map is newer than OBJECT_TYPE_REFRESH_INTERVAL_S.
+    Never raises; auxiliary state must not break the TLE update.
+    """
+    known = load_object_types(path)
+    if path.exists():
+        try:
+            age_s = datetime.now(UTC).timestamp() - path.stat().st_mtime
+        except OSError:
+            age_s = float("inf")
+        if age_s < OBJECT_TYPE_REFRESH_INTERVAL_S:
+            return known
+    fresh = (fetch or fetch_object_types)(opener, SPACETRACK_SATCAT_URL)
+    if fresh is None:
+        return known
+    known.update(fresh)
+    with contextlib.suppress(Exception):
+        save_object_types(path, known)
+    return known
+
+
+def enrich_object_types(
+    merged: dict[str, TleRecord], types: dict[str, str]
+) -> dict[str, TleRecord]:
+    """Set objectType on each record from SATCAT where a NORAD ID matches."""
+    for rec in merged.values():
+        norad = norad_id(rec["line1"])
+        object_type = types.get(norad) if norad is not None else None
+        if object_type is not None:
+            rec["objectType"] = object_type
+    return merged
 
 
 def main() -> None:
@@ -317,6 +422,8 @@ def main() -> None:
     except Exception:
         username, password = "", ""
     decayed_ids: set[str] = set()
+    # Honor the cached types even when Space-Track is unreachable this run.
+    object_types: dict[str, str] = load_object_types(OBJECT_TYPES_PATH)
     if username and password:
         opener, ok = make_spacetrack_opener(username, password, SPACETRACK_AUTH_URL)
         if ok:
@@ -324,6 +431,7 @@ def main() -> None:
             if new:
                 source = "space-track"
             decayed_ids = refresh_decay_ids(opener, DECAY_IDS_PATH)
+            object_types = refresh_object_types(opener, OBJECT_TYPES_PATH)
     if not new:
         new = fetch_celestrak(CELESTRAK_URL)
         if new:
@@ -335,9 +443,12 @@ def main() -> None:
 
     merged = merge_tles(existing, new)
     merged, decayed = drop_decayed(merged, decayed_ids)
+    merged = enrich_object_types(merged, object_types)
     save_json(list(merged.values()), TLE_PATH)
     TLE_PATH.parent.joinpath("last-updated.json").write_text(
-        json.dumps({"count": len(merged), "source": source, "updated": datetime.now(timezone.utc).isoformat()})
+        json.dumps(
+            {"count": len(merged), "source": source, "updated": datetime.now(UTC).isoformat()}
+        )
     )
     print(f"fetch-tles: {source}, +{len(new)} fetched, {len(merged)} total, -{decayed} decayed")
 

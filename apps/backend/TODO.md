@@ -6,7 +6,8 @@
 - [x] Backend: API server with key auth, localhost-only behind nginx
 - [x] Backend: nginx reverse proxy with rate limiting, CORS, server header hiding
 - [x] Backend: systemd services (api server + 6h fetch timer)
-- [x] Backend: 11 tests (parse, merge, load, save)
+- [x] Backend: unit tests (parse, merge, load, save, decay, object types)
+- [x] Backend: SATCAT object-type enrichment (payload/rocket-body/debris) attached to each TLE
 - [x] Frontend: tracker app fetches from local API first, falls back to CelesTrak/samples
 - [x] Frontend: API key via Vite env vars (not hardcoded)
 - [x] Security: key rotated, .env gitignored, no secrets in tracked files

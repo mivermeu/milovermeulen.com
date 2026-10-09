@@ -3,7 +3,8 @@
 TLE data fetcher and API server for the [Satellite Tracker](../tracker/) app. Fetches orbital data
 from Space-Track (with CelesTrak fallback), persists it to disk, and serves it over HTTP.
 
-Zero external Python dependencies — stdlib only.
+Zero external Python dependencies — stdlib only. Requires Python 3.12+ (declared in the root
+`pyproject.toml`; the backend uses `datetime.UTC`).
 
 ## Architecture
 
@@ -20,10 +21,10 @@ Space-Track / CelesTrak
 
 Two independent components that share a JSON file on disk:
 
-| Component   | Purpose                                                   | Runs                            |
-| ----------- | --------------------------------------------------------- | ------------------------------- |
-| `fetch.py`  | Fetches TLE data, merges with existing, writes atomically | Cron / systemd timer (every 6h) |
-| `server.py` | Serves `tles.json` with API key auth                      | systemd service (always-on)     |
+| Component   | Purpose                                                                                      | Runs                            |
+| ----------- | -------------------------------------------------------------------------------------------- | ------------------------------- |
+| `fetch.py`  | Fetches TLE data, merges with existing, enriches with SATCAT object types, writes atomically | Cron / systemd timer (every 6h) |
+| `server.py` | Serves `tles.json` with API key auth                                                         | systemd service (always-on)     |
 
 ## Quick Start (Local Development)
 
@@ -36,11 +37,10 @@ mkdir -p /var/www/satellite-api
 
 ### 2. Set up Space-Track credentials (optional, for full catalog)
 
-Create `~/.config/satellite-api/spacetrack-creds` with two lines:
+Create `~/.config/satellite-api/spacetrack-creds` with a single `username:password` line:
 
 ```
-your-username
-your-password
+your-username:your-password
 ```
 
 Get a free account at https://www.space-track.org/
@@ -104,6 +104,13 @@ curl http://localhost:8081/tles.json | head -c 200
 | `SATELLITE_API_PORT` | `8081`                   | Server port                   |
 | `SATELLITE_DATA_DIR` | `/var/www/satellite-api` | Directory to serve files from |
 
+## Object type enrichment
+
+With Space-Track credentials configured, `fetch.py` also pulls the SATCAT class (cached to
+`object-types.json`, refreshed at most once per 20h) and attaches a normalized `objectType` to each
+TLE record — one of `payload`, `rocket-body`, `debris`, or `unknown`. The field is present only
+where a matching NORAD ID is known, so consumers should fall back to name-based heuristics.
+
 ## Frontend Integration
 
 The tracker app looks for this Vite env var (set in `.env` or via `--env`):
@@ -139,7 +146,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 /path/to/apps/backend/server.py
+ExecStart=/usr/bin/python3.12 /path/to/apps/backend/server.py
 Restart=on-failure
 RestartSec=5
 Environment=SATELLITE_API_HOST=127.0.0.1
@@ -158,7 +165,7 @@ Description=Fetch satellite TLE data
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/python3 -c "from apps.backend.fetch import *; ..."
+ExecStart=/usr/bin/python3.12 -c "from apps.backend.fetch import *; ..."
 ```
 
 ```ini
