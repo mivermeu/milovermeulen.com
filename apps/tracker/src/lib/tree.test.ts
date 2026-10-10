@@ -211,3 +211,23 @@ describe('function category metadata', () => {
         expect(root.children.find((c) => c.label === 'Navigation')).toBeDefined();
     });
 });
+
+describe('ordering', () => {
+    it('sorts groups within a category alphabetically', () => {
+        const root = buildRoot([
+            sat('GPS BIIF-1'),
+            sat('GLONASS-M 761'),
+            sat('GALILEO-221'),
+            sat('BEIDOU-3 M1')
+        ]);
+        const nav = root.children.find((c) => c.label === 'Navigation')!;
+        expect(nav.children.map((c) => c.label)).toEqual(['BEIDOU', 'GALILEO', 'GLONASS', 'GPS']);
+    });
+
+    it('sorts satellites within a group alphabetically', () => {
+        const root = buildRoot([sat('STARLINK-3002'), sat('STARLINK-1001'), sat('STARLINK-1002')]);
+        const comms = root.children.find((c) => c.label === 'Communications')!;
+        const batch1 = comms.children.find((c) => c.label === 'STARLINK-1')!;
+        expect(batch1.children.map((c) => c.label)).toEqual(['STARLINK-1001', 'STARLINK-1002']);
+    });
+});

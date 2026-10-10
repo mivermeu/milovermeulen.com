@@ -211,6 +211,7 @@ function buildTree(satellites: ParsedSatellite[]): TreeNode[] {
                         children: []
                     };
                 });
+                groupChildren.sort((a, b) => a.label.localeCompare(b.label));
                 funcChildren.push({
                     id: `group-${funcType}-${groupPrefix}`,
                     label: groupPrefix,
@@ -221,6 +222,8 @@ function buildTree(satellites: ParsedSatellite[]): TreeNode[] {
                 });
             }
         }
+
+        funcChildren.sort((a, b) => a.label.localeCompare(b.label));
 
         return {
             id: `func-${funcType}`,
