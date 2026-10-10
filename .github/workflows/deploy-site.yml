@@ -1,18 +1,23 @@
-name: Deploy site
-
-# Builds the static apps and uploads each one over FTPS to
-#   $FTPS_REMOTE_DIR + the app's SvelteKit base path
+# Deploy site
+#
+# Builds every deployable SvelteKit app and uploads each over FTPS to
+#   $FTPS_REMOTE_DIR + the app's kit.paths.base
 # e.g. FTPS_REMOTE_DIR=/public_html gives /public_html/tracker, /public_html/webneut,
-# and the portfolio app (base '') lands directly in /public_html.
-# Target directories are derived from each app's kit.paths.base, never configured per app.
+# and an app whose base is '' (the portfolio) lands directly in /public_html.
+#
+# Apps are discovered dynamically: every apps/<name>/ with a svelte.config.js is
+# deployable, and its base path and Rust/WASM need are read from the repo - there is
+# no hardcoded app list to maintain. On push, only apps whose files changed (or all
+# apps, when shared files change) are deployed; keep apps/backend out of the matrix
+# simply by not giving it a svelte.config.js.
 #
 # Required repository secrets (Settings > Secrets and variables > Actions > Secrets):
 #   FTPS_HOST, FTPS_USER, FTPS_PASSWORD
 # Required repository variable (same screen, Variables tab):
 #   FTPS_REMOTE_DIR   - document root of the site on the host
 # Optional repository variables:
-#   FTPS_PORT         - default 21 (use 990 for implicit FTPS)
-#   FTPS_MODE         - "explicit" (default, AUTH TLS on port 21) or "implicit"
+#   FTPS_PORT         - default 21; port 990 defaults to implicit FTPS
+#   FTPS_MODE         - force "explicit" (AUTH TLS on 21) or "implicit"
 #   FTPS_VERIFY_CERT  - default true; set false for hosts with an incomplete chain
 #   VITE_SATELLITE_API_URL - TLE API endpoint baked into the tracker bundle
 #
@@ -20,13 +25,15 @@ name: Deploy site
 # stale files. Switch `mirror` to `mirror --delete` only on a directory that the
 # app fully owns.
 
+name: Deploy site
+
 on:
     workflow_dispatch:
         inputs:
             apps:
-                description: 'Apps to deploy, space separated (portfolio webneut tracker)'
+                description: 'Apps to deploy, space separated (default: all)'
                 type: string
-                default: tracker
+                default: ''
     push:
         branches: [main]
         paths:
@@ -34,74 +41,180 @@ on:
             - 'packages/**'
             - 'package.json'
             - 'bun.lock'
+            - 'turbo.json'
             - '.github/workflows/deploy-site.yml'
+
+permissions:
+    contents: read
 
 concurrency:
     group: deploy-${{ github.ref }}
     cancel-in-progress: false
 
 jobs:
-    plan:
-        name: Plan
+    test:
+        name: Test
         runs-on: ubuntu-latest
-        outputs:
-            matrix: ${{ steps.plan.outputs.matrix }}
         steps:
-            - id: plan
-              env:
-                  EVENT: ${{ github.event_name }}
-                  REQUESTED: ${{ inputs.apps }}
-              run: |
-                  set -euo pipefail
-                  if [ "$EVENT" = "push" ]; then
-                    requested="tracker portfolio webneut"
-                  else
-                    requested="${REQUESTED:-tracker}"
-                  fi
-                  matrix=$(python3 -c 'import json,sys
-                  all_apps=["tracker","portfolio","webneut"]
-                  req=sys.argv[1].split()
-                  bad=[a for a in req if a not in all_apps]
-                  if bad: sys.exit("unknown app(s): "+" ".join(bad))
-                  print(json.dumps({"app":[a for a in all_apps if a in req]}))' "$requested")
-                  echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
-                  echo "Deploying: $matrix"
-
-    build:
-        name: Build ${{ matrix.app }}
-        needs: plan
-        runs-on: ubuntu-latest
-        strategy:
-            fail-fast: false
-            matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
-        steps:
-            - uses: actions/checkout@v4
-
-            - uses: oven-sh/setup-bun@v2
+            - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+            - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
               with:
                   bun-version: latest
 
             - name: Install dependencies
               run: bun install --frozen-lockfile
 
-            # webneut's build compiles oscillator-rs to WASM; the runner has rustup but
-            # needs the wasm target and wasm-pack.
+            # turbo's `test` task depends on `build`, and webneut's build compiles
+            # oscillator-rs, so the Rust toolchain is needed even to run tests.
+            - name: Cache Rust tools
+              uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+              with:
+                  path: |
+                      ~/.cargo/bin
+                      ~/.cargo/registry
+                      ~/.cargo/git
+                  key: ${{ runner.os }}-cargo-wasm-pack
             - name: Prepare Rust toolchain
-              if: matrix.app == 'webneut'
               run: |
                   rustup target add wasm32-unknown-unknown
-                  cargo install wasm-pack --locked
+                  command -v wasm-pack || cargo install wasm-pack --locked
+
+            - name: Workspace tests
+              run: bun run test
+
+            - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+              with:
+                  python-version: '3.12'
+            - name: Backend tests
+              run: |
+                  python -m pip install --quiet pytest
+                  python -m pytest apps/backend/tests -q
+
+    plan:
+        name: Plan
+        runs-on: ubuntu-latest
+        outputs:
+            matrix: ${{ steps.plan.outputs.matrix }}
+            has_apps: ${{ steps.plan.outputs.has_apps }}
+        steps:
+            - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+              with:
+                  fetch-depth: 0
+            - id: plan
+              env:
+                  EVENT: ${{ github.event_name }}
+                  REQUESTED: ${{ inputs.apps }}
+                  BEFORE: ${{ github.event.before }}
+                  SHA: ${{ github.sha }}
+              run: |
+                  set -euo pipefail
+                  python3 - <<'PY'
+                  import json, os, pathlib, re, subprocess
+
+                  apps = []
+                  for cfg in sorted(pathlib.Path("apps").glob("*/svelte.config.js")):
+                      match = re.search(r"\bbase:\s*(['\"`])(.*?)\1", cfg.read_text())
+                      apps.append(
+                          {
+                              "app": cfg.parent.name,
+                              "base": match.group(2) if match else "",
+                              "wasm": "true" if (cfg.parent / "oscillator-rs").is_dir() else "false",
+                          }
+                      )
+                  names = [a["app"] for a in apps]
+
+                  event = os.environ.get("EVENT", "")
+                  requested = os.environ.get("REQUESTED", "").split()
+                  if event == "push":
+                      before, sha = os.environ.get("BEFORE", ""), os.environ.get("SHA", "")
+                      if before and set(before) != {"0"} and sha:
+                          try:
+                              changed = subprocess.run(
+                                  ["git", "diff", "--name-only", before, sha],
+                                  capture_output=True,
+                                  text=True,
+                                  check=True,
+                              ).stdout.split()
+                          except subprocess.CalledProcessError:
+                              changed = [f"apps/{a['app']}/" for a in apps]
+                      else:
+                          changed = [f"apps/{a['app']}/" for a in apps]
+                      shared = any(
+                          p.startswith("packages/")
+                          or p in ("package.json", "bun.lock", "turbo.json")
+                          or p == ".github/workflows/deploy-site.yml"
+                          for p in changed
+                      )
+                      selected = (
+                          apps
+                          if shared
+                          else [
+                              a
+                              for a in apps
+                              if any(p.startswith(f"apps/{a['app']}/") for p in changed)
+                          ]
+                      )
+                  elif requested:
+                      unknown = [a for a in requested if a not in names]
+                      if unknown:
+                          raise SystemExit(
+                              "unknown app(s): " + " ".join(unknown) + " (available: " + " ".join(names) + ")"
+                          )
+                      selected = [a for a in apps if a["app"] in requested]
+                  else:
+                      selected = apps
+
+                  # Always emit a non-empty matrix; `has_apps` gates the jobs so the
+                  # empty case never relies on GitHub's empty-matrix behaviour.
+                  matrix = {"include": selected or [{"app": "", "base": "", "wasm": "false"}]}
+                  with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+                      out.write("matrix=" + json.dumps(matrix) + "\n")
+                      out.write("has_apps=" + ("true" if selected else "false") + "\n")
+                  print("Deploying:", ", ".join(a["app"] for a in selected) or "(none)")
+                  PY
+
+    build:
+        name: Build ${{ matrix.app }}
+        needs: [plan, test]
+        if: ${{ needs.plan.outputs.has_apps == 'true' }}
+        runs-on: ubuntu-latest
+        strategy:
+            fail-fast: false
+            matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+        steps:
+            - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+            - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+              with:
+                  bun-version: latest
+
+            - name: Install dependencies
+              run: bun install --frozen-lockfile
+
+            - name: Cache Rust tools
+              if: matrix.wasm == 'true'
+              uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+              with:
+                  path: |
+                      ~/.cargo/bin
+                      ~/.cargo/registry
+                      ~/.cargo/git
+                  key: ${{ runner.os }}-cargo-wasm-pack
+            - name: Prepare Rust toolchain
+              if: matrix.wasm == 'true'
+              run: |
+                  rustup target add wasm32-unknown-unknown
+                  command -v wasm-pack || cargo install wasm-pack --locked
 
             - name: Build ${{ matrix.app }}
               env:
                   VITE_SATELLITE_API_URL:
                       ${{ vars.VITE_SATELLITE_API_URL ||
                       'https://thehuis.tail4fbfb1.ts.net/tles.json' }}
-              run: bun run build
               working-directory: apps/${{ matrix.app }}
+              run: bun run build
 
             - name: Upload build artifact
-              uses: actions/upload-artifact@v4
+              uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
               with:
                   name: build-${{ matrix.app }}
                   path: apps/${{ matrix.app }}/build
@@ -110,7 +223,9 @@ jobs:
     deploy:
         name: Deploy ${{ matrix.app }}
         needs: [plan, build]
+        if: ${{ needs.plan.outputs.has_apps == 'true' }}
         runs-on: ubuntu-latest
+        environment: production
         strategy:
             fail-fast: false
             matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
@@ -132,42 +247,12 @@ jobs:
                     exit 1
                   fi
 
-            # Only needed to read kit.paths.base out of the app's svelte.config.js.
-            - uses: actions/checkout@v4
-
-            - name: Resolve remote directory for ${{ matrix.app }}
-              id: target
-              env:
-                  APP: ${{ matrix.app }}
-                  FTPS_REMOTE_DIR: ${{ vars.FTPS_REMOTE_DIR }}
-              run: |
-                  set -euo pipefail
-                  config="apps/$APP/svelte.config.js"
-                  if [ ! -f "$config" ]; then
-                    echo "::error::$config not found"
-                    exit 1
-                  fi
-                  contents=$(< "$config")
-                  if [[ "$contents" =~ base:[[:space:]]*\'([^\']*)\' ]]; then
-                    base="${BASH_REMATCH[1]}"
-                  else
-                    echo "::error::No kit.paths.base in $config; cannot derive the remote directory"
-                    exit 1
-                  fi
-                  if [ -n "$base" ] && [ "${base:0:1}" != "/" ]; then
-                    base="/$base"
-                  fi
-                  root="${FTPS_REMOTE_DIR%/}"
-                  remote="$root$base"
-                  echo "remote=$remote" >> "$GITHUB_OUTPUT"
-                  echo "$APP: base '$base' -> $remote"
-
             - name: Install lftp
               run: |
                   sudo apt-get update
                   sudo apt-get install -y --no-install-recommends lftp
 
-            - uses: actions/download-artifact@v4
+            - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
               with:
                   name: build-${{ matrix.app }}
                   path: build
@@ -178,24 +263,25 @@ jobs:
                   FTPS_USER: ${{ secrets.FTPS_USER }}
                   FTPS_PASSWORD: ${{ secrets.FTPS_PASSWORD }}
                   FTPS_PORT: ${{ vars.FTPS_PORT || '21' }}
-                  FTPS_MODE: ${{ vars.FTPS_MODE || 'explicit' }}
+                  FTPS_MODE: ${{ vars.FTPS_MODE }}
                   FTPS_VERIFY_CERT: ${{ vars.FTPS_VERIFY_CERT || 'true' }}
-                  REMOTE: ${{ steps.target.outputs.remote }}
+                  FTPS_REMOTE_DIR: ${{ vars.FTPS_REMOTE_DIR }}
+                  BASE: ${{ matrix.base }}
               run: |
                   set -euo pipefail
-                  # 990 is implicit FTPS (TLS from the first byte); anything else is
-                  # explicit FTPS (AUTH TLS on port 21).
                   PORT="${FTPS_PORT:-21}"
-                  MODE="${FTPS_MODE:-explicit}"
-                  VERIFY_CERT="${FTPS_VERIFY_CERT:-true}"
-                  if [ "$MODE" = "implicit" ]; then
-                    SCHEME="ftps"
-                  else
-                    SCHEME="ftp"
+                  MODE="${FTPS_MODE:-}"
+                  # Port 990 is implicit FTPS (TLS from the first byte); otherwise
+                  # explicit FTPS (AUTH TLS on 21). FTPS_MODE overrides this guess.
+                  if [ -z "$MODE" ]; then
+                    if [ "$PORT" = "990" ]; then MODE="implicit"; else MODE="explicit"; fi
                   fi
+                  if [ "$MODE" = "implicit" ]; then SCHEME="ftps"; else SCHEME="ftp"; fi
+                  VERIFY_CERT="${FTPS_VERIFY_CERT:-true}"
+                  REMOTE="${FTPS_REMOTE_DIR%/}${BASE}"
 
                   export LFTP_PASSWORD="$FTPS_PASSWORD"
-                  echo "Uploading build/ to $REMOTE"
+                  echo "Uploading build/ to $REMOTE ($MODE on $PORT)"
                   # The password is handed to lftp through the environment (open --env-password)
                   # instead of being interpolated into the command string, so characters like
                   # " $ ` ; cannot break lftp's own command parsing.
@@ -218,9 +304,9 @@ jobs:
                   rc=${PIPESTATUS[0]}
                   set -e
                   if [ "$rc" -ne 0 ]; then
-                    if grep -q '530' /tmp/lftp.log; then
+                    if grep -qE '530 ' /tmp/lftp.log; then
                       echo "::error::The host rejected the login (530). Check FTPS_USER and FTPS_PASSWORD; many shared hosts require the username in the form user@domain."
-                    elif grep -q 'ssl:verify-certificate' /tmp/lftp.log; then
+                    elif grep -qiE 'certificate|verify' /tmp/lftp.log; then
                       echo "::error::TLS certificate verification failed. Set the repository variable FTPS_VERIFY_CERT to false only if you trust this host."
                     fi
                     echo "::error::lftp exited with status $rc"

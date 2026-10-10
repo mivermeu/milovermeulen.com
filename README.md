@@ -5,12 +5,13 @@ a **Turborepo** monorepo managed by **bun**.
 
 ## Apps
 
-| Path       | App                           | Description                                       |
-| ---------- | ----------------------------- | ------------------------------------------------- |
-| `/`        | [portfolio](./apps/portfolio) | Personal portfolio and resume                     |
-| `/webneut` | [webneut](./apps/webneut)     | Neutrino oscillation visualizer                   |
-| `/tracker` | [tracker](./apps/tracker)     | Satellite globe tracker (SGP4, three.js, ECF/ECI) |
-| `/builder` | builder                       | Cat tree builder (planned)                        |
+| Path          | App                             | Description                                       |
+| ------------- | ------------------------------- | ------------------------------------------------- |
+| `/`           | [portfolio](./apps/portfolio)   | Personal portfolio and resume                     |
+| `/webneut`    | [webneut](./apps/webneut)       | Neutrino oscillation visualizer                   |
+| `/tracker`    | [tracker](./apps/tracker)       | Satellite globe tracker (SGP4, three.js, ECF/ECI) |
+| `/cool-tools` | [cool-tools](./apps/cool-tools) | Small in-browser utilities                        |
+| `/builder`    | builder                         | Cat tree builder (planned)                        |
 
 ## Getting Started
 
@@ -39,6 +40,8 @@ Each dev server runs on its own port. See individual app `package.json` for port
 │   ├── webneut/         # SvelteKit + static adapter, base path /webneut
 │   │   └── oscillator-rs/  # Rust/WASM neutrino oscillation engine
 │   ├── tracker/         # SvelteKit + static adapter, base path /tracker
+│   ├── cool-tools/      # SvelteKit + static adapter, base path /cool-tools
+│   ├── backend/         # Python: TLE fetcher + API server (not a static app)
 │   └── builder/         # planned
 ├── packages/
 │   └── shared-config/   # shared Tailwind v4 theme, fonts, utility classes
@@ -58,3 +61,23 @@ Each dev server runs on its own port. See individual app `package.json` for port
   oscillation engine
 - **3D rendering**: three.js (WebGL2) lines-only globe in tracker, SGP4 orbit propagation in a Web
   Worker
+
+## Deployment
+
+Pushing to `main` runs [`.github/workflows/deploy-site.yml`](./.github/workflows/deploy-site.yml),
+which tests, builds, and uploads the static apps over FTPS. Deployable apps are discovered
+dynamically — every `apps/*/svelte.config.js` — so there is no list to maintain. On push, only the
+apps whose files changed are deployed; a change to shared files (`packages/**`, `package.json`,
+`bun.lock`, `turbo.json`) deploys all of them.
+
+Configure it under **Settings → Secrets and variables → Actions**:
+
+| Kind            | Name                                                                   |
+| --------------- | ---------------------------------------------------------------------- |
+| Secret          | `FTPS_HOST`, `FTPS_USER`, `FTPS_PASSWORD`                              |
+| Variable        | `FTPS_REMOTE_DIR` (document root on the host, e.g. `/public_html`)     |
+| Variable (opt.) | `FTPS_PORT`, `FTPS_MODE`, `FTPS_VERIFY_CERT`, `VITE_SATELLITE_API_URL` |
+
+The deploy job targets a GitHub Environment named `production`; add protection rules there to
+require approval before shipping. Uploads never delete, so content-hashed assets accumulate on the
+host.
