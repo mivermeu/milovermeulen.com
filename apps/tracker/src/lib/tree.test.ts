@@ -97,9 +97,9 @@ describe('grouping', () => {
         const labels = nav.children.map((c) => c.label);
         expect(labels).toContain('GPS');
         expect(labels).toContain('GLONASS');
-        expect(labels).toContain('GALILEO');
-        expect(labels).toContain('QZS');
-        expect(labels).toContain('NAVIC');
+        expect(labels).toContain('GALILEO-221');
+        expect(labels).toContain('QZS-2');
+        expect(labels).toContain('NAVIC-1G');
     });
 
     it('STARLINK subcategorized by batch', () => {
@@ -123,7 +123,7 @@ describe('grouping', () => {
         ]);
         const eo = root.children.find((c) => c.label === 'Earth Observation')!;
         expect(findInChildren(eo.children, 'SENTINEL')!.children.length).toBe(3);
-        expect(findInChildren(eo.children, 'LANDSAT')).toBeDefined();
+        expect(findInChildren(eo.children, 'LANDSAT 8')).toBeDefined();
     });
 
     it('COSMOS grouped under Military', () => {
@@ -141,11 +141,15 @@ describe('grouping', () => {
         ]);
 
         const debris = root.children.find((c) => c.label === 'Debris')!;
-        expect(debris.children.map((c) => c.label).sort()).toEqual(['ARIANE', 'COSMOS', 'FENGYUN']);
-        expect(findInChildren(debris.children, 'COSMOS')!.satelliteIndex).toBe(0);
+        expect(debris.children.map((c) => c.label).sort()).toEqual([
+            'ARIANE 5 R/B',
+            'COSMOS 2251 DEB',
+            'FENGYUN 1C DEB'
+        ]);
+        expect(findInChildren(debris.children, 'COSMOS 2251 DEB')!.satelliteIndex).toBe(0);
 
         const mil = root.children.find((c) => c.label === 'Military')!;
-        expect(findInChildren(mil.children, 'COSMOS')!.satelliteIndex).toBe(3);
+        expect(findInChildren(mil.children, 'COSMOS 2553')!.satelliteIndex).toBe(3);
     });
 
     it('INMARSAT etc. under Communications', () => {
@@ -156,8 +160,8 @@ describe('grouping', () => {
             sat('MOLNIYA-3-60')
         ]);
         const comms = root.children.find((c) => c.label === 'Communications')!;
-        expect(comms.children.map((c) => c.label)).toContain('INMARSAT');
-        expect(comms.children.map((c) => c.label)).toContain('EUTELSAT');
+        expect(comms.children.map((c) => c.label)).toContain('INMARSAT 6-F1');
+        expect(comms.children.map((c) => c.label)).toContain('EUTELSAT 10B');
     });
 });
 
@@ -168,7 +172,7 @@ describe('object type metadata', () => {
             { ...sat('NAVSTAR 80'), objectType: 'rocket-body' }
         ]);
         const debris = root.children.find((c) => c.label === 'Debris')!;
-        expect(debris.children.map((c) => c.label).sort()).toEqual(['ISS', 'NAVSTAR']);
+        expect(debris.children.map((c) => c.label).sort()).toEqual(['ISS (ZARYA)', 'NAVSTAR 80']);
     });
 
     it('trusts an authoritative payload over a debris-looking name', () => {
@@ -216,9 +220,13 @@ describe('ordering', () => {
     it('sorts groups within a category alphabetically', () => {
         const root = buildRoot([
             sat('GPS BIIF-1'),
+            sat('GPS BIIF-2'),
             sat('GLONASS-M 761'),
+            sat('GLONASS-M 762'),
             sat('GALILEO-221'),
-            sat('BEIDOU-3 M1')
+            sat('GALILEO-222'),
+            sat('BEIDOU-3 M1'),
+            sat('BEIDOU-3 M2')
         ]);
         const nav = root.children.find((c) => c.label === 'Navigation')!;
         expect(nav.children.map((c) => c.label)).toEqual(['BEIDOU', 'GALILEO', 'GLONASS', 'GPS']);
@@ -229,5 +237,14 @@ describe('ordering', () => {
         const comms = root.children.find((c) => c.label === 'Communications')!;
         const batch1 = comms.children.find((c) => c.label === 'STARLINK-1')!;
         expect(batch1.children.map((c) => c.label)).toEqual(['STARLINK-1001', 'STARLINK-1002']);
+    });
+});
+
+describe('single satellites', () => {
+    it('shows the full name for a lone satellite, not its prefix', () => {
+        // A-1 (ASTERIX) has prefix "A"; alone it must show the full name.
+        const root = buildRoot([sat('A-1 (ASTERIX)')]);
+        const other = root.children.find((c) => c.label === 'Other')!;
+        expect(other.children.map((c) => c.label)).toEqual(['A-1 (ASTERIX)']);
     });
 });

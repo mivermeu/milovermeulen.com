@@ -191,7 +191,7 @@ function buildTree(satellites: ParsedSatellite[]): TreeNode[] {
                 const satIdx = satellites.indexOf(sat);
                 funcChildren.push({
                     id: `sat-${satIdx}`,
-                    label: groupPrefix,
+                    label: sat.name,
                     satelliteIndex: satIdx,
                     selected: isSelected,
                     triState: (isSelected ? 'all' : 'none') as TriState,
