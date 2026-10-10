@@ -8,6 +8,8 @@ export interface OrbitalElements {
 }
 
 const EARTH_MU = 398600.4418; // km^3/s^2
+const DEG2RAD = Math.PI / 180;
+const RAD2DEG = 180 / Math.PI;
 
 /**
  * Classical (Keplerian) orbital elements from a TLE line 2.
@@ -25,4 +27,23 @@ export function orbitalElements(line2: string): OrbitalElements | null {
     const nRadPerSec = (n * 2 * Math.PI) / 86400;
     const a = Math.cbrt(EARTH_MU / (nRadPerSec * nRadPerSec));
     return { a, e, i, raan, argp, m };
+}
+
+/**
+ * Argument of latitude `u = ω + ν` — the angle from the ascending node to the
+ * satellite (the "anomaly past the ascending node", as opposed to the mean anomaly
+ * which is measured past periapsis). The true anomaly `ν` is obtained from the mean
+ * anomaly via Kepler's equation. Returns degrees in [0, 360).
+ */
+export function argumentOfLatitude(el: OrbitalElements): number {
+    const M = el.m * DEG2RAD;
+    let E = M;
+    for (let k = 0; k < 8; k++) {
+        E -= (E - el.e * Math.sin(E) - M) / (1 - el.e * Math.cos(E));
+    }
+    const nu =
+        2 *
+        Math.atan2(Math.sqrt(1 + el.e) * Math.sin(E / 2), Math.sqrt(1 - el.e) * Math.cos(E / 2));
+    const u = el.argp * DEG2RAD + nu;
+    return (((u * RAD2DEG) % 360) + 360) % 360;
 }

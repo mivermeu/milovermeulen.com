@@ -2,12 +2,13 @@
     import * as THREE from 'three';
     import { trackerState } from '$lib/state.svelte';
     import { categorize } from '$lib/tree';
-    import { orbitalElements, type OrbitalElements } from '$lib/orbit';
+    import { orbitalElements, argumentOfLatitude, type OrbitalElements } from '$lib/orbit';
     import Panel from './Panel.svelte';
 
-    type Param = keyof OrbitalElements;
+    type Param = keyof OrbitalElements | 'u';
 
-    const PARAMS: { key: Param; label: string; short: string }[] = [
+    // The six fundamental Keplerian elements.
+    const FUNDAMENTAL: { key: Param; label: string; short: string }[] = [
         { key: 'a', label: 'Semi-major axis (km)', short: 'a' },
         { key: 'e', label: 'Eccentricity', short: 'e' },
         { key: 'i', label: 'Inclination (°)', short: 'i' },
@@ -15,6 +16,16 @@
         { key: 'argp', label: 'Arg. of periapsis (°)', short: 'ω' },
         { key: 'm', label: 'Mean anomaly (°)', short: 'M' }
     ];
+
+    // Derived quantities, shown after a separator in the pickers.
+    const DERIVED: { key: Param; label: string; short: string }[] = [
+        { key: 'u', label: 'Argument of latitude (°)', short: 'u' }
+    ];
+    const ALL_PARAMS = [...FUNDAMENTAL, ...DERIVED];
+
+    function paramValue(el: OrbitalElements, key: Param): number {
+        return key === 'u' ? argumentOfLatitude(el) : el[key];
+    }
 
     const CATEGORY_COLORS: Record<string, number> = {
         communications: 0x818cf8,
@@ -61,8 +72,8 @@
     let raycaster: THREE.Raycaster | undefined;
     let lastMoveWall = 0;
 
-    const xLabel = $derived(PARAMS.find((p) => p.key === xKey)?.label ?? '');
-    const yLabel = $derived(PARAMS.find((p) => p.key === yKey)?.label ?? '');
+    const xLabel = $derived(ALL_PARAMS.find((p) => p.key === xKey)?.label ?? '');
+    const yLabel = $derived(ALL_PARAMS.find((p) => p.key === yKey)?.label ?? '');
 
     // Only the active (filtered/selected) satellites, with a valid orbit.
     const samples = $derived.by(() => {
@@ -102,8 +113,8 @@
         const s = samples.find((x) => x.index === focusIndex);
         if (!s) return null;
         return {
-            x: plot.l + norm(s.el[xKey], xRange, xLog) * plot.w,
-            y: plot.t + (1 - norm(s.el[yKey], yRange, yLog)) * plot.h
+            x: plot.l + norm(paramValue(s.el, xKey), xRange, xLog) * plot.w,
+            y: plot.t + (1 - norm(paramValue(s.el, yKey), yRange, yLog)) * plot.h
         };
     });
 
@@ -159,8 +170,8 @@
         let ymin = Infinity;
         let ymax = -Infinity;
         for (let k = 0; k < n; k++) {
-            const x = samples[k].el[xKey];
-            const y = samples[k].el[yKey];
+            const x = paramValue(samples[k].el, xKey);
+            const y = paramValue(samples[k].el, yKey);
             if (x < xmin) xmin = x;
             if (x > xmax) xmax = x;
             if (y < ymin) ymin = y;
@@ -199,7 +210,12 @@
         const color = geometry.getAttribute('color') as THREE.BufferAttribute;
         for (let k = 0; k < n; k++) {
             const s = samples[k];
-            position.setXYZ(k, l + xToNorm(s.el[xKey]) * w, t + (1 - yToNorm(s.el[yKey])) * h, 0);
+            position.setXYZ(
+                k,
+                l + xToNorm(paramValue(s.el, xKey)) * w,
+                t + (1 - yToNorm(paramValue(s.el, yKey))) * h,
+                0
+            );
             color.setXYZ(k, s.color.r, s.color.g, s.color.b);
         }
         position.needsUpdate = true;
@@ -344,7 +360,11 @@
                         aria-label="X axis parameter"
                         class="rounded border border-brand-secondary bg-brand-bg px-1 py-0.5"
                     >
-                        {#each PARAMS as p (p.key)}
+                        {#each FUNDAMENTAL as p (p.key)}
+                            <option value={p.key}>{p.short}</option>
+                        {/each}
+                        <option disabled>──────────</option>
+                        {#each DERIVED as p (p.key)}
                             <option value={p.key}>{p.short}</option>
                         {/each}
                     </select>
@@ -354,7 +374,11 @@
                         aria-label="Y axis parameter"
                         class="rounded border border-brand-secondary bg-brand-bg px-1 py-0.5"
                     >
-                        {#each PARAMS as p (p.key)}
+                        {#each FUNDAMENTAL as p (p.key)}
+                            <option value={p.key}>{p.short}</option>
+                        {/each}
+                        <option disabled>──────────</option>
+                        {#each DERIVED as p (p.key)}
                             <option value={p.key}>{p.short}</option>
                         {/each}
                     </select>
