@@ -39,11 +39,11 @@ jobs:
                   FTPS_PORT: ${{ vars.FTPS_PORT || '21' }}
                   FTPS_MODE: ${{ vars.FTPS_MODE || 'explicit' }}
                   EXTRA_USERS: ${{ inputs.usernames }}
-                  SITE_DOMAIN: milovermeulen.com
+                  # Leave empty to avoid guessing; set to the site domain to also try user@domain.
+                  SITE_DOMAIN: ''
               run: |
                   python3 - <<'PY'
                   import ftplib
-                  import hashlib
                   import os
                   import ssl
                   import sys
@@ -55,9 +55,10 @@ jobs:
                   mode = os.environ["FTPS_MODE"]
 
                   print("=== what GitHub has stored ===")
+                  non_ascii = sum(1 for ch in password if ord(ch) > 126)
                   print(f"USER     repr={user!r} len={len(user)} has_at={'@' in user}")
                   print(f"USER     leading_ws={user != user.lstrip()} trailing_ws={user != user.rstrip()}")
-                  print(f"PASSWORD len={len(password)} sha256={hashlib.sha256(password.encode()).hexdigest()}")
+                  print(f"PASSWORD len={len(password)} non_ascii_chars={non_ascii}")
                   print(f"PASSWORD leading_ws={password != password.lstrip()} "
                         f"trailing_ws={password != password.rstrip()} "
                         f"has_newline={chr(10) in password or chr(13) in password}")
