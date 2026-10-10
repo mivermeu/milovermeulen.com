@@ -1,8 +1,13 @@
 import { describe, it, expect } from 'bun:test';
-import { orbitalElements, argumentOfLatitude } from './orbit';
+import { orbitalElements, argumentOfLatitudeAt } from './orbit';
 
 // ISS, real TLE line 2.
 const ISS_LINE2 = '2 25544  51.6400 200.0000 0005000 100.0000 260.0000 15.49000000400000';
+
+// A real Starlink TLE (epoch 2026 day 283.557).
+const SL_L1 = '1 44714U 19074B   26283.55700749  .00047721  00000-0  45157-3 0  9995';
+const SL_L2 = '2 44714  53.1452 228.6792 0002957 108.6784 251.4553 15.66512426382214';
+const SL_EPOCH = Date.UTC(2026, 0, 1) + (283.55700749 - 1) * 86400000;
 
 describe('orbitalElements', () => {
     it('parses the classical elements', () => {
@@ -26,19 +31,22 @@ describe('orbitalElements', () => {
     });
 });
 
-describe('argumentOfLatitude', () => {
-    it('equals ω + M for a circular orbit (e = 0)', () => {
-        // eccentricity field 0000000 => e = 0, so true anomaly == mean anomaly.
-        const el = orbitalElements(
-            '2 25544  51.6400 200.0000 0000000 100.0000 260.0000 15.49000000400000'
-        )!;
-        expect(argumentOfLatitude(el)).toBeCloseTo((100 + 260) % 360, 3);
+describe('argumentOfLatitudeAt', () => {
+    it('is ~0 at the TLE epoch (near-circular elements are given at the node)', () => {
+        const u = argumentOfLatitudeAt(SL_L1, SL_L2, SL_EPOCH)!;
+        expect(Math.min(u, 360 - u)).toBeLessThan(1);
     });
 
-    it('stays in [0, 360)', () => {
-        const el = orbitalElements(ISS_LINE2)!;
-        const u = argumentOfLatitude(el);
-        expect(u).toBeGreaterThanOrEqual(0);
-        expect(u).toBeLessThan(360);
+    it('advances ~90° in a quarter of a period', () => {
+        const u0 = argumentOfLatitudeAt(SL_L1, SL_L2, SL_EPOCH)!;
+        // period ≈ 1440/15.665 min ≈ 91.9 min; a quarter is ~23 min.
+        const u1 = argumentOfLatitudeAt(SL_L1, SL_L2, SL_EPOCH + 23 * 60000)!;
+        const du = (((u1 - u0) % 360) + 360) % 360;
+        expect(du).toBeGreaterThan(80);
+        expect(du).toBeLessThan(100);
+    });
+
+    it('returns null for unparsable input', () => {
+        expect(argumentOfLatitudeAt('garbage', 'garbage', SL_EPOCH)).toBeNull();
     });
 });

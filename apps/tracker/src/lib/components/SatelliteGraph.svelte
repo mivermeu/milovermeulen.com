@@ -2,7 +2,7 @@
     import * as THREE from 'three';
     import { trackerState } from '$lib/state.svelte';
     import { categorize } from '$lib/tree';
-    import { orbitalElements, argumentOfLatitude, type OrbitalElements } from '$lib/orbit';
+    import { orbitalElements, argumentOfLatitudeAt, type OrbitalElements } from '$lib/orbit';
     import Panel from './Panel.svelte';
 
     type Param = keyof OrbitalElements | 'u';
@@ -19,12 +19,19 @@
 
     // Derived quantities, shown after a separator in the pickers.
     const DERIVED: { key: Param; label: string; short: string }[] = [
-        { key: 'u', label: 'Argument of latitude (°)', short: 'u' }
+        { key: 'u', label: 'Anomaly past asc. node (°)', short: 'u' }
     ];
     const ALL_PARAMS = [...FUNDAMENTAL, ...DERIVED];
 
-    function paramValue(el: OrbitalElements, key: Param): number {
-        return key === 'u' ? argumentOfLatitude(el) : el[key];
+    interface Sample {
+        index: number;
+        el: OrbitalElements;
+        u: number;
+        color: THREE.Color;
+    }
+
+    function paramValue(s: Sample, key: Param): number {
+        return key === 'u' ? s.u : s.el[key];
     }
 
     const CATEGORY_COLORS: Record<string, number> = {
@@ -63,6 +70,8 @@
     let xLog = $state(false);
     let yLog = $state(false);
     let hover = $state<{ x: number; y: number; name: string } | null>(null);
+    // Current time; a time-dependent axis (argument of latitude) advances with it.
+    let now = $state(Date.now());
 
     let renderer: THREE.WebGLRenderer | undefined;
     let scene: THREE.Scene | undefined;
@@ -75,10 +84,15 @@
     const xLabel = $derived(ALL_PARAMS.find((p) => p.key === xKey)?.label ?? '');
     const yLabel = $derived(ALL_PARAMS.find((p) => p.key === yKey)?.label ?? '');
 
+    // Argument of latitude is evaluated at the current time (matching the globe).
+    const usesU = $derived(xKey === 'u' || yKey === 'u');
+
     // Only the active (filtered/selected) satellites, with a valid orbit.
     const samples = $derived.by(() => {
         const sats = trackerState.satellites;
-        const out: { index: number; el: OrbitalElements; color: THREE.Color }[] = [];
+        const needU = usesU;
+        const t = needU ? now : 0;
+        const out: Sample[] = [];
         for (const index of trackerState.activeIndices) {
             const sat = sats[index];
             if (!sat) continue;
@@ -88,6 +102,7 @@
             out.push({
                 index,
                 el,
+                u: needU ? (argumentOfLatitudeAt(sat.line1, sat.line2, t) ?? 0) : 0,
                 color: new THREE.Color(CATEGORY_COLORS[category] ?? CATEGORY_COLORS.other)
             });
         }
@@ -113,8 +128,8 @@
         const s = samples.find((x) => x.index === focusIndex);
         if (!s) return null;
         return {
-            x: plot.l + norm(paramValue(s.el, xKey), xRange, xLog) * plot.w,
-            y: plot.t + (1 - norm(paramValue(s.el, yKey), yRange, yLog)) * plot.h
+            x: plot.l + norm(paramValue(s, xKey), xRange, xLog) * plot.w,
+            y: plot.t + (1 - norm(paramValue(s, yKey), yRange, yLog)) * plot.h
         };
     });
 
@@ -170,8 +185,8 @@
         let ymin = Infinity;
         let ymax = -Infinity;
         for (let k = 0; k < n; k++) {
-            const x = paramValue(samples[k].el, xKey);
-            const y = paramValue(samples[k].el, yKey);
+            const x = paramValue(samples[k], xKey);
+            const y = paramValue(samples[k], yKey);
             if (x < xmin) xmin = x;
             if (x > xmax) xmax = x;
             if (y < ymin) ymin = y;
@@ -212,8 +227,8 @@
             const s = samples[k];
             position.setXYZ(
                 k,
-                l + xToNorm(paramValue(s.el, xKey)) * w,
-                t + (1 - yToNorm(paramValue(s.el, yKey))) * h,
+                l + xToNorm(paramValue(s, xKey)) * w,
+                t + (1 - yToNorm(paramValue(s, yKey))) * h,
                 0
             );
             color.setXYZ(k, s.color.r, s.color.g, s.color.b);
@@ -343,6 +358,14 @@
         void xKey;
         void yKey;
         draw();
+    });
+
+    // Advance the clock so a time-dependent axis updates as the satellites move.
+    $effect(() => {
+        const id = setInterval(() => {
+            now = Date.now();
+        }, 2000);
+        return () => clearInterval(id);
     });
 </script>
 
