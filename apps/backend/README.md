@@ -98,11 +98,20 @@ curl http://localhost:8081/tles.json | head -c 200
 
 ## Environment Variables
 
-| Variable             | Default                  | Description                   |
-| -------------------- | ------------------------ | ----------------------------- |
-| `SATELLITE_API_HOST` | `127.0.0.1`              | Server bind address           |
-| `SATELLITE_API_PORT` | `8081`                   | Server port                   |
-| `SATELLITE_DATA_DIR` | `/var/www/satellite-api` | Directory to serve files from |
+| Variable                  | Default                  | Description                                     |
+| ------------------------- | ------------------------ | ----------------------------------------------- |
+| `SATELLITE_API_HOST`      | `127.0.0.1`              | Server bind address                             |
+| `SATELLITE_API_PORT`      | `8081`                   | Server port                                     |
+| `SATELLITE_DATA_DIR`      | `/var/www/satellite-api` | Directory to serve files from                   |
+| `SATELLITE_CACHE_MAX_AGE` | `1800`                   | `Cache-Control` max-age (seconds) for responses |
+
+## Caching & compression
+
+The TLE catalog is several MB. `server.py` sends
+`Cache-Control: public, max-age=<SATELLITE_CACHE_MAX_AGE>` with `ETag` / `Last-Modified` validators,
+answers conditional requests with `304`, and supports `HEAD` — so repeat loads are cheap.
+`nginx.conf` gzips `application/json` on the way out (~4.5 MB → ~1.2 MB; enable `ngx_brotli` for a
+further ~30%). Deploy the updated `nginx.conf` and reload nginx for the compression to take effect.
 
 ## Object type enrichment
 
@@ -134,6 +143,29 @@ limit_req_zone $binary_remote_addr zone=satellite_api:10m rate=10r/s;
 ```
 
 CORS is handled by the Python server directly (`server.py`), not nginx.
+
+After editing the config, validate it and reload:
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+Then verify compression, caching, and revalidation are live (send `Accept-Encoding` explicitly —
+some servers skip compression on `HEAD`):
+
+```bash
+curl -sS -D - -o /dev/null -H 'Accept-Encoding: gzip' \
+  https://<api-host>/tles.json \
+  | grep -iE 'content-encoding|vary|cache-control|etag'
+# expect: content-encoding: gzip, vary: Accept-Encoding,
+#         cache-control: public, max-age=1800, etag: "..."
+
+# A conditional request with the returned ETag should answer 304.
+ETAG=$(curl -sS -D - -o /dev/null -H 'Accept-Encoding: gzip' https://<api-host>/tles.json \
+  | awk -F': ' 'tolower($1)=="etag"{print $2}' | tr -d '\r')
+curl -sS -o /dev/null -w '%{http_code}\n' -H "If-None-Match: $ETAG" https://<api-host>/tles.json
+# expect: 304
+```
 
 ### systemd
 
