@@ -1,0 +1,28 @@
+export interface OrbitalElements {
+    a: number; // semi-major axis (km)
+    e: number; // eccentricity
+    i: number; // inclination (deg)
+    raan: number; // right ascension of the ascending node (deg)
+    argp: number; // argument of periapsis (deg)
+    m: number; // mean anomaly (deg)
+}
+
+const EARTH_MU = 398600.4418; // km^3/s^2
+
+/**
+ * Classical (Keplerian) orbital elements from a TLE line 2.
+ * Two-body only — no perturbations. Returns null if the line is unparsable.
+ */
+export function orbitalElements(line2: string): OrbitalElements | null {
+    if (typeof line2 !== 'string' || line2.length < 63) return null;
+    const i = parseFloat(line2.slice(8, 16));
+    const raan = parseFloat(line2.slice(17, 25));
+    const e = parseFloat(`0.${line2.slice(26, 33).trim()}`);
+    const argp = parseFloat(line2.slice(34, 42));
+    const m = parseFloat(line2.slice(43, 51));
+    const n = parseFloat(line2.slice(52, 63)); // mean motion, revs/day
+    if (![i, raan, e, argp, m, n].every(Number.isFinite) || n <= 0) return null;
+    const nRadPerSec = (n * 2 * Math.PI) / 86400;
+    const a = Math.cbrt(EARTH_MU / (nRadPerSec * nRadPerSec));
+    return { a, e, i, raan, argp, m };
+}

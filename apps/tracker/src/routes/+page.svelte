@@ -1,6 +1,7 @@
 <script lang="ts">
     import ControlPanel from '$lib/components/ControlPanel.svelte';
     import FilterPanel from '$lib/components/FilterPanel.svelte';
+    import SatelliteGraph from '$lib/components/SatelliteGraph.svelte';
     import SatelliteInfo from '$lib/components/SatelliteInfo.svelte';
     import SatelliteViewer from '$lib/components/SatelliteViewer.svelte';
     import favicon from '$lib/assets/favicon.svg';
@@ -43,6 +44,9 @@
         <SatelliteViewer />
         <div class="pointer-events-none absolute inset-0 z-10">
             <SatelliteInfo />
+        </div>
+        <div class="pointer-events-none absolute bottom-3 left-3 z-20 grid h-80 w-[32rem]">
+            <SatelliteGraph />
         </div>
         <div
             class="pointer-events-none absolute top-3 right-3 bottom-3 z-20 flex w-80 flex-col gap-3 transition-transform duration-300"
