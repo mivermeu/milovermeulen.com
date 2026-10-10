@@ -1,0 +1,114 @@
+name: Diagnose FTPS login
+
+# Temporary diagnostic: reports what the host sees when GitHub's runner logs in.
+# Prints no secret values - the username only, plus the password's length, a
+# sha256 you can compare against the hash of your own password, and whitespace
+# flags. Manual runs only.
+
+on:
+    workflow_dispatch:
+        inputs:
+            usernames:
+                description: 'Extra username forms to try, space separated (optional)'
+                type: string
+                default: ''
+
+jobs:
+    diagnose:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Egress IP and DNS
+              run: |
+                  echo "runner egress IP: $(curl -s https://api.ipify.org)"
+                  echo "resolved addresses for \$FTPS_HOST:"
+                  getent ahostsv4 "$FTPS_HOST" || true
+                  getent ahostsv6 "$FTPS_HOST" || true
+              env:
+                  FTPS_HOST: ${{ secrets.FTPS_HOST }}
+
+            - name: TLS and login dialogue
+              env:
+                  FTPS_HOST: ${{ secrets.FTPS_HOST }}
+                  FTPS_USER: ${{ secrets.FTPS_USER }}
+                  FTPS_PASSWORD: ${{ secrets.FTPS_PASSWORD }}
+                  FTPS_PORT: ${{ vars.FTPS_PORT || '21' }}
+                  FTPS_MODE: ${{ vars.FTPS_MODE || 'explicit' }}
+                  EXTRA_USERS: ${{ inputs.usernames }}
+              run: |
+                  python3 - <<'PY'
+                  import ftplib
+                  import hashlib
+                  import os
+                  import ssl
+                  import sys
+
+                  host = os.environ["FTPS_HOST"]
+                  user = os.environ["FTPS_USER"]
+                  password = os.environ["FTPS_PASSWORD"]
+                  port = int(os.environ["FTPS_PORT"])
+                  mode = os.environ["FTPS_MODE"]
+
+                  print("=== what GitHub has stored ===")
+                  print(f"USER     repr={user!r} len={len(user)} has_at={'@' in user}")
+                  print(f"USER     leading_ws={user != user.lstrip()} trailing_ws={user != user.rstrip()}")
+                  print(f"PASSWORD len={len(password)} sha256={hashlib.sha256(password.encode()).hexdigest()}")
+                  print(f"PASSWORD leading_ws={password != password.lstrip()} "
+                        f"trailing_ws={password != password.rstrip()} "
+                        f"has_newline={chr(10) in password or chr(13) in password}")
+                  print(f"HOST     {host!r} port={port} mode={mode}")
+
+                  candidates = []
+                  for name in [user, *os.environ.get("EXTRA_USERS", "").split()]:
+                      if name and name not in candidates:
+                          candidates.append(name)
+                  if "@" not in user and host.startswith("ftp."):
+                      # Most shared hosts want user@domain; derive it from ftp.example.com.
+                      guess = f"{user}@{host[4:]}"
+                      if guess not in candidates:
+                          candidates.append(guess)
+                  print(f"will try {len(candidates)} username form(s): {candidates}")
+
+                  ctx = ssl.create_default_context()
+                  ctx.check_hostname = False
+                  ctx.verify_mode = ssl.CERT_NONE
+
+                  def attempt(username):
+                      print(f"\n=== AUTH TLS + login as {username!r} ===")
+                      try:
+                          ftp = ftplib.FTP_TLS(context=ctx, timeout=30)
+                          ftp.set_debuglevel(2)
+                          ftp.connect(host, port)
+                          ftp.auth()
+                          print(f"prot_p: {ftp.prot_p()}")
+                          try:
+                              print("FEAT:", " | ".join(ftp.sendcmd("FEAT").splitlines()))
+                          except Exception as exc:  # noqa: BLE001
+                              print("FEAT unsupported:", exc)
+                          try:
+                              resp = ftp.login(username, password)
+                              print(f"LOGIN OK: {resp}")
+                              print("pwd:", ftp.pwd())
+                              try:
+                                  print("root listing:", ftp.nlst()[:10])
+                              except Exception as exc:  # noqa: BLE001
+                                  print("listing failed:", exc)
+                              ftp.quit()
+                              return True
+                          except ftplib.error_perm as exc:
+                              print(f"LOGIN REJECTED: {exc}")
+                              return False
+                          finally:
+                              try:
+                                  ftp.close()
+                              except Exception:  # noqa: BLE001
+                                  pass
+                      except Exception as exc:  # noqa: BLE001
+                          print(f"CONNECTION/TLS FAILED: {type(exc).__name__}: {exc}")
+                          return False
+
+                  results = [(name, attempt(name)) for name in candidates]
+                  print("\n=== summary ===")
+                  for name, ok in results:
+                      print(f"{name!r}: {'OK' if ok else 'FAILED'}")
+                  sys.exit(0 if any(ok for _, ok in results) else 1)
+                  PY
