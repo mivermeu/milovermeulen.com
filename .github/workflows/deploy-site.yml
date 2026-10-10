@@ -1,21 +1,21 @@
 name: Deploy site
 
-# Builds the static apps and uploads them to the web host over FTPS.
+# Builds the static apps and uploads each one over FTPS to
+#   $FTPS_REMOTE_DIR + the app's SvelteKit base path
+# e.g. FTPS_REMOTE_DIR=/public_html gives /public_html/tracker, /public_html/webneut,
+# and the portfolio app (base '') lands directly in /public_html.
+# Target directories are derived from each app's kit.paths.base, never configured per app.
 #
-# Required repository secrets (Settings > Secrets and variables > Actions):
-#   FTPS_HOST      - hostname or IP of the web host
-#   FTPS_USER      - FTPS username
-#   FTPS_PASSWORD  - FTPS password
+# Required repository secrets (Settings > Secrets and variables > Actions > Secrets):
+#   FTPS_HOST, FTPS_USER, FTPS_PASSWORD
+# Required repository variable (same screen, Variables tab):
+#   FTPS_REMOTE_DIR   - document root of the site on the host
 # Optional repository variables:
-#   FTPS_PORT                   - default 21 (use 990 for implicit FTPS)
-#   FTPS_MODE                   - "explicit" (default, AUTH TLS on port 21) or "implicit"
-#   FTPS_VERIFY_CERT            - default true; set false for hosts with an incomplete chain
-#   FTPS_REMOTE_DIR_TRACKER     - remote directory that /tracker maps to
-#   FTPS_REMOTE_DIR_PORTFOLIO   - remote directory for the root site
-#   FTPS_REMOTE_DIR_WEBNEUT     - remote directory for /webneut
-#   VITE_SATELLITE_API_URL      - TLE API endpoint baked into the tracker bundle
+#   FTPS_PORT         - default 21 (use 990 for implicit FTPS)
+#   FTPS_MODE         - "explicit" (default, AUTH TLS on port 21) or "implicit"
+#   FTPS_VERIFY_CERT  - default true; set false for hosts with an incomplete chain
+#   VITE_SATELLITE_API_URL - TLE API endpoint baked into the tracker bundle
 #
-# An app is skipped when its remote directory variable is empty.
 # Uploads never delete: content-hashed assets change names, so the remote keeps
 # stale files. Switch `mirror` to `mirror --delete` only on a directory that the
 # app fully owns.
@@ -115,20 +115,52 @@ jobs:
             fail-fast: false
             matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
         steps:
-            - name: Check credentials
+            - name: Check configuration
               env:
                   FTPS_HOST: ${{ secrets.FTPS_HOST }}
                   FTPS_USER: ${{ secrets.FTPS_USER }}
                   FTPS_PASSWORD: ${{ secrets.FTPS_PASSWORD }}
+                  FTPS_REMOTE_DIR: ${{ vars.FTPS_REMOTE_DIR }}
               run: |
                   missing=""
-                  [ -n "$FTPS_HOST" ] || missing="$missing FTPS_HOST"
-                  [ -n "$FTPS_USER" ] || missing="$missing FTPS_USER"
-                  [ -n "$FTPS_PASSWORD" ] || missing="$missing FTPS_PASSWORD"
+                  [ -n "$FTPS_HOST" ] || missing="$missing secret:FTPS_HOST"
+                  [ -n "$FTPS_USER" ] || missing="$missing secret:FTPS_USER"
+                  [ -n "$FTPS_PASSWORD" ] || missing="$missing secret:FTPS_PASSWORD"
+                  [ -n "$FTPS_REMOTE_DIR" ] || missing="$missing variable:FTPS_REMOTE_DIR"
                   if [ -n "$missing" ]; then
-                    echo "::error::Missing repository secrets:$missing"
+                    echo "::error::Not configured:$missing"
                     exit 1
                   fi
+
+            # Only needed to read kit.paths.base out of the app's svelte.config.js.
+            - uses: actions/checkout@v4
+
+            - name: Resolve remote directory for ${{ matrix.app }}
+              id: target
+              env:
+                  APP: ${{ matrix.app }}
+                  FTPS_REMOTE_DIR: ${{ vars.FTPS_REMOTE_DIR }}
+              run: |
+                  set -euo pipefail
+                  config="apps/$APP/svelte.config.js"
+                  if [ ! -f "$config" ]; then
+                    echo "::error::$config not found"
+                    exit 1
+                  fi
+                  contents=$(< "$config")
+                  if [[ "$contents" =~ base:[[:space:]]*\'([^\']*)\' ]]; then
+                    base="${BASH_REMATCH[1]}"
+                  else
+                    echo "::error::No kit.paths.base in $config; cannot derive the remote directory"
+                    exit 1
+                  fi
+                  if [ -n "$base" ] && [ "${base:0:1}" != "/" ]; then
+                    base="/$base"
+                  fi
+                  root="${FTPS_REMOTE_DIR%/}"
+                  remote="$root$base"
+                  echo "remote=$remote" >> "$GITHUB_OUTPUT"
+                  echo "$APP: base '$base' -> $remote"
 
             - name: Install lftp
               run: |
@@ -148,23 +180,9 @@ jobs:
                   FTPS_PORT: ${{ vars.FTPS_PORT || '21' }}
                   FTPS_MODE: ${{ vars.FTPS_MODE || 'explicit' }}
                   FTPS_VERIFY_CERT: ${{ vars.FTPS_VERIFY_CERT || 'true' }}
-                  APP: ${{ matrix.app }}
-                  REMOTE_TRACKER: ${{ vars.FTPS_REMOTE_DIR_TRACKER }}
-                  REMOTE_PORTFOLIO: ${{ vars.FTPS_REMOTE_DIR_PORTFOLIO }}
-                  REMOTE_WEBNEUT: ${{ vars.FTPS_REMOTE_DIR_WEBNEUT }}
+                  REMOTE: ${{ steps.target.outputs.remote }}
               run: |
                   set -euo pipefail
-                  case "$APP" in
-                    tracker)   REMOTE="$REMOTE_TRACKER" ;;
-                    portfolio) REMOTE="$REMOTE_PORTFOLIO" ;;
-                    webneut)   REMOTE="$REMOTE_WEBNEUT" ;;
-                    *) echo "::error::Unknown app: $APP"; exit 1 ;;
-                  esac
-                  if [ -z "$REMOTE" ]; then
-                    echo "No remote directory configured for $APP, skipping."
-                    exit 0
-                  fi
-
                   # 990 is implicit FTPS (TLS from the first byte); anything else is
                   # explicit FTPS (AUTH TLS on port 21).
                   PORT="${FTPS_PORT:-21}"
@@ -176,6 +194,7 @@ jobs:
                     SCHEME="ftp"
                   fi
 
+                  echo "Uploading build/ to $REMOTE"
                   lftp -c "
                     set ftp:ssl-force true;
                     set ftp:ssl-protect-data true;
