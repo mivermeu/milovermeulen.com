@@ -120,6 +120,18 @@ With Space-Track credentials configured, `fetch.py` also pulls the SATCAT class 
 TLE record — one of `payload`, `rocket-body`, `debris`, or `unknown`. The field is present only
 where a matching NORAD ID is known, so consumers should fall back to name-based heuristics.
 
+## Function category enrichment
+
+`fetch.py` also derives a function `category` from CelesTrak's curated groups (public — no
+credentials needed): group membership maps to `navigation`, `weather`, `earth-observation`,
+`communications`, `science`, `military`, or `other` and is attached to each record. Every group is
+downloaded in one pass — CelesTrak's limit is one download _per group_ per 2h, so a whole-set pull
+is fine — and the result is cached to `categories.json`, refreshed at most once per
+`CATEGORY_REFRESH_INTERVAL_S` (20h). Groups are visited in priority order, so a specific group
+(`weather`) beats a broad one (`geo`), and the cache is merged by priority rank — a group that fails
+can't downgrade an object to a lower-priority category. Only objects in a named group get a
+category; the rest fall back to the frontend's name heuristic.
+
 ## Frontend Integration
 
 The tracker app looks for this Vite env var (set in `.env` or via `--env`):

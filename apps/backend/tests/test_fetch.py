@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 from ..fetch import (
+    CATEGORY_REFRESH_INTERVAL_S,
     DECAY_REFRESH_INTERVAL_S,
     OBJECT_TYPE_REFRESH_INTERVAL_S,
     SPACETRACK_DECAY_FULL_URL,
@@ -16,7 +17,10 @@ from ..fetch import (
     SPACETRACK_SATCAT_URL,
     TleRecord,
     drop_decayed,
+    enrich_categories,
     enrich_object_types,
+    fetch_categories,
+    load_categories,
     load_decay_ids,
     load_existing,
     load_object_types,
@@ -26,8 +30,10 @@ from ..fetch import (
     parse_decay_ids,
     parse_object_types,
     parse_tle_text,
+    refresh_categories,
     refresh_decay_ids,
     refresh_object_types,
+    save_categories,
     save_decay_ids,
     save_json,
     save_object_types,
@@ -349,3 +355,107 @@ def test_refresh_object_types_fetch_failure_keeps_stored() -> None:
             return None
 
         assert refresh_object_types(None, path, fetch=stub_fail) == {"25544": "payload"}  # type: ignore[arg-type]
+
+
+def test_fetch_categories_priority() -> None:
+    groups = {
+        "military": [{"NORAD_CAT_ID": 1}],
+        "gnss": [{"NORAD_CAT_ID": 2}, {"NORAD_CAT_ID": 3}],
+        "gps-ops": [{"NORAD_CAT_ID": 3}],
+        "weather": [{"NORAD_CAT_ID": 4}],
+        "geo": [{"NORAD_CAT_ID": 5}, {"NORAD_CAT_ID": 4}],
+        "cubesat": [{"NORAD_CAT_ID": 6}],
+    }
+
+    def stub(group: str) -> list[dict[str, int]] | None:
+        return groups.get(group)
+
+    assert fetch_categories(fetch=stub) == {
+        "1": "military",
+        "2": "navigation",
+        "3": "navigation",
+        "4": "weather",  # weather beats the broad `geo`
+        "5": "communications",
+        "6": "other",
+    }
+
+
+def test_fetch_categories_all_fail() -> None:
+    assert fetch_categories(fetch=lambda group: None) is None
+
+
+def test_categories_roundtrip() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "categories.json"
+        assert load_categories(path) == {}
+        save_categories(path, {"25544": "science", "68319": "military"})
+        assert load_categories(path) == {"25544": "science", "68319": "military"}
+        path.write_text("corrupt{{{")
+        assert load_categories(path) == {}
+        path.write_text("[1, 2]")
+        assert load_categories(path) == {}
+
+
+def test_enrich_categories() -> None:
+    merged: dict[str, TleRecord] = {
+        "ISS": {
+            "name": "ISS",
+            "line1": "1 25544U 98067A   24001.50000000  .00016717  00000-0  10270-3 0  9990",
+            "line2": "2 25544",
+        },
+        "JUNK": {"name": "JUNK", "line1": "nope", "line2": "nope"},
+    }
+    enriched = enrich_categories(merged, {"25544": "science"})
+    assert enriched["ISS"].get("category") == "science"
+    assert "category" not in enriched["JUNK"]
+
+
+def test_refresh_categories_merges_and_caches() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "categories.json"
+        calls: list[str] = []
+
+        def stub(group: str) -> list[dict[str, int]] | None:
+            calls.append(group)
+            return [{"NORAD_CAT_ID": 25544}] if group == "science" else None
+
+        assert refresh_categories(path, fetch=stub) == {"25544": "science"}
+        assert "science" in calls
+
+        # Fresh values win over stored ones; other stored entries are kept.
+        save_categories(path, {"68319": "military", "25544": "other"})
+        backdate(path, CATEGORY_REFRESH_INTERVAL_S + 3600)
+        assert refresh_categories(path, fetch=stub) == {"68319": "military", "25544": "science"}
+        assert load_categories(path) == {"68319": "military", "25544": "science"}
+
+
+def test_refresh_categories_skips_when_fresh() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "categories.json"
+        save_categories(path, {"25544": "science"})
+
+        def stub_boom(group: str) -> list[dict[str, int]] | None:
+            raise AssertionError("must not fetch")
+
+        assert refresh_categories(path, fetch=stub_boom) == {"25544": "science"}
+
+
+def test_refresh_categories_fetch_failure_keeps_stored() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "categories.json"
+        save_categories(path, {"25544": "science"})
+        backdate(path, CATEGORY_REFRESH_INTERVAL_S + 3600)
+        assert refresh_categories(path, fetch=lambda group: None) == {"25544": "science"}
+
+
+def test_refresh_categories_does_not_downgrade_on_partial_failure() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "categories.json"
+        save_categories(path, {"25544": "military"})
+        backdate(path, CATEGORY_REFRESH_INTERVAL_S + 3600)
+
+        # `military` (higher priority) fails, but a broad `geo` group still lists it.
+        def stub(group: str) -> list[dict[str, int]] | None:
+            return [{"NORAD_CAT_ID": 25544}] if group == "geo" else None
+
+        assert refresh_categories(path, fetch=stub)["25544"] == "military"

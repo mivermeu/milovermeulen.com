@@ -18,7 +18,7 @@ import urllib.request
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any, Literal, TypedDict
 
 
 class _TleRequired(TypedDict):
@@ -28,8 +28,9 @@ class _TleRequired(TypedDict):
 
 
 class TleRecord(_TleRequired, total=False):
-    # Attached by enrich_object_types() when SATCAT metadata is available.
+    # Attached during enrichment; see enrich_object_types()/enrich_categories().
     objectType: str
+    category: str
 
 
 class SpacetrackRecord(TleRecord, total=False):
@@ -149,13 +150,10 @@ def _relaxed_ssl_context() -> ssl.SSLContext:
     return ctx
 
 
-def fetch_celestrak(url: str, timeout: int = 30) -> list[TleRecord] | None:
-    """Fetch TLE data from CelesTrak (public, no auth).
-
-    Tries strict SSL first, then relaxed (CelesTrak has expired cert).
-    Returns list of TleRecord or None.
-    """
-    for _attempt, ctx in enumerate([None, _relaxed_ssl_context()]):
+def _fetch_celestrak_text(url: str, timeout: int = 30) -> str | None:
+    """GET text from CelesTrak (public, no auth). Tries strict SSL, then relaxed
+    (CelesTrak's certificate has historically expired)."""
+    for ctx in (None, _relaxed_ssl_context()):
         req = urllib.request.Request(url, headers={"User-Agent": "satellite-api/1.0"})
         try:
             if ctx is not None:
@@ -165,10 +163,27 @@ def fetch_celestrak(url: str, timeout: int = 30) -> list[TleRecord] | None:
             with resp:
                 data = resp.read().decode("utf-8")
                 if data.strip() and "403" not in data[:200]:
-                    return parse_tle_text(data)
+                    return data
         except Exception:
             continue
     return None
+
+
+def fetch_celestrak(url: str, timeout: int = 30) -> list[TleRecord] | None:
+    """Fetch TLE data from CelesTrak (public, no auth). None on failure."""
+    text = _fetch_celestrak_text(url, timeout)
+    return parse_tle_text(text) if text is not None else None
+
+
+def fetch_celestrak_json(url: str, timeout: int = 30) -> Any | None:
+    """Fetch JSON from CelesTrak (public, no auth). None on failure."""
+    text = _fetch_celestrak_text(url, timeout)
+    if text is None:
+        return None
+    try:
+        return json.loads(text)
+    except Exception:
+        return None
 
 
 def load_existing(tle_path: Path) -> dict[str, TleRecord]:
@@ -210,15 +225,60 @@ SPACETRACK_DECAY_RECENT_URL = (
     "https://www.space-track.org/basicspacedata/query/class/decay/MSG_EPOCH/%3Enow-1/format/json"
 )
 CELESTRAK_URL = "https://www.celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle"
+CELESTRAK_GROUP_URL = "https://celestrak.org/NORAD/elements/gp.php?GROUP={group}&FORMAT=json"
 TLE_PATH = Path("/var/www/satellite-api/tles.json")
 DECAY_IDS_PATH = Path("/var/www/satellite-api/decayed-ids.json")
 OBJECT_TYPES_PATH = Path("/var/www/satellite-api/object-types.json")
+CATEGORIES_PATH = Path("/var/www/satellite-api/categories.json")
 # Space-Track allows the decay class once per day; skip the refresh when the
 # stored set is newer than this (the GP fetch itself may run hourly). The SATCAT
 # query is bulk (one row per on-orbit object), so it is throttled the same way.
 DECAY_REFRESH_INTERVAL_S = 20 * 3600
 OBJECT_TYPE_REFRESH_INTERVAL_S = 20 * 3600
+CATEGORY_REFRESH_INTERVAL_S = 20 * 3600
 CREDS_PATH = Path.home() / ".config" / "satellite-api" / "spacetrack-creds"
+
+
+# CelesTrak's curated groups mapped onto our function buckets, in priority order:
+# the first group (from the top) that lists an object wins, so specific groups are
+# checked before broad ones like `geo`.
+_GROUP_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("military", ("military",)),
+    ("navigation", ("gnss", "gps-ops", "glo-ops", "galileo", "beidou", "sbas")),
+    ("weather", ("weather",)),
+    ("earth-observation", ("resource", "sar", "sarsat", "dmc", "argos", "planet", "spire")),
+    ("science", ("science", "geodetic", "engineering", "education")),
+    (
+        "communications",
+        (
+            "geo",
+            "intelsat",
+            "ses",
+            "eutelsat",
+            "telesat",
+            "starlink",
+            "oneweb",
+            "qianfan",
+            "hulianwang",
+            "kuiper",
+            "iridium-NEXT",
+            "orbcomm",
+            "globalstar",
+            "amateur",
+            "satnogs",
+            "x-comm",
+            "other-comm",
+            "tdrss",
+        ),
+    ),
+    ("other", ("radar", "cubesat", "analyst")),
+)
+
+# Lower rank = higher priority; avoids downgrading a cached category to a
+# lower-priority group when a higher-priority group failed to download.
+_CATEGORY_RANK: dict[str, int] = {
+    category: index for index, (category, _) in enumerate(_GROUP_CATEGORIES)
+}
 
 
 # Alpha-5: catalog numbers >= 100000 encode the leading digits as a letter
@@ -331,13 +391,20 @@ def normalize_object_type(raw: Any) -> str:
     return "unknown" if value in ("", "tba") else value
 
 
+def _norad_key(value: Any) -> str | None:
+    """Normalize a NORAD catalog id to the string form used as a map key."""
+    try:
+        return str(int(value))
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
 def parse_object_types(records: list[dict[str, Any]]) -> dict[str, str]:
     """NORAD ID -> object type from SATCAT records (unparsable rows skipped)."""
     types: dict[str, str] = {}
     for rec in records:
-        try:
-            norad = str(int(rec["NORAD_CAT_ID"]))  # type: ignore[arg-type]
-        except (KeyError, TypeError, ValueError):
+        norad = _norad_key(rec.get("NORAD_CAT_ID"))
+        if norad is None:
             continue
         types[norad] = normalize_object_type(rec.get("OBJECT_TYPE", ""))
     return types
@@ -354,8 +421,8 @@ def fetch_object_types(opener: urllib.request.OpenerDirector, url: str) -> dict[
         return None
 
 
-def load_object_types(path: Path) -> dict[str, str]:
-    """Load stored object types; empty map when missing or corrupt."""
+def _load_str_map(path: Path) -> dict[str, str]:
+    """Load a JSON string->string map; empty map when missing or corrupt."""
     try:
         raw = json.loads(path.read_text())
     except Exception:
@@ -365,12 +432,22 @@ def load_object_types(path: Path) -> dict[str, str]:
     return {str(k): str(v) for k, v in raw.items()}
 
 
-def save_object_types(path: Path, types: dict[str, str]) -> None:
-    """Atomically write object types as JSON."""
+def _save_str_map(path: Path, mapping: dict[str, str]) -> None:
+    """Atomically write a JSON string->string map."""
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(types, sort_keys=True))
+    tmp.write_text(json.dumps(mapping, sort_keys=True))
     tmp.rename(path)
+
+
+def load_object_types(path: Path) -> dict[str, str]:
+    """Load stored object types; empty map when missing or corrupt."""
+    return _load_str_map(path)
+
+
+def save_object_types(path: Path, types: dict[str, str]) -> None:
+    """Atomically write object types as JSON."""
+    _save_str_map(path, types)
 
 
 def refresh_object_types(
@@ -400,16 +477,108 @@ def refresh_object_types(
     return known
 
 
+def _enrich(
+    merged: dict[str, TleRecord], mapping: dict[str, str], field: Literal["objectType", "category"]
+) -> dict[str, TleRecord]:
+    """Set `field` on each record from `mapping` where the NORAD ID matches."""
+    for rec in merged.values():
+        norad = norad_id(rec["line1"])
+        value = mapping.get(norad) if norad is not None else None
+        if value is not None:
+            rec[field] = value
+    return merged
+
+
 def enrich_object_types(
     merged: dict[str, TleRecord], types: dict[str, str]
 ) -> dict[str, TleRecord]:
     """Set objectType on each record from SATCAT where a NORAD ID matches."""
-    for rec in merged.values():
-        norad = norad_id(rec["line1"])
-        object_type = types.get(norad) if norad is not None else None
-        if object_type is not None:
-            rec["objectType"] = object_type
-    return merged
+    return _enrich(merged, types, "objectType")
+
+
+def _fetch_group(group: str) -> list[dict[str, Any]] | None:
+    data = fetch_celestrak_json(CELESTRAK_GROUP_URL.format(group=group))
+    return data if isinstance(data, list) else None
+
+
+def load_categories(path: Path) -> dict[str, str]:
+    """Load stored categories; empty map when missing or corrupt."""
+    return _load_str_map(path)
+
+
+def save_categories(path: Path, categories: dict[str, str]) -> None:
+    """Atomically write categories as JSON."""
+    _save_str_map(path, categories)
+
+
+def fetch_categories(
+    fetch: Callable[[str], list[dict[str, Any]] | None] | None = None,
+) -> dict[str, str] | None:
+    """NORAD ID -> function category from CelesTrak group membership.
+
+    Downloads every group in one pass (CelesTrak's rate limit is per group, so a
+    whole-set download is fine). Groups are visited in priority order, so the first
+    that lists an object wins. None when every group fetch fails (caller keeps the
+    cached map).
+    """
+    get = fetch or _fetch_group
+    categories: dict[str, str] = {}
+    fetched_any = False
+    for category, groups in _GROUP_CATEGORIES:
+        for group in groups:
+            data = get(group)
+            if not isinstance(data, list):
+                continue
+            fetched_any = True
+            for rec in data:
+                if not isinstance(rec, dict):
+                    continue
+                norad = _norad_key(rec.get("NORAD_CAT_ID"))
+                if norad is not None and norad not in categories:
+                    categories[norad] = category
+    return categories if fetched_any else None
+
+
+def refresh_categories(
+    path: Path,
+    fetch: Callable[[str], list[dict[str, Any]] | None] | None = None,
+) -> dict[str, str]:
+    """Merge stored categories with a fresh CelesTrak group pull (new values win).
+
+    Skips the pull when the stored map is newer than CATEGORY_REFRESH_INTERVAL_S.
+    Never raises; auxiliary state must not break the TLE update.
+    """
+    known = load_categories(path)
+    if path.exists():
+        try:
+            age_s = datetime.now(UTC).timestamp() - path.stat().st_mtime
+        except OSError:
+            age_s = float("inf")
+        if age_s < CATEGORY_REFRESH_INTERVAL_S:
+            return known
+    try:
+        fresh = fetch_categories(fetch)
+    except Exception:
+        return known
+    if not fresh:
+        return known
+    unknown_rank = len(_CATEGORY_RANK)
+    for norad, category in fresh.items():
+        current = known.get(norad)
+        if current is None or _CATEGORY_RANK.get(category, unknown_rank) <= _CATEGORY_RANK.get(
+            current, unknown_rank
+        ):
+            known[norad] = category
+    with contextlib.suppress(Exception):
+        save_categories(path, known)
+    return known
+
+
+def enrich_categories(
+    merged: dict[str, TleRecord], categories: dict[str, str]
+) -> dict[str, TleRecord]:
+    """Set category on each record from CelesTrak groups where a NORAD ID matches."""
+    return _enrich(merged, categories, "category")
 
 
 def main() -> None:
@@ -443,7 +612,10 @@ def main() -> None:
 
     merged = merge_tles(existing, new)
     merged, decayed = drop_decayed(merged, decayed_ids)
+    # Function categories come from public CelesTrak groups (no auth needed).
+    categories = refresh_categories(CATEGORIES_PATH)
     merged = enrich_object_types(merged, object_types)
+    merged = enrich_categories(merged, categories)
     save_json(list(merged.values()), TLE_PATH)
     TLE_PATH.parent.joinpath("last-updated.json").write_text(
         json.dumps(

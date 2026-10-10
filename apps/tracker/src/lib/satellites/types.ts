@@ -4,6 +4,8 @@ export interface ParsedSatellite {
     line2: string;
     // SATCAT type from the local API ('payload' | 'rocket-body' | 'debris' | 'unknown').
     objectType?: string;
+    // Function category from the local API (CelesTrak groups), e.g. 'navigation'.
+    category?: string;
 }
 
 export type DataSource = 'loading' | 'local-api' | 'celestrak' | 'sample' | 'error';

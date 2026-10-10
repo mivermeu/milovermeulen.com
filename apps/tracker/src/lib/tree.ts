@@ -12,11 +12,24 @@ export interface TreeNode {
     children: TreeNode[];
 }
 
-export function categorize(name: string, objectType?: string): string {
+const FUNCTION_CATEGORIES = new Set([
+    'communications',
+    'navigation',
+    'earth-observation',
+    'weather',
+    'science',
+    'military',
+    'debris',
+    'other'
+]);
+
+export function categorize(name: string, objectType?: string, category?: string): string {
     if (objectType === 'debris' || objectType === 'rocket-body') return 'debris';
 
-    // SATCAT 'payload' is authoritative; anything else (missing, unknown, null)
-    // falls back to the name suffix heuristic.
+    // Fetched function category (CelesTrak groups) is authoritative when present.
+    if (category && FUNCTION_CATEGORIES.has(category)) return category;
+
+    // Otherwise infer debris from the name (unless SATCAT says payload).
     if (objectType !== 'payload' && /\bDEB\b|\bR\/B\b|\bROCKET BODY\b/i.test(name)) {
         return 'debris';
     }
@@ -148,7 +161,7 @@ function buildTree(satellites: ParsedSatellite[]): TreeNode[] {
 
     for (let i = 0; i < satellites.length; i++) {
         const sat = satellites[i];
-        const functionType = categorize(sat.name, sat.objectType);
+        const functionType = categorize(sat.name, sat.objectType, sat.category);
         if (!functions[functionType]) functions[functionType] = [];
         functions[functionType].push(sat);
     }

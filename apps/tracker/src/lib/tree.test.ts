@@ -185,3 +185,29 @@ describe('object type metadata', () => {
         expect(root.children.find((c) => c.label === 'Debris')).toBeDefined();
     });
 });
+
+describe('function category metadata', () => {
+    it('uses the fetched category over the name heuristic', () => {
+        const root = buildRoot([{ ...sat('COSMOS 2553'), category: 'science' }]);
+        expect(root.children.find((c) => c.label === 'Science')).toBeDefined();
+        expect(root.children.find((c) => c.label === 'Military')).toBeUndefined();
+    });
+
+    it('ignores an unknown category and falls back to the name', () => {
+        const root = buildRoot([{ ...sat('COSMOS 2553'), category: 'bogus' }]);
+        expect(root.children.find((c) => c.label === 'Military')).toBeDefined();
+    });
+
+    it('objectType debris still wins over a category', () => {
+        const root = buildRoot([
+            { ...sat('ISS (ZARYA)'), objectType: 'debris', category: 'science' }
+        ]);
+        expect(root.children.find((c) => c.label === 'Debris')).toBeDefined();
+        expect(root.children.find((c) => c.label === 'Science')).toBeUndefined();
+    });
+
+    it('falls back to the name when no category is present', () => {
+        const root = buildRoot([sat('NAVSTAR 80')]);
+        expect(root.children.find((c) => c.label === 'Navigation')).toBeDefined();
+    });
+});

@@ -81,11 +81,18 @@ async function fetchLocalApi(): Promise<ParsedSatellite[] | null> {
         const data = JSON.parse(text);
         if (Array.isArray(data) && data.length > 0) {
             return data.map(
-                (s: { name: string; line1: string; line2: string; objectType?: string }) => ({
+                (s: {
+                    name: string;
+                    line1: string;
+                    line2: string;
+                    objectType?: string;
+                    category?: string;
+                }) => ({
                     name: s.name,
                     line1: s.line1,
                     line2: s.line2,
-                    objectType: s.objectType
+                    objectType: s.objectType,
+                    category: s.category
                 })
             );
         }
