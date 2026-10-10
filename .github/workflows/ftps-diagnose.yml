@@ -39,6 +39,7 @@ jobs:
                   FTPS_PORT: ${{ vars.FTPS_PORT || '21' }}
                   FTPS_MODE: ${{ vars.FTPS_MODE || 'explicit' }}
                   EXTRA_USERS: ${{ inputs.usernames }}
+                  SITE_DOMAIN: milovermeulen.com
               run: |
                   python3 - <<'PY'
                   import ftplib
@@ -66,8 +67,14 @@ jobs:
                   for name in [user, *os.environ.get("EXTRA_USERS", "").split()]:
                       if name and name not in candidates:
                           candidates.append(name)
+                  # Pure-FTPd on shared hosts usually wants user@domain. Derive it from the
+                  # site domain, and from the host when it is of the form ftp.example.com.
+                  domain_guess = os.environ.get("SITE_DOMAIN", "").strip()
+                  if domain_guess and "@" not in user:
+                      guess = f"{user}@{domain_guess}"
+                      if guess not in candidates:
+                          candidates.append(guess)
                   if "@" not in user and host.startswith("ftp."):
-                      # Most shared hosts want user@domain; derive it from ftp.example.com.
                       guess = f"{user}@{host[4:]}"
                       if guess not in candidates:
                           candidates.append(guess)
