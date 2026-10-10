@@ -12,6 +12,11 @@ on:
                 description: 'Extra username forms to try, space separated (optional)'
                 type: string
                 default: ''
+    # Temporary: lets a push trigger this when the dispatching API is unavailable.
+    push:
+        branches: [main]
+        paths:
+            - '.github/workflows/ftps-diagnose.yml'
 
 jobs:
     diagnose:
