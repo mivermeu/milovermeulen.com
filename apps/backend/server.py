@@ -90,7 +90,7 @@ class SatelliteAPIHandler(SimpleHTTPRequestHandler):
     def _not_modified(self, etag: str, mtime: float) -> bool:
         if_none_match = self.headers.get("If-None-Match")
         if if_none_match:
-            tags = [tag.strip() for tag in if_none_match.split(",")]
+            tags = [self._strip_weakness(tag) for tag in if_none_match.split(",")]
             return "*" in tags or etag in tags
         if_modified_since = self.headers.get("If-Modified-Since")
         if if_modified_since:
@@ -100,6 +100,17 @@ class SatelliteAPIHandler(SimpleHTTPRequestHandler):
                 return False
             return int(mtime) <= since
         return False
+
+    @staticmethod
+    def _strip_weakness(tag: str) -> str:
+        """Drop an ETag's weakness marker ('W/"x"' -> '"x"').
+
+        If-None-Match uses the weak comparison (RFC 9110), and nginx marks the
+        ETag weak whenever it gzips the response. Browsers echo that validator
+        back verbatim, so the marker has to be ignored for the match to succeed.
+        """
+        tag = tag.strip()
+        return tag[2:] if tag[:2].lower() == "w/" else tag
 
     def _send_json(self, code: int, payload: dict[str, Any], send_body: bool = True) -> None:
         data = json.dumps(payload).encode()

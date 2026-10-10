@@ -74,6 +74,24 @@ def test_if_none_match_returns_304() -> None:
         assert headers2["ETag"] == headers["ETag"]
 
 
+def test_weak_if_none_match_returns_304() -> None:
+    """nginx marks the ETag weak when it gzips; browsers echo it verbatim."""
+    with running_server() as (url, _):
+        _, headers, _ = request(f"{url}/tles.json")
+        peer_etag = f"W/{headers['ETag']}"
+        status, _, body = request(f"{url}/tles.json", headers={"If-None-Match": peer_etag})
+        assert status == 304
+        assert body == b""
+
+
+def test_if_none_match_list_returns_304() -> None:
+    with running_server() as (url, _):
+        _, headers, _ = request(f"{url}/tles.json")
+        peer_etag = f'"some-other-version", W/{headers["ETag"]}'
+        status, _, _ = request(f"{url}/tles.json", headers={"If-None-Match": peer_etag})
+        assert status == 304
+
+
 def test_if_modified_since_returns_304() -> None:
     with running_server() as (url, _):
         _, headers, _ = request(f"{url}/tles.json")
