@@ -87,19 +87,27 @@ export function labelFunction(f: string): string {
 }
 
 export function extractPrefix(name: string): string {
-    if (/^STARLINK-/i.test(name)) {
-        const m = name.match(/^STARLINK-(\d+)/i);
-        if (m) return `STARLINK-${Math.floor(parseInt(m[1]) / 1000)}`;
-        return 'STARLINK';
-    }
     const m = name.match(/^\w+/);
     return m ? m[0] : name;
+}
+
+// Starlink satellites are organized by orbital shell, which the TLE inclination
+// (line 2, cols 9-16) separates cleanly. Group them by whole-degree shell rather
+// than the arbitrary catalog-number buckets.
+export function starlinkShell(line2: string): string {
+    const inclination = Math.round(parseFloat(line2.slice(8, 16)));
+    return Number.isFinite(inclination) ? `STARLINK ${inclination}°` : 'STARLINK';
+}
+
+function groupKey(sat: ParsedSatellite): string {
+    if (/^STARLINK/i.test(sat.name)) return starlinkShell(sat.line2);
+    return extractPrefix(sat.name);
 }
 
 export function groupByPrefix(sats: ParsedSatellite[]): Record<string, ParsedSatellite[]> {
     const groups: Record<string, ParsedSatellite[]> = {};
     for (const sat of sats) {
-        const prefix = extractPrefix(sat.name);
+        const prefix = groupKey(sat);
         if (!groups[prefix]) groups[prefix] = [];
         groups[prefix].push(sat);
     }

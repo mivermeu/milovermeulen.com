@@ -1,12 +1,26 @@
 import { describe, it, expect } from 'bun:test';
 import type { ParsedSatellite } from './satellites/types';
-import { buildRoot, toggleNodeInTree, collectLeaves, extractPrefix, type TreeNode } from './tree';
+import {
+    buildRoot,
+    toggleNodeInTree,
+    collectLeaves,
+    extractPrefix,
+    starlinkShell,
+    type TreeNode
+} from './tree';
 
 function sat(name: string): ParsedSatellite {
     return {
         name,
         line1: '1 00000U 00000A   00000.00000000  .00000000  00000-0  00000-0 0  0000',
         line2: '2 00000   0.0000   0.0000 0000000   0.0000   0.0000  0.00000000  0000'
+    };
+}
+
+function satWithInc(name: string, inc: number): ParsedSatellite {
+    return {
+        ...sat(name),
+        line2: `2 00000 ${inc.toFixed(4).padStart(8)}  0.0000 0000000   0.0000   0.0000  0.00000000  0000`
     };
 }
 
@@ -76,9 +90,17 @@ describe('extractPrefix', () => {
         expect(extractPrefix('GPS BIIF-1')).toBe('GPS');
         expect(extractPrefix('COSMOS 2251 DEB')).toBe('COSMOS');
     });
-    it('STARLINK batches', () => {
-        expect(extractPrefix('STARLINK-3001')).toBe('STARLINK-3');
-        expect(extractPrefix('STARLINK-1001')).toBe('STARLINK-1');
+    it('STARLINK collapses to one prefix by name', () => {
+        expect(extractPrefix('STARLINK-3001')).toBe('STARLINK');
+    });
+    it('STARLINK shell from inclination', () => {
+        expect(
+            starlinkShell('2 00000  53.0123  0.0000 0000000   0.0000   0.0000  0.00000000  0000')
+        ).toBe('STARLINK 53°');
+        expect(
+            starlinkShell('2 00000  97.0012  0.0000 0000000   0.0000   0.0000  0.00000000  0000')
+        ).toBe('STARLINK 97°');
+        expect(starlinkShell('garbage')).toBe('STARLINK');
     });
 });
 
@@ -102,16 +124,21 @@ describe('grouping', () => {
         expect(labels).toContain('NAVIC-1G');
     });
 
-    it('STARLINK subcategorized by batch', () => {
+    it('STARLINK subcategorized by inclination shell', () => {
         const root = buildRoot([
-            sat('STARLINK-1001'),
-            sat('STARLINK-1002'),
-            sat('STARLINK-3001'),
-            sat('STARLINK-3002')
+            satWithInc('STARLINK-1001', 53.0),
+            satWithInc('STARLINK-3001', 53.2),
+            satWithInc('STARLINK-5001', 70.0),
+            satWithInc('STARLINK-5002', 70.1),
+            satWithInc('STARLINK-6001', 97.0),
+            satWithInc('STARLINK-6002', 97.2)
         ]);
         const comms = root.children.find((c) => c.label === 'Communications')!;
-        expect(findInChildren(comms.children, 'STARLINK-1')!.children.length).toBe(2);
-        expect(findInChildren(comms.children, 'STARLINK-3')!.children.length).toBe(2);
+        // 53.0° and 53.2° both round to the same shell; each shell has >= 2 sats so
+        // it renders as a group (a lone sat would show its own name instead).
+        expect(findInChildren(comms.children, 'STARLINK 53°')!.children.length).toBe(2);
+        expect(findInChildren(comms.children, 'STARLINK 70°')!.children.length).toBe(2);
+        expect(findInChildren(comms.children, 'STARLINK 97°')!.children.length).toBe(2);
     });
 
     it('SENTINEL grouped under Earth Observation', () => {
@@ -233,10 +260,14 @@ describe('ordering', () => {
     });
 
     it('sorts satellites within a group alphabetically', () => {
-        const root = buildRoot([sat('STARLINK-3002'), sat('STARLINK-1001'), sat('STARLINK-1002')]);
-        const comms = root.children.find((c) => c.label === 'Communications')!;
-        const batch1 = comms.children.find((c) => c.label === 'STARLINK-1')!;
-        expect(batch1.children.map((c) => c.label)).toEqual(['STARLINK-1001', 'STARLINK-1002']);
+        const root = buildRoot([sat('SENTINEL-3A'), sat('SENTINEL-2A'), sat('SENTINEL-2B')]);
+        const eo = root.children.find((c) => c.label === 'Earth Observation')!;
+        const sentinel = eo.children.find((c) => c.label === 'SENTINEL')!;
+        expect(sentinel.children.map((c) => c.label)).toEqual([
+            'SENTINEL-2A',
+            'SENTINEL-2B',
+            'SENTINEL-3A'
+        ]);
     });
 });
 
