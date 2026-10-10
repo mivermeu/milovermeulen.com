@@ -194,7 +194,12 @@ jobs:
                     SCHEME="ftp"
                   fi
 
+                  export LFTP_PASSWORD="$FTPS_PASSWORD"
                   echo "Uploading build/ to $REMOTE"
+                  # The password is handed to lftp through the environment (open --env-password)
+                  # instead of being interpolated into the command string, so characters like
+                  # " $ ` ; cannot break lftp's own command parsing.
+                  set +e
                   lftp -c "
                     set ftp:ssl-force true;
                     set ftp:ssl-protect-data true;
@@ -207,6 +212,17 @@ jobs:
                     set net:reconnect-interval-base 5;
                     set mirror:parallel-transfer-count 4;
                     set xfer:clobber true;
-                    open -u \"$FTPS_USER\",\"$FTPS_PASSWORD\" $SCHEME://$FTPS_HOST:$PORT;
+                    open --env-password -u \"$FTPS_USER\" $SCHEME://$FTPS_HOST:$PORT;
                     mirror -R --no-perms --verbose build \"$REMOTE\";
-                  "
+                  " 2>&1 | tee /tmp/lftp.log
+                  rc=${PIPESTATUS[0]}
+                  set -e
+                  if [ "$rc" -ne 0 ]; then
+                    if grep -q '530' /tmp/lftp.log; then
+                      echo "::error::The host rejected the login (530). Check FTPS_USER and FTPS_PASSWORD; many shared hosts require the username in the form user@domain."
+                    elif grep -q 'ssl:verify-certificate' /tmp/lftp.log; then
+                      echo "::error::TLS certificate verification failed. Set the repository variable FTPS_VERIFY_CERT to false only if you trust this host."
+                    fi
+                    echo "::error::lftp exited with status $rc"
+                    exit "$rc"
+                  fi
