@@ -21,6 +21,7 @@
                 ) => {
                     if (!scene || filteredIndex < 0 || !name) {
                         trackerState.hovered = null;
+                        trackerState.hoveredIndex = -1;
                     } else {
                         const origIdx = scene.getOriginalIndex(filteredIndex);
                         trackerState.hovered = {
@@ -29,6 +30,7 @@
                             screenX,
                             screenY
                         };
+                        trackerState.hoveredIndex = origIdx;
                     }
                 },
                 onSelect: (filteredIndex: number) => {
@@ -62,23 +64,19 @@
         if (sats.length === 0) return;
         const filtered = indices.map((i) => sats[i]);
         trackerState.hovered = null;
+        trackerState.hoveredIndex = -1;
         trackerState.pinnedIndex = -1;
         scene.setFilter(filtered, indices);
     });
 
     $effect(() => {
         if (!scene) return;
-        const pi = trackerState.pinnedIndex;
-        const hv = trackerState.hovered;
-        if (pi >= 0) {
-            const filteredIdx = trackerState.activeIndices.indexOf(pi);
-            if (filteredIdx >= 0) scene.showHighlight(filteredIdx);
-        } else if (hv) {
-            const filteredIdx = trackerState.activeIndices.indexOf(hv.originalIndex);
-            if (filteredIdx >= 0) scene.showHighlight(filteredIdx);
-        } else {
-            scene.hideHighlight();
-        }
+        // Hover from either view (globe or graph) takes precedence over the pin.
+        const index =
+            trackerState.hoveredIndex >= 0 ? trackerState.hoveredIndex : trackerState.pinnedIndex;
+        const filteredIdx = index >= 0 ? trackerState.activeIndices.indexOf(index) : -1;
+        if (filteredIdx >= 0) scene.showHighlight(filteredIdx);
+        else scene.hideHighlight();
     });
 
     onDestroy(() => {

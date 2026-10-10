@@ -45,9 +45,7 @@
         <div class="pointer-events-none absolute inset-0 z-10">
             <SatelliteInfo />
         </div>
-        <div class="pointer-events-none absolute bottom-3 left-3 z-20 grid h-80 w-[32rem]">
-            <SatelliteGraph />
-        </div>
+        <SatelliteGraph />
         <div
             class="pointer-events-none absolute top-3 right-3 bottom-3 z-20 flex w-80 flex-col gap-3 transition-transform duration-300"
             class:translate-x-[calc(100%+0.75rem)]={!panelsOpen}

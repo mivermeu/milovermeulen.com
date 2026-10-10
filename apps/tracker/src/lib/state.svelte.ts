@@ -21,6 +21,8 @@ export const trackerState = $state({
     error: '',
     referenceFrame: 'ecf' as 'ecf' | 'eci',
     hovered: null as HoverInfo | null,
+    // Satellite under the pointer in either view (globe or graph), or -1.
+    hoveredIndex: -1,
     pinnedIndex: -1,
     tree: null as TreeNode | null,
     activeIndices: [] as number[],

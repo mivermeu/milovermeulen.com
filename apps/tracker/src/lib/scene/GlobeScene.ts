@@ -61,6 +61,13 @@ export class GlobeScene {
     private readonly onPointerMove: (event: PointerEvent) => void;
     private readonly onPointerDown: (event: PointerEvent) => void;
     private readonly onPointerUp: (event: PointerEvent) => void;
+    private readonly onPointerEnter = (): void => {
+        this.pointerOverCanvas = true;
+    };
+    private readonly onPointerLeave = (): void => {
+        this.pointerOverCanvas = false;
+        this.callbacks.onHover?.(-1, null, 0, 0);
+    };
     private readonly canvas: HTMLCanvasElement;
 
     private ready = false;
@@ -78,6 +85,7 @@ export class GlobeScene {
     private orbitPositions: Float32Array | null = null;
     private orbitBuildGmst = 0;
     private highlightIndex = -1;
+    private pointerOverCanvas = false;
     private lastPointerMoveWall = 0;
     private pointerDownX = 0;
     private pointerDownY = 0;
@@ -248,6 +256,8 @@ export class GlobeScene {
         canvas.addEventListener('pointermove', this.onPointerMove);
         canvas.addEventListener('pointerdown', this.onPointerDown);
         canvas.addEventListener('pointerup', this.onPointerUp);
+        canvas.addEventListener('pointerenter', this.onPointerEnter);
+        canvas.addEventListener('pointerleave', this.onPointerLeave);
 
         this.resizeObserver = new ResizeObserver(() => this.handleResize());
         this.resizeObserver.observe(canvas.parentElement ?? canvas);
@@ -708,7 +718,7 @@ export class GlobeScene {
 
         this.updatePositions();
 
-        if (this.highlightIndex >= 0) {
+        if (this.highlightIndex >= 0 && this.pointerOverCanvas) {
             const sat = this.satellites[this.highlightIndex];
             const i = this.highlightIndex * 3;
             const pos = new THREE.Vector3(
@@ -758,6 +768,8 @@ export class GlobeScene {
         this.canvas.removeEventListener('pointermove', this.onPointerMove);
         this.canvas.removeEventListener('pointerdown', this.onPointerDown);
         this.canvas.removeEventListener('pointerup', this.onPointerUp);
+        this.canvas.removeEventListener('pointerenter', this.onPointerEnter);
+        this.canvas.removeEventListener('pointerleave', this.onPointerLeave);
         this.worker.terminate();
         this.controls.dispose();
         this.pointsGeometry.dispose();
