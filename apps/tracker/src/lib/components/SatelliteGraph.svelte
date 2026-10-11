@@ -126,6 +126,8 @@
     const TICKS = 5;
     const MAX_POINTS = 60000;
     const MIN_W = 320;
+    // Sane default panel width; the user can drag it larger up to MAX_W.
+    const DEFAULT_W = 560;
     const MIN_H = 200;
     const MAX_W = 1400;
     const MAX_H = 1000;
@@ -147,7 +149,10 @@
     let width = $state(
         Math.min(
             MAX_W,
-            Math.max(MIN_W, typeof window === 'undefined' ? 560 : window.innerWidth - 32)
+            Math.min(
+                DEFAULT_W,
+                Math.max(MIN_W, typeof window === 'undefined' ? 560 : window.innerWidth - 32)
+            )
         )
     );
     let height = $state(320);
@@ -411,6 +416,9 @@
         }
         position.needsUpdate = true;
         geometry.setDrawRange(0, n);
+        // Keep pick raycasts honest: invalidate the cached bounding sphere (it
+        // is recomputed lazily from the live buffer on the next pick).
+        geometry.boundingSphere = null;
         updateHighlight();
         renderer.render(scene, camera);
     }
@@ -549,6 +557,12 @@
                 opacity: 0.9
             })
         );
+        // The plot spans its own canvas, so frustum culling is meaningless — and
+        // worse, the renderer computes the geometry's bounding sphere once on the
+        // first render (over the still-empty buffer = a 0-radius sphere at the
+        // origin) and never invalidates it, which permanently kills every
+        // subsequent pick raycast.
+        pts.frustumCulled = false;
         s.add(pts);
         const ray = new THREE.Raycaster();
         ray.params.Points.threshold = 5;
