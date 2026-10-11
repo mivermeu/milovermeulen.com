@@ -1,7 +1,44 @@
 import type { ParsedSatellite } from '$lib/satellites/types';
 import type { ElementMode } from './orbit';
+import type { ObserverLocation, PassRow } from './passes';
 
 export type { ElementMode };
+
+/**
+ * Request to search passes from an observer over the satellites currently
+ * loaded in the worker (the tree-filtered set as sent to the last `init`).
+ */
+export interface PassesRequest {
+    requestId: number;
+    observer: ObserverLocation;
+    /** Search window start (ms). */
+    startMs: number;
+    /** Search window end (ms). */
+    endMs: number;
+    /** Minimum elevation for a pass (degrees). */
+    minElDeg?: number;
+    /** Maximum number of passes returned (default 20). */
+    maxPasses?: number;
+    /**
+     * Search cap: when the active set is larger, only this many satellites —
+     * sorted by orbital period ascending (lowest orbit first) — are searched.
+     */
+    maxSats?: number;
+    /**
+     * Original-catalog index of each satellite in the order they were sent to
+     * the last `init` (i.e. `trackerState.activeIndices`), for result mapping.
+     */
+    originalIndices: number[];
+}
+
+/** Result cap bookkeeping the UI surfaces as a "limited to N" note. */
+export interface PassCapInfo {
+    /** Satellites in the active (tree-filtered) set. */
+    active: number;
+    /** Satellites actually searched after the cap. */
+    searched: number;
+    capped: boolean;
+}
 
 export interface WorkerResponse {
     type: string;
@@ -15,6 +52,12 @@ export interface WorkerResponse {
     elements?: Float32Array;
     message?: string;
     ranges?: number[];
+    /** Pass search results (type 'passes'). */
+    passes?: PassRow[];
+    /** True when the pass search was cut short by its budget. */
+    partial?: boolean;
+    /** Pass search candidate cap bookkeeping (type 'passes'). */
+    capInfo?: PassCapInfo;
 }
 
 /**
@@ -177,6 +220,15 @@ class PropagationService {
 
     buildOrbits(epoch: number, requestId: number, frame: 'ecf' | 'eci'): void {
         this.ensure()?.postMessage({ type: 'buildOrbits', epoch, requestId, frame });
+    }
+
+    /**
+     * Search passes over the worker's currently loaded (tree-filtered)
+     * catalog from an observer location. Results arrive as a
+     * `type: 'passes'` response stamped with the catalog generation.
+     */
+    findPasses(request: PassesRequest): void {
+        this.ensure()?.postMessage({ type: 'passes', ...request });
     }
 }
 

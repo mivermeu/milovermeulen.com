@@ -14,6 +14,9 @@ panels.
 - **Click** to pin — detailed orbital info panel (eccentricity, inclination, RAAN, altitude, etc.)
 - **Time controls** — pause, speed up to 60×, scrub ±30 days
 - **ECF/ECI reference frame** toggle
+- **Pass finder** — set an observer location (geolocation or manual) and see the next 20 passes over
+  your horizon (10°) in the next 7 days, with live countdowns and az/el; rows pin the satellite on
+  the globe
 - **Data sources** — local API → CelesTrak (live) → bundled sample catalog
 
 ## Setup
@@ -78,11 +81,15 @@ bun run test            # unit tests
 src/
 ├── lib/
 │   ├── scene/GlobeScene.ts      # three.js scene — globe, satellites, orbits, hover/pin
-│   ├── workers/sgp4.worker.ts   # Web Worker — SGP4 propagation, orbit computation
+│   ├── workers/sgp4.worker.ts   # Web Worker — SGP4 propagation, orbit computation, pass search
 │   ├── satellites/              # TLE fetching, parsing, types
+│   ├── passes.ts                # pass finding (plane screen, coarse stepping, bisection refine)
+│   ├── observer.svelte.ts       # observer location state (geolocation, manual entry, localStorage)
 │   ├── components/              # Svelte UI components
 │   │   ├── SatelliteViewer.svelte   # Canvas + scene lifecycle
 │   │   ├── ControlPanel.svelte      # Speed, orbits, reference frame, time scrub
+│   │   ├── FilterPanel.svelte       # Filter tree + search
+│   │   ├── PassesPanel.svelte       # Observer location + pass countdown list
 │   │   └── SatelliteInfo.svelte     # Hover label + pinned info window
 │   ├── state.svelte.ts          # Reactive state (satellites, hover, pin, sim time)
 │   └── utils.ts                 # Helpers
@@ -101,6 +108,13 @@ src/
 - **Orbit ellipses** sampled over one full period in ECI (closed loops), rotated by delta GMST for
   ECF display.
 - **Hover highlight** extracts one satellite's orbit from the shared buffer; pin persists it.
+- **Passes** are searched in the shared SGP4 worker over the tree-filtered catalog: a static
+  orbit-plane screen discards never-visible satellites, coarse stepping is sized per satellite from
+  its own max above-threshold duration, and candidate passes refine by bisection with satellite.js
+  look angles. The chronological (min-heap) scan stops once the top-20-by-start list cannot be
+  beaten; results reach the UI with a catalog generation stamp to drop stale snapshots. A
+  `PassVisibilityGate` hook (`passes.ts` + the worker's `passVisibilityGate` constant) awaits
+  sunlit/observer-darkness filtering from the sun model feature.
 
 ## Tech Stack
 

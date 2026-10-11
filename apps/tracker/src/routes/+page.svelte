@@ -1,6 +1,7 @@
 <script lang="ts">
     import ControlPanel from '$lib/components/ControlPanel.svelte';
     import FilterPanel from '$lib/components/FilterPanel.svelte';
+    import PassesPanel from '$lib/components/PassesPanel.svelte';
     import SatelliteGraph from '$lib/components/SatelliteGraph.svelte';
     import SatelliteInfo from '$lib/components/SatelliteInfo.svelte';
     import SatelliteViewer from '$lib/components/SatelliteViewer.svelte';
@@ -129,8 +130,11 @@
             <div class="shrink-0">
                 <ControlPanel />
             </div>
-            <div class="flex min-h-0 flex-col">
+            <div class="flex min-h-0 flex-[3] flex-col">
                 <FilterPanel />
+            </div>
+            <div class="flex min-h-0 flex-[2] flex-col">
+                <PassesPanel />
             </div>
         </div>
     </div>

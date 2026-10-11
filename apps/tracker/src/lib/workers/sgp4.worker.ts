@@ -2,6 +2,13 @@ import { twoline2satrec, propagate, eciToEcf, gstime } from 'satellite.js';
 import type { EciVec3, SatRec } from 'satellite.js';
 import type { ParsedSatellite } from '$lib/satellites/types';
 import { elementsFor, type ElementMode, type OrbitalElements } from '$lib/orbit';
+import {
+    capCandidates,
+    findPasses,
+    type PassCandidate,
+    type PassSearchResult,
+    type PassVisibilityGate
+} from '$lib/passes';
 
 const EARTH_RADIUS_KM = 6371;
 const MU_KM3_S2 = 398600.4418;
@@ -23,14 +30,35 @@ type BuildOrbitsMessage = {
     frame: Frame;
 };
 type ModeMessage = { type: 'mode'; mode: ElementMode };
+type PassesMessage = {
+    type: 'passes';
+    requestId: number;
+    observer: { latDeg: number; lonDeg: number };
+    startMs: number;
+    endMs: number;
+    minElDeg?: number;
+    maxPasses?: number;
+    /** Search-cap: at most this many satellites are searched (shortest-period first). */
+    maxSats?: number;
+    /**
+     * Original-catalog index of every satellite in the last `init` — same
+     * order, so worker satellites map through their `srcIndex` to it.
+     */
+    originalIndices: number[];
+};
 
-type WorkerMessage = InitMessage | PropagateMessage | BuildOrbitsMessage | ModeMessage;
+type WorkerMessage =
+    InitMessage | PropagateMessage | BuildOrbitsMessage | ModeMessage | PassesMessage;
 
 interface PreparedSatellite {
     rec: SatRec;
     epochEl: OrbitalElements;
     nRadPerSec: number;
     epochMs: number;
+    /** Name from the init message, for pass rows. */
+    name: string;
+    /** Index of this satellite in the last init's input array, for index mapping. */
+    srcIndex: number;
 }
 
 const TAU = Math.PI * 2;
@@ -79,6 +107,18 @@ let orbitBuildId = 0;
 // Bumped on every init; stamped onto responses so views can drop stale snapshots.
 let catalogVersion = 0;
 let elementMode: ElementMode = 'smoothed';
+
+// HOOK POINT (feat/sunlight-globe): assign a PassVisibilityGate here once the
+// sun model lands (e.g. "satellite sunlit AND observer local darkness") to
+// restrict pass results to optically visible passes. Requests pick it up
+// automatically; `undefined` (today) returns every geometric pass above the
+// minimum elevation.
+const passVisibilityGate: PassVisibilityGate | undefined = undefined;
+
+// Search slicing: each generator heartbeat ≈ 400 coarse samples (~1ms of
+// compute) is followed by a macrotask yield, so live position ticks keep
+// flowing while a pass search runs.
+const PASS_SEARCH_BUDGET_MS = 4000;
 
 function altitudeKm(rec: SatRec): number {
     const meanMotionRadPerSec = rec.no / 60;
@@ -279,6 +319,72 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
     postMessage({ type: 'orbits', requestId, positions, ranges }, [positions.buffer]);
 }
 
+/**
+ * Run a pass search for one 'passes' request. The search is a generator
+ * (see $lib/passes) sliced with macrotask yields so position ticks keep
+ * flowing; a fresh request or init supersedes the previous search's token.
+ * Responses are stamped with the catalog generation captured at request time,
+ * so the UI can drop results from a stale catalog.
+ */
+/**
+ * Drive the pass-search generator with macrotask yields so live propagation
+ * keeps flowing. Returns null when the search was superseded by a catalog
+ * re-init (stale — discard).
+ */
+async function drivePassSearch(
+    iter: Generator<{ processed: number }, PassSearchResult, void>,
+    generation: number
+): Promise<PassSearchResult | null> {
+    for (;;) {
+        const step = iter.next();
+        if (generation !== catalogVersion) {
+            // The catalog was re-inited mid-search — the result is stale.
+            iter.return({ passes: [], partial: true });
+            return null;
+        }
+        if (step.done) return step.value;
+        // Macrotask yield: interleaves live propagation and catalog changes.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+}
+
+async function runPassSearch(message: PassesMessage): Promise<void> {
+    const requestId = message.requestId;
+    const generation = catalogVersion;
+    // Worker-catalog satellites map through their srcIndex to the original
+    // catalog indices provided with the request.
+    const candidates: PassCandidate[] = satellites.map((sat) => ({
+        name: sat.name,
+        rec: sat.rec,
+        index: message.originalIndices[sat.srcIndex] ?? sat.srcIndex
+    }));
+    const cap = capCandidates(candidates, message.maxSats ?? 2000);
+    const iter = findPasses({
+        candidates: cap.capped,
+        observer: message.observer,
+        startMs: message.startMs,
+        endMs: message.endMs,
+        minElDeg: message.minElDeg,
+        maxPasses: message.maxPasses,
+        gate: passVisibilityGate,
+        wallBudgetMs: PASS_SEARCH_BUDGET_MS
+    });
+    const result = await drivePassSearch(iter, generation);
+    if (!result || generation !== catalogVersion) return;
+    postMessage({
+        type: 'passes',
+        requestId,
+        generation,
+        passes: result.passes,
+        partial: result.partial,
+        capInfo: {
+            active: cap.active,
+            searched: cap.searched,
+            capped: cap.active > cap.searched
+        }
+    });
+}
+
 function handleMessage(event: MessageEvent<WorkerMessage>): void {
     const message = event.data;
     switch (message.type) {
@@ -286,7 +392,10 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
             satellites = [];
             scale = message.scale;
             elementMode = message.mode;
-            for (const sat of message.satellites) {
+            // `srcIndex` preserves the input position so pass results can map
+            // worker satellites back to original catalog indices.
+            for (let srcIndex = 0; srcIndex < message.satellites.length; srcIndex++) {
+                const sat = message.satellites[srcIndex];
                 try {
                     const rec = twoline2satrec(sat.line1, sat.line2);
                     if (rec.error !== 0) continue;
@@ -306,7 +415,9 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
                         epochEl,
                         nRadPerSec,
                         // satellite.js stores the full Julian date in jdsatepoch.
-                        epochMs: (rec.jdsatepoch - JULIAN_UNIX_EPOCH) * 86400000
+                        epochMs: (rec.jdsatepoch - JULIAN_UNIX_EPOCH) * 86400000,
+                        name: sat.name,
+                        srcIndex
                     });
                 } catch {
                     // skip malformed TLE entries
@@ -386,6 +497,11 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
         case 'buildOrbits': {
             if (!initialized) break;
             void buildOrbits(message);
+            break;
+        }
+        case 'passes': {
+            if (!initialized) break;
+            void runPassSearch(message);
             break;
         }
     }
