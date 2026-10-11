@@ -24,6 +24,17 @@
     ];
     const ALL_PARAMS = [...FUNDAMENTAL, ...DERIVED];
 
+    // Natural bounds for parameters that have them; axes are clamped to these so
+    // e.g. Ω / ω / M / u never show a tick past 360°.
+    const LIMITS: Partial<Record<Param, [number, number]>> = {
+        e: [0, 1],
+        i: [0, 180],
+        raan: [0, 360],
+        argp: [0, 360],
+        m: [0, 360],
+        u: [0, 360]
+    };
+
     interface Sample {
         index: number;
         el: OrbitalElements;
@@ -126,6 +137,23 @@
         trackerState.hoveredIndex >= 0 ? trackerState.hoveredIndex : trackerState.pinnedIndex
     );
 
+    function axisRange(
+        min: number,
+        max: number,
+        log: boolean,
+        limit: [number, number] | undefined
+    ): [number, number] {
+        if (log) return [min / 10 ** 0.02, max * 10 ** 0.02];
+        const pad = (max - min || 1) * 0.04;
+        let lo = Math.max(0, min - pad);
+        let hi = max + pad;
+        if (limit) {
+            lo = Math.max(limit[0], lo);
+            hi = Math.min(limit[1], hi);
+        }
+        return [lo, hi];
+    }
+
     function norm(value: number, range: [number, number], log: boolean): number {
         if (log) {
             const l0 = Math.log10(range[0]);
@@ -209,29 +237,15 @@
         // (>500,000 km), so it gets a log scale; the others stay linear.
         const xIsLog = xKey === 'a';
         const yIsLog = yKey === 'a';
-        if (xIsLog) {
-            xmin /= 10 ** 0.02;
-            xmax *= 10 ** 0.02;
-        } else {
-            const p = (xmax - xmin || 1) * 0.04;
-            xmin = Math.max(0, xmin - p);
-            xmax += p;
-        }
-        if (yIsLog) {
-            ymin /= 10 ** 0.02;
-            ymax *= 10 ** 0.02;
-        } else {
-            const p = (ymax - ymin || 1) * 0.04;
-            ymin = Math.max(0, ymin - p);
-            ymax += p;
-        }
-        xRange = [xmin, xmax];
-        yRange = [ymin, ymax];
+        const xr = axisRange(xmin, xmax, xIsLog, LIMITS[xKey]);
+        const yr = axisRange(ymin, ymax, yIsLog, LIMITS[yKey]);
+        xRange = xr;
+        yRange = yr;
         xLog = xIsLog;
         yLog = yIsLog;
 
-        const xToNorm = (v: number) => norm(v, [xmin, xmax], xIsLog);
-        const yToNorm = (v: number) => norm(v, [ymin, ymax], yIsLog);
+        const xToNorm = (v: number) => norm(v, xr, xIsLog);
+        const yToNorm = (v: number) => norm(v, yr, yIsLog);
 
         const position = geometry.getAttribute('position') as THREE.BufferAttribute;
         const color = geometry.getAttribute('color') as THREE.BufferAttribute;
