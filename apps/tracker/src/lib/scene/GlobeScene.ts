@@ -110,8 +110,8 @@ export class GlobeScene {
 
         this.scene = new THREE.Scene();
         this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 10000);
-        this.camera.position.set(0, 25, 0);
         this.camera.up.set(0, 0, 1);
+        this.camera.position.copy(latLonToVector(17, 8, this.initialCameraDistance()));
 
         this.controls = new OrbitControls(this.camera, canvas);
         this.controls.enableDamping = true;
@@ -252,6 +252,19 @@ export class GlobeScene {
         propagation.init(satellites, SCALE, trackerState.elementMode);
 
         this.raf = requestAnimationFrame(() => this.loop());
+    }
+
+    /**
+     * Initial camera distance: back off on narrow viewports so the globe's
+     * full diameter fits the short axis (fov 45°, globe + breathing room).
+     */
+    private initialCameraDistance(): number {
+        const container = this.renderer.domElement.parentElement;
+        const width = container?.clientWidth || 1;
+        const height = container?.clientHeight || 1;
+        const aspect = Math.min(1, width / height);
+        const halfSpan = GLOBE_RADIUS + 1.5;
+        return Math.min(42, Math.max(25, halfSpan / (Math.tan((45 * Math.PI) / 360) * aspect)));
     }
 
     private buildEquatorRing(): THREE.LineLoop {
