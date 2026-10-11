@@ -91,6 +91,7 @@
 
     let canvas: HTMLCanvasElement | undefined = $state();
     let host: HTMLDivElement | undefined = $state();
+    let dialog: HTMLDivElement | undefined = $state();
 
     let camera: THREE.PerspectiveCamera | undefined;
     let controls: OrbitControls | undefined;
@@ -165,6 +166,13 @@
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
+    });
+
+    // Move focus into the dialog on open and hand it back on close.
+    $effect(() => {
+        const previous = document.activeElement as HTMLElement | null;
+        dialog?.focus();
+        return () => previous?.focus();
     });
 
     $effect(() => {
@@ -301,6 +309,7 @@
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onclick={onclose}>
     <div
+        bind:this={dialog}
         class="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg border border-brand-secondary bg-brand-secondary/95 shadow-2xl backdrop-blur-sm"
         role="dialog"
         aria-modal="true"

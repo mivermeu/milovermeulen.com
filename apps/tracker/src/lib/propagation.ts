@@ -14,13 +14,6 @@ export interface WorkerResponse {
     ranges?: number[];
 }
 
-export interface PropagationSnapshot {
-    epoch: number;
-    count: number;
-    positions: Float32Array;
-    elements: Float32Array;
-}
-
 type Listener = (message: WorkerResponse) => void;
 
 // Position refresh scales with the propagated count: small filters stay snappy,
@@ -36,12 +29,11 @@ const TICK_MS = 30;
  * on a count-scaled cadence, emitting ECF positions (globe) and the argument of
  * latitude (graph) from one pass — so no view propagates on the main thread and
  * the service is independent of any component's lifecycle. The worker lives for
- * the app's lifetime; components subscribe to its messages or read `latest()`.
+ * the app's lifetime; components subscribe to its messages.
  */
 class PropagationService {
     private worker: Worker | undefined;
     private readonly listeners = new Set<Listener>();
-    private snapshot: PropagationSnapshot | null = null;
     private count = 0;
     private cadenceMs = MIN_CADENCE_MS;
     private timer: ReturnType<typeof setInterval> | undefined;
@@ -78,12 +70,6 @@ class PropagationService {
             else this.stopLoop();
         } else if (message.type === 'positions' && message.positions && message.elements) {
             this.pending = false;
-            this.snapshot = {
-                epoch: message.epoch ?? Date.now(),
-                count: message.count ?? message.positions.length / 3,
-                positions: message.positions,
-                elements: message.elements
-            };
         }
         this.emit(message);
     }
@@ -141,11 +127,6 @@ class PropagationService {
 
     buildOrbits(epoch: number, requestId: number, frame: 'ecf' | 'eci'): void {
         this.ensure()?.postMessage({ type: 'buildOrbits', epoch, requestId, frame });
-    }
-
-    /** Latest propagated snapshot (positions + orbital elements), or null. */
-    latest(): PropagationSnapshot | null {
-        return this.snapshot;
     }
 }
 

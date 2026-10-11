@@ -104,7 +104,7 @@ function elementsFor(
     r: EciVec3<number>,
     velocity: unknown,
     epochMs: number
-): { a: number; e: number; i: number; raan: number; argp: number; m: number; u: number } {
+): { a: number; e: number; i: number; raan: number; argp: number; m: number; u: number } | null {
     if (elementMode === 'instantaneous' && velocity && typeof velocity !== 'boolean') {
         const el = elementsFromState(r, velocity as EciVec3<number>);
         if (el) return el;
@@ -113,7 +113,13 @@ function elementsFor(
         elementMode === 'epoch'
             ? sat.epochEl
             : propagateMeanElements(sat.epochEl, sat.nRadPerSec, (epochMs - sat.epochMs) / 1000);
-    return { ...base, u: argumentOfLatitudeFromElements(base) };
+    const out = { ...base, u: argumentOfLatitudeFromElements(base) };
+    // Equatorial / e >= 1 edge cases yield NaN, which would flow into the graph's
+    // position buffer and poison three.js' bounding sphere.
+    for (const v of [out.a, out.e, out.i, out.raan, out.argp, out.m, out.u]) {
+        if (!Number.isFinite(v)) return null;
+    }
+    return out;
 }
 
 async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
@@ -319,14 +325,12 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
                         argp: rec.argpo * RAD2DEG,
                         m: rec.mo * RAD2DEG
                     };
-                    const jd =
-                        rec.jdsatepoch +
-                        ((rec as unknown as { jdsatepochF?: number }).jdsatepochF ?? 0);
                     satellites.push({
                         rec,
                         epochEl,
                         nRadPerSec,
-                        epochMs: (jd - JULIAN_UNIX_EPOCH) * 86400000
+                        // satellite.js stores the full Julian date in jdsatepoch.
+                        epochMs: (rec.jdsatepoch - JULIAN_UNIX_EPOCH) * 86400000
                     });
                 } catch {
                     // skip malformed TLE entries
@@ -362,6 +366,7 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
                 positions[i * 3 + 1] = ecf.y * scale;
                 positions[i * 3 + 2] = ecf.z * scale;
                 const el = elementsFor(sat, eci, state.velocity, epoch);
+                if (!el) continue;
                 elements[i * 7] = el.a;
                 elements[i * 7 + 1] = el.e;
                 elements[i * 7 + 2] = el.i;

@@ -1,5 +1,6 @@
 <script lang="ts">
     import * as THREE from 'three';
+    import { untrack } from 'svelte';
     import { trackerState } from '$lib/state.svelte';
     import { categorize } from '$lib/tree';
     import { orbitalPeriodSeconds, trueAnomalyFromMean, type OrbitalElements } from '$lib/orbit';
@@ -143,7 +144,12 @@
     let showModel = $state(false);
 
     // Panel is anchored bottom-left; the top-right handle resizes it.
-    let width = $state(560);
+    let width = $state(
+        Math.min(
+            MAX_W,
+            Math.max(MIN_W, typeof window === 'undefined' ? 560 : window.innerWidth - 32)
+        )
+    );
     let height = $state(320);
     let resizing = $state(false);
     let resizeStart = { x: 0, y: 0, w: 0, h: 0 };
@@ -174,8 +180,8 @@
     let elPrevEpoch = 0;
     let elNextEpoch = 0;
 
-    const xLabel = $derived(ALL_PARAMS.find((p) => p.key === xKey)?.label ?? '');
-    const yLabel = $derived(ALL_PARAMS.find((p) => p.key === yKey)?.label ?? '');
+    const xLabel = $derived(meta(xKey).label);
+    const yLabel = $derived(meta(yKey).label);
 
     // Where each parameter sits inside the worker's 7-element-per-satellite block.
     const EL_INDEX: Record<BaseParam, number> = { a: 0, e: 1, i: 2, raan: 3, argp: 4, m: 5, u: 6 };
@@ -204,23 +210,27 @@
         trackerState.hoveredIndex >= 0 ? trackerState.hoveredIndex : trackerState.pinnedIndex
     );
 
-    function baseValue(s: Sample, key: BaseParam): number {
-        return elCurrent[s.uIndex * 7 + EL_INDEX[key]] ?? 0;
+    function baseValue(els: Float32Array, s: Sample, key: BaseParam): number {
+        return els[s.uIndex * 7 + EL_INDEX[key]] ?? 0;
+    }
+
+    function paramValueAt(els: Float32Array, s: Sample, key: Param): number {
+        switch (key) {
+            case 'perigee':
+                return baseValue(els, s, 'a') * (1 - baseValue(els, s, 'e')) - EARTH_RADIUS_KM;
+            case 'apogee':
+                return baseValue(els, s, 'a') * (1 + baseValue(els, s, 'e')) - EARTH_RADIUS_KM;
+            case 'period':
+                return orbitalPeriodSeconds(baseValue(els, s, 'a')) / 60;
+            case 'nu':
+                return trueAnomalyFromMean(baseValue(els, s, 'm'), baseValue(els, s, 'e'));
+            default:
+                return baseValue(els, s, key);
+        }
     }
 
     function paramValue(s: Sample, key: Param): number {
-        switch (key) {
-            case 'perigee':
-                return baseValue(s, 'a') * (1 - baseValue(s, 'e')) - EARTH_RADIUS_KM;
-            case 'apogee':
-                return baseValue(s, 'a') * (1 + baseValue(s, 'e')) - EARTH_RADIUS_KM;
-            case 'period':
-                return orbitalPeriodSeconds(baseValue(s, 'a')) / 60;
-            case 'nu':
-                return trueAnomalyFromMean(baseValue(s, 'm'), baseValue(s, 'e'));
-            default:
-                return baseValue(s, key);
-        }
+        return paramValueAt(elCurrent, s, key);
     }
 
     function axisRange(
@@ -285,11 +295,13 @@
         );
     }
 
-    function draw(): void {
-        if (!renderer || !host || !camera || !geometry || !scene) return;
+    // Match the drawing buffer to the host and cache the plot rect. Only writes
+    // `plot` when it actually moved, so the overlay doesn't churn every frame.
+    function syncSize(): boolean {
+        if (!renderer || !host || !camera) return false;
         const w0 = host.clientWidth;
         const h0 = host.clientHeight;
-        if (w0 === 0 || h0 === 0) return;
+        if (w0 === 0 || h0 === 0) return false;
 
         renderer.setSize(w0, h0, false);
         camera.left = 0;
@@ -302,58 +314,89 @@
         const t = MARGIN.t;
         const w = Math.max(1, w0 - MARGIN.l - MARGIN.r);
         const h = Math.max(1, h0 - MARGIN.t - MARGIN.b);
-        plot = { l, t, w, h };
+        if (plot.l !== l || plot.t !== t || plot.w !== w || plot.h !== h) plot = { l, t, w, h };
+        return true;
+    }
 
+    // Scan both endpoints of the current blend so points stay inside the axis
+    // while they glide between snapshots.
+    function scanRange(
+        key: Param,
+        isLog: boolean,
+        limit: [number, number] | undefined
+    ): [number, number] {
         const n = Math.min(samples.length, MAX_POINTS);
-        if (n === 0) {
+        let min = Infinity;
+        let max = -Infinity;
+        for (const els of [elPrev, elNext]) {
+            if (els.length === 0) continue;
+            for (let k = 0; k < n; k++) {
+                const v = paramValueAt(els, samples[k], key);
+                if (!Number.isFinite(v)) continue;
+                if (v < min) min = v;
+                if (v > max) max = v;
+            }
+        }
+        if (min === Infinity) return isLog ? [LOG_FLOOR, LOG_FLOOR * 10] : [0, 1];
+        return axisRange(min, max, isLog, limit);
+    }
+
+    function computeRanges(): void {
+        const xIsLog = LOG_PARAMS.has(xKey);
+        const yIsLog = LOG_PARAMS.has(yKey);
+        xLog = xIsLog;
+        yLog = yIsLog;
+        xRange = scanRange(xKey, xIsLog, LIMITS[xKey]);
+        yRange = scanRange(yKey, yIsLog, LIMITS[yKey]);
+    }
+
+    function applyColors(): void {
+        if (!geometry) return;
+        const color = geometry.getAttribute('color') as THREE.BufferAttribute;
+        const n = Math.min(samples.length, MAX_POINTS);
+        for (let k = 0; k < n; k++) {
+            const c = samples[k].color;
+            color.setXYZ(k, c.r, c.g, c.b);
+        }
+        color.needsUpdate = true;
+    }
+
+    // Per-frame hot path: positions only, using the ranges cached by `layout`.
+    function updatePoints(): void {
+        if (!renderer || !camera || !geometry || !scene) return;
+        const n = Math.min(samples.length, MAX_POINTS);
+        if (n === 0 || elCurrent.length === 0) {
             geometry.setDrawRange(0, 0);
             renderer.render(scene, camera);
             return;
         }
 
-        let xmin = Infinity;
-        let xmax = -Infinity;
-        let ymin = Infinity;
-        let ymax = -Infinity;
-        for (let k = 0; k < n; k++) {
-            const x = paramValue(samples[k], xKey);
-            const y = paramValue(samples[k], yKey);
-            if (x < xmin) xmin = x;
-            if (x > xmax) xmax = x;
-            if (y < ymin) ymin = y;
-            if (y > ymax) ymax = y;
-        }
-
-        // The semi-major axis spans LEO (~6,800 km) to deep-space probes
-        // (>500,000 km), so it gets a log scale; the others stay linear.
-        const xIsLog = LOG_PARAMS.has(xKey);
-        const yIsLog = LOG_PARAMS.has(yKey);
-        const xr = axisRange(xmin, xmax, xIsLog, LIMITS[xKey]);
-        const yr = axisRange(ymin, ymax, yIsLog, LIMITS[yKey]);
-        xRange = xr;
-        yRange = yr;
-        xLog = xIsLog;
-        yLog = yIsLog;
-
-        const xToNorm = (v: number) => norm(v, xr, xIsLog);
-        const yToNorm = (v: number) => norm(v, yr, yIsLog);
-
         const position = geometry.getAttribute('position') as THREE.BufferAttribute;
-        const color = geometry.getAttribute('color') as THREE.BufferAttribute;
+        const l = plot.l;
+        const t = plot.t;
+        const w = plot.w;
+        const h = plot.h;
         for (let k = 0; k < n; k++) {
             const s = samples[k];
             position.setXYZ(
                 k,
-                l + xToNorm(paramValue(s, xKey)) * w,
-                t + (1 - yToNorm(paramValue(s, yKey))) * h,
+                l + norm(paramValue(s, xKey), xRange, xLog) * w,
+                t + (1 - norm(paramValue(s, yKey), yRange, yLog)) * h,
                 0
             );
-            color.setXYZ(k, s.color.r, s.color.g, s.color.b);
         }
         position.needsUpdate = true;
-        color.needsUpdate = true;
         geometry.setDrawRange(0, n);
         renderer.render(scene, camera);
+    }
+
+    // Cold path: resize, axis ranges and colors. Runs on a new snapshot, an axis
+    // change, or a resize — not every frame.
+    function layout(): void {
+        if (!syncSize()) return;
+        computeRanges();
+        applyColors();
+        updatePoints();
     }
 
     function pick(event: PointerEvent): number | null {
@@ -445,14 +488,19 @@
             const b = k < elNext.length ? elNext[k] : a;
             elCurrent[k] = a + (b - a) * blend;
         }
-        draw();
+        updatePoints();
     }
 
     // Set up three.js once the canvas/host refs exist, and subscribe to the
     // shared propagation service for positions + orbital elements.
     $effect(() => {
         if (!canvas || !host) return;
-        const r = new THREE.WebGLRenderer({ canvas, antialias: false });
+        let r: THREE.WebGLRenderer;
+        try {
+            r = new THREE.WebGLRenderer({ canvas, antialias: false });
+        } catch {
+            return;
+        }
         r.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         r.setClearColor(0x000000, 0);
         const s = new THREE.Scene();
@@ -487,9 +535,9 @@
         points = pts;
         raycaster = ray;
 
-        const observer = new ResizeObserver(() => draw());
+        const observer = new ResizeObserver(() => layout());
         observer.observe(host);
-        draw();
+        untrack(() => layout());
 
         const unsubscribe = propagation.subscribe((message) => {
             if (message.type !== 'positions' || !message.elements || message.epoch === undefined)
@@ -503,8 +551,11 @@
             }
             elNext = message.elements;
             elNextEpoch = message.epoch;
-            if (elCurrent.length !== message.elements.length)
+            if (elCurrent.length !== message.elements.length) {
                 elCurrent = new Float32Array(message.elements.length);
+                elCurrent.set(message.elements);
+            }
+            layout();
         });
         rafId = requestAnimationFrame(frame);
 
@@ -525,12 +576,12 @@
         };
     });
 
-    // Redraw when the active set, catalog, or axes change.
+    // Re-layout when the active set, catalog, or axes change.
     $effect(() => {
         void samples;
         void xKey;
         void yKey;
-        draw();
+        untrack(() => layout());
     });
 </script>
 
@@ -565,7 +616,7 @@
     </button>
 {:else}
     <div
-        class="pointer-events-none absolute bottom-3 left-3 z-20"
+        class="pointer-events-none absolute bottom-3 left-3 z-20 max-w-[calc(100vw-1.5rem)]"
         style:width="{width}px"
         style:height="{height}px"
     >
@@ -632,8 +683,11 @@
                 </div>
 
                 <div bind:this={host} class="relative min-h-0 flex-1">
+                    <!-- svelte-ignore a11y_no_interactive_element_to_noninteractive_role -->
                     <canvas
                         bind:this={canvas}
+                        role="img"
+                        aria-label={`Orbital element scatter plot: ${xLabel} versus ${yLabel}, ${samples.length} satellites`}
                         class="block h-full w-full cursor-crosshair"
                         onpointermove={onPointerMove}
                         onpointerleave={onPointerLeave}
