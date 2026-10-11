@@ -111,8 +111,6 @@ src/
   rotated to ECF with the frame's GMST. `renderOrder = -1` keeps it under dots/orbit lines.
 - **Orbit ellipses** sampled over one full period in ECI (closed loops), rotated by delta GMST for
   ECF display.
-- **Orbit ellipses** sampled over one full period in ECI (closed loops), rotated by delta GMST for
-  ECF display.
 - **Ground track** is always ECF (each sample rotated by its own GMST, ±1 period at 256 samples) and
   is never affected by the reference-frame toggle; rebuilt on the same 5 s cadence as orbits, only
   while a satellite is pinned ("Ground track" toggle in the controls).

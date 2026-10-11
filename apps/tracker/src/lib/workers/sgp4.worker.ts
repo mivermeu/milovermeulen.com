@@ -307,7 +307,7 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
  * earth-fixed regardless of the reference-frame toggle. Emitted as line
  * segments with honest gaps where SGP4 fails.
  */
-async function buildGroundTrack(message: BuildGroundTrackMessage): Promise<void> {
+function buildGroundTrack(message: BuildGroundTrackMessage): void {
     const { requestId, epoch, index } = message;
     const sat = satellites[index];
     if (!sat) return;
@@ -489,7 +489,7 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
         }
         case 'buildGroundTrack': {
             if (!initialized) break;
-            void buildGroundTrack(message);
+            buildGroundTrack(message);
             break;
         }
     }

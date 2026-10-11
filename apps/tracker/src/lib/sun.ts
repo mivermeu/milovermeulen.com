@@ -29,7 +29,7 @@ export const DEG2RAD = Math.PI / 180;
 export const RAD2DEG = 180 / Math.PI;
 
 /** Julian date for a unix timestamp in milliseconds (UTC). */
-export function julianDate(dateMs: number): number {
+function julianDate(dateMs: number): number {
     return dateMs / 86400000 + JULIAN_UNIX_EPOCH;
 }
 
@@ -52,19 +52,6 @@ export function gmstRadians(dateMs: number): number {
 /** Mean anomaly of the sun (deg), wrapped to [0, 360). */
 function solarMeanAnomalyDeg(n: number): number {
     return (((357.528 + 0.9856003 * n) % 360) + 360) % 360;
-}
-
-/**
- * Distance from Earth's center to the sun in km (low-precision series in AU).
- * Only the direction classifies sunlight, but the distance is useful for a
- * truthful subsolar "sun overhead" framing and costs one extra term.
- */
-export function sunDistanceKm(dateMs: number): number {
-    const AU_KM = 149597870.7;
-    const n = daysSinceJ2000(dateMs);
-    const g = solarMeanAnomalyDeg(n) * DEG2RAD;
-    const au = 1.00014 - 0.01671 * Math.cos(g) - 0.00014 * Math.cos(2 * g);
-    return au * AU_KM;
 }
 
 /**

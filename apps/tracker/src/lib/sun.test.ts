@@ -1,12 +1,13 @@
 import { describe, it, expect } from 'bun:test';
+import { gstime } from 'satellite.js';
 import {
     sunEciDirection,
     sunEcfDirection,
     subsolarPoint,
-    sunDistanceKm,
     isSunlit,
     gmstRadians,
     daysSinceJ2000,
+    RAD2DEG,
     EARTH_EQUATORIAL_RADIUS_KM,
     type Vec3
 } from './sun';
@@ -19,10 +20,21 @@ describe('sun ephemeris', () => {
         expect(daysSinceJ2000(0)).toBeCloseTo(-10957.5, 3);
     });
 
-    it('GMST matches the known J2000 value', () => {
-        // GMST = 280.46061837° at the J2000 epoch.
-        const gmstDeg = gmstRadians(Date.UTC(2000, 0, 1, 12)) * (180 / Math.PI);
-        expect(gmstDeg).toBeCloseTo(280.46061837, 2);
+    it('GMST matches satellite.js gstime across decades', () => {
+        // The terminator/dimming feature leans on this GMST convention
+        // matching the worker's — the two formulas must agree tightly.
+        const samples = [
+            Date.UTC(1995, 6, 1, 12),
+            Date.UTC(2000, 0, 1, 12),
+            Date.UTC(2012, 5, 15, 6, 30),
+            Date.UTC(2026, 9, 11, 14, 23, 45)
+        ];
+        for (const ms of samples) {
+            const ours = (((gmstRadians(ms) * RAD2DEG) % 360) + 360) % 360;
+            const ref = (((gstime(new Date(ms)) * RAD2DEG) % 360) + 360) % 360;
+            // 0.01° ≈ 2.4 s sidereal — plenty for terminal-free visualization.
+            expect(Math.abs(ours - ref)).toBeLessThan(0.01);
+        }
     });
 
     it('sun vector is a unit vector', () => {
@@ -66,11 +78,6 @@ describe('sun ephemeris', () => {
         expect(((ecfLon - sub.lonDeg + 540) % 360) - 180).toBeCloseTo(0, 6);
         // The subsolar point faces the sun: the ECF unit vector points at it.
         expect(ecfLon).toBeCloseTo(sub.lonDeg, 6);
-    });
-
-    it('sun distance is near 1 AU at perihelion and aphelion', () => {
-        expect(Math.abs(sunDistanceKm(Date.UTC(2024, 0, 3)) - 147099858)).toBeLessThan(2e4);
-        expect(Math.abs(sunDistanceKm(Date.UTC(2024, 6, 5)) - 152097707)).toBeLessThan(2e4);
     });
 });
 

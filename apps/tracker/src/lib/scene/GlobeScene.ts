@@ -52,8 +52,7 @@ export class GlobeScene {
     private readonly highlightGeometry: THREE.BufferGeometry;
     private readonly nightOverlay: THREE.Mesh;
     private readonly terminatorRing: THREE.LineLoop;
-    private sunEci: Vec3 | null = null;
-    private sunEcf: Vec3 = { x: 1, y: 0, z: 0 };
+    private sunEci: Vec3 = sunEciDirection(0);
     private lastSunComputeMs = 0;
     private readonly groundTrackMesh: THREE.LineSegments;
     private readonly groundTrackGeometry: THREE.BufferGeometry;
@@ -393,26 +392,22 @@ export class GlobeScene {
 
     /**
      * Sun bookkeeping: the ECI direction is recomputed on a slow wall cadence
-     * (the sun barely moves), but the ECF rotation is refreshed every frame
-     * from the GMST we already computed — cheap and keeps the terminator
-     * synchronized with the shared-propagation scene.
+     * (the sun barely moves), then rotated to ECF with the frame's GMST. Both
+     * meshes live in the ECF frame, so the terminator geometry is built from
+     * the same rotated vector the shader uses — building it from the ECI
+     * vector would disagree with the night shading by the GMST angle. The 60 s
+     * recompute cadence bounds the ring's own drift to ~0.25°.
      */
     private updateSun(gmst: number): void {
         const nowMs = Date.now();
-        if (!this.sunEci || nowMs - this.lastSunComputeMs >= SUN_RECOMPUTE_INTERVAL_MS) {
+        if (nowMs - this.lastSunComputeMs >= SUN_RECOMPUTE_INTERVAL_MS) {
             this.sunEci = sunEciDirection(nowMs);
-            this.updateTerminatorGeometry(this.sunEci);
+            this.updateTerminatorGeometry(eciDirectionToEcf(this.sunEci, gmst));
             this.lastSunComputeMs = nowMs;
         }
-        // Per-frame ECF rotation of the cached ECI sun vector — one rotation,
-        // no allocation, and exactly in sync with the frame's GMST.
-        this.sunEcf = eciDirectionToEcf(this.sunEci, gmst);
+        const sunEcf = eciDirectionToEcf(this.sunEci, gmst);
         const mat = this.nightOverlay.material as THREE.ShaderMaterial;
-        (mat.uniforms.uSunDirEcf.value as THREE.Vector3).set(
-            this.sunEcf.x,
-            this.sunEcf.y,
-            this.sunEcf.z
-        );
+        (mat.uniforms.uSunDirEcf.value as THREE.Vector3).set(sunEcf.x, sunEcf.y, sunEcf.z);
     }
 
     private buildEquatorRing(): THREE.LineLoop {
@@ -550,11 +545,32 @@ export class GlobeScene {
         const positions = message.positions;
         this.groundTrackReady = !!positions && positions.length > 0;
         if (this.groundTrackReady && positions) {
+            this.applyGroundTrackGeometry(positions);
+        }
+        this.updateGroundTrackVisibility();
+    }
+
+    /**
+     * Reuse the position attribute across cadence rebuilds (set + needsUpdate);
+     * only allocate a new BufferAttribute when the length actually differs
+     * (catalog swap or the initial empty buffer).
+     */
+    private applyGroundTrackGeometry(positions: Float32Array): void {
+        const attr = this.groundTrackGeometry.getAttribute('position') as
+            THREE.BufferAttribute | undefined;
+        if (attr && positions.length === attr.array.length) {
+            (attr.array as Float32Array).set(positions);
+            attr.needsUpdate = true;
+        } else {
             this.groundTrackGeometry.setAttribute(
                 'position',
                 new THREE.BufferAttribute(positions, 3)
             );
         }
+    }
+
+    /** Single source of truth for whether the ground track renders. */
+    private updateGroundTrackVisibility(): void {
         this.groundTrackMesh.visible =
             this.groundTrackReady && this.groundTrackIndex >= 0 && this.showGroundTrack;
     }
@@ -783,11 +799,8 @@ export class GlobeScene {
         if (this.groundTrackIndex === filteredIndex) return;
         this.groundTrackIndex = filteredIndex;
         this.groundTrackReady = false;
-        this.groundTrackGeometry.setAttribute(
-            'position',
-            new THREE.BufferAttribute(new Float32Array(0), 3)
-        );
-        this.groundTrackMesh.visible = false;
+        this.applyGroundTrackGeometry(new Float32Array(0));
+        this.updateGroundTrackVisibility();
         if (filteredIndex >= 0 && this.ready && this.showGroundTrack) {
             this.requestGroundTrack();
         }
@@ -798,8 +811,7 @@ export class GlobeScene {
         if (show && this.ready && this.groundTrackIndex >= 0 && !this.groundTrackReady) {
             this.requestGroundTrack();
         } else {
-            this.groundTrackMesh.visible =
-                show && this.groundTrackReady && this.groundTrackIndex >= 0;
+            this.updateGroundTrackVisibility();
         }
     }
 
