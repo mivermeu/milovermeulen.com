@@ -2,7 +2,7 @@
     import * as THREE from 'three';
     import { trackerState } from '$lib/state.svelte';
     import { categorize } from '$lib/tree';
-    import { orbitalElements, argumentOfLatitudeAt, type OrbitalElements } from '$lib/orbit';
+    import { orbitalElements, type OrbitalElements } from '$lib/orbit';
     import { propagation } from '$lib/propagation';
     import Panel from './Panel.svelte';
 
@@ -35,17 +35,6 @@
         u: [0, 360]
     };
 
-    interface Sample {
-        index: number;
-        el: OrbitalElements;
-        u: number;
-        color: THREE.Color;
-    }
-
-    function paramValue(s: Sample, key: Param): number {
-        return key === 'u' ? s.u : s.el[key];
-    }
-
     const CATEGORY_COLORS: Record<string, number> = {
         communications: 0x818cf8,
         navigation: 0xff6900,
@@ -65,6 +54,13 @@
     const MAX_W = 1400;
     const MAX_H = 1000;
 
+    interface Sample {
+        index: number;
+        uIndex: number;
+        el: OrbitalElements;
+        color: THREE.Color;
+    }
+
     let xKey = $state<Param>('a');
     let yKey = $state<Param>('i');
 
@@ -82,8 +78,6 @@
     let xLog = $state(false);
     let yLog = $state(false);
     let hover = $state<{ x: number; y: number; name: string } | null>(null);
-    // Current time; a time-dependent axis (argument of latitude) advances with it.
-    let now = $state(Date.now());
 
     let renderer: THREE.WebGLRenderer | undefined;
     let scene: THREE.Scene | undefined;
@@ -93,20 +87,26 @@
     let raycaster: THREE.Raycaster | undefined;
     let lastMoveWall = 0;
 
+    // Live argument of latitude, indexed by the filtered/active position. The
+    // shared propagation service emits a fresh snapshot each tick; we blend the
+    // previous and next snapshots per frame so the points glide (like the globe).
+    let uPrev: Float32Array<ArrayBufferLike> = new Float32Array(0);
+    let uNext: Float32Array<ArrayBufferLike> = new Float32Array(0);
+    let uCurrent: Float32Array<ArrayBufferLike> = new Float32Array(0);
+    let uPrevEpoch = 0;
+    let uNextEpoch = 0;
+
     const xLabel = $derived(ALL_PARAMS.find((p) => p.key === xKey)?.label ?? '');
     const yLabel = $derived(ALL_PARAMS.find((p) => p.key === yKey)?.label ?? '');
+    let uOnAxis = false;
+    $effect(() => {
+        uOnAxis = xKey === 'u' || yKey === 'u';
+    });
 
-    // Argument of latitude comes from the shared propagation service (the same SGP4
-    // pass the globe uses), so the graph does no propagation of its own.
-    const usesU = $derived(xKey === 'u' || yKey === 'u');
-
-    // Only the active (filtered/selected) satellites, with a valid orbit.
+    // Static per-satellite data; recomputed only when the catalog/filter changes.
     const samples = $derived.by(() => {
         const sats = trackerState.satellites;
-        const needU = usesU;
         const active = trackerState.activeIndices;
-        const shared = needU ? propagation.latest() : null;
-        const t = needU ? now : 0;
         const out: Sample[] = [];
         for (let i = 0; i < active.length; i++) {
             const index = active[i];
@@ -115,17 +115,10 @@
             const el = orbitalElements(sat.line2);
             if (!el) continue;
             const category = categorize(sat.name, sat.objectType, sat.category);
-            let u = 0;
-            if (needU) {
-                const fromShared = shared && i < shared.u.length ? shared.u[i] : NaN;
-                u = Number.isFinite(fromShared)
-                    ? fromShared
-                    : (argumentOfLatitudeAt(sat.line1, sat.line2, t) ?? 0);
-            }
             out.push({
                 index,
+                uIndex: i,
                 el,
-                u,
                 color: new THREE.Color(CATEGORY_COLORS[category] ?? CATEGORY_COLORS.other)
             });
         }
@@ -136,6 +129,10 @@
     const focusIndex = $derived(
         trackerState.hoveredIndex >= 0 ? trackerState.hoveredIndex : trackerState.pinnedIndex
     );
+
+    function paramValue(s: Sample, key: Param): number {
+        return key === 'u' ? (uCurrent[s.uIndex] ?? 0) : s.el[key];
+    }
 
     function axisRange(
         min: number,
@@ -325,7 +322,40 @@
         (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
     }
 
-    // Set up three.js once the canvas/host refs exist (robust Svelte 5 pattern).
+    function circleTexture(): THREE.Texture {
+        const size = 64;
+        const c = document.createElement('canvas');
+        c.width = c.height = size;
+        const ctx = c.getContext('2d');
+        if (ctx) {
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        return new THREE.CanvasTexture(c);
+    }
+
+    let rafId = 0;
+
+    // Per-frame: blend the last two snapshots into the current argument of latitude.
+    function frame(): void {
+        rafId = requestAnimationFrame(frame);
+        if (!uOnAxis || uCurrent.length === 0) return;
+        const span = uNextEpoch - uPrevEpoch;
+        let blend = span > 0 ? (Date.now() - uPrevEpoch) / span : 1;
+        if (blend < 0) blend = 0;
+        else if (blend > 1) blend = 1;
+        for (let k = 0; k < uCurrent.length; k++) {
+            const a = k < uPrev.length ? uPrev[k] : (uNext[k] ?? 0);
+            const b = k < uNext.length ? uNext[k] : a;
+            uCurrent[k] = a + (b - a) * blend;
+        }
+        draw();
+    }
+
+    // Set up three.js once the canvas/host refs exist, and subscribe to the
+    // shared propagation service for positions + argument of latitude.
     $effect(() => {
         if (!canvas || !host) return;
         const r = new THREE.WebGLRenderer({ canvas, antialias: false });
@@ -339,12 +369,15 @@
             new THREE.BufferAttribute(new Float32Array(MAX_POINTS * 3), 3)
         );
         geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(MAX_POINTS * 3), 3));
+        const tex = circleTexture();
         const pts = new THREE.Points(
             geo,
             new THREE.PointsMaterial({
-                size: 2.5,
+                size: 3,
                 sizeAttenuation: false,
                 vertexColors: true,
+                map: tex,
+                alphaTest: 0.5,
                 transparent: true,
                 opacity: 0.9
             })
@@ -364,9 +397,27 @@
         observer.observe(host);
         draw();
 
+        const unsubscribe = propagation.subscribe((message) => {
+            if (message.type !== 'positions' || !message.u || message.epoch === undefined) return;
+            if (uNext.length !== message.u.length) {
+                uPrev = message.u;
+                uPrevEpoch = message.epoch;
+            } else {
+                uPrev = uNext;
+                uPrevEpoch = uNextEpoch;
+            }
+            uNext = message.u;
+            uNextEpoch = message.epoch;
+            if (uCurrent.length !== message.u.length) uCurrent = new Float32Array(message.u.length);
+        });
+        rafId = requestAnimationFrame(frame);
+
         return () => {
+            unsubscribe();
+            cancelAnimationFrame(rafId);
             observer.disconnect();
             geo.dispose();
+            tex.dispose();
             (pts.material as THREE.Material).dispose();
             r.dispose();
             renderer = undefined;
@@ -378,20 +429,12 @@
         };
     });
 
-    // Redraw whenever the active set, catalog, or axes change.
+    // Redraw when the active set, catalog, or axes change.
     $effect(() => {
         void samples;
         void xKey;
         void yKey;
         draw();
-    });
-
-    // Advance the clock so a time-dependent axis updates as the satellites move.
-    $effect(() => {
-        const id = setInterval(() => {
-            now = Date.now();
-        }, 2000);
-        return () => clearInterval(id);
     });
 </script>
 
