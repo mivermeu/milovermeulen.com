@@ -18,6 +18,11 @@ panels.
 - **Click** to pin — detailed orbital info panel (eccentricity, inclination, RAAN, altitude, etc.),
   a subtly-dimmed **ground track** (nadir subpoints one orbital period into the future, always ECF)
   behind the orbit highlight
+- **Info panel extras** — NORAD catalog ID, TLE epoch age (days), and current speed in km/s (ECI)
+- **Search by name or NORAD ID** — all-digit queries match catalog IDs (alpha-5 aware), other
+  queries match labels
+- **Orbital element graph** — any pair of elements/derived values as a scatter plot with live hover
+  coordinates
 - **Time controls** — pause, speed up to 60×, scrub ±30 days
 - **ECF/ECI reference frame** toggle
 - **Data sources** — local API → CelesTrak (live) → bundled sample catalog

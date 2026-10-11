@@ -186,7 +186,9 @@
     let yRange = $state<[number, number]>([0, 1]);
     let xLog = $state(false);
     let yLog = $state(false);
-    let hover = $state<{ x: number; y: number; name: string } | null>(null);
+    let hover = $state<{ x: number; y: number; name: string; xVal: number; yVal: number } | null>(
+        null
+    );
 
     let renderer: THREE.WebGLRenderer | undefined;
     let scene: THREE.Scene | undefined;
@@ -483,7 +485,9 @@
         hover = {
             x: event.clientX - rect.left,
             y: event.clientY - rect.top,
-            name: trackerState.satellites[sample.index]?.name ?? ''
+            name: trackerState.satellites[sample.index]?.name ?? '',
+            xVal: paramValue(sample, xKey),
+            yVal: paramValue(sample, yKey)
         };
     }
 
@@ -858,7 +862,14 @@
                             style:left="{hover.x + 10}px"
                             style:top="{hover.y + 10}px"
                         >
-                            {hover.name}
+                            <div class="font-medium text-brand-text-highlight">{hover.name}</div>
+                            <div class="text-brand-text/80">
+                                {#if Number.isFinite(hover.xVal)}
+                                    {meta(xKey).short} {format(xKey, hover.xVal)}{:else}—{/if}
+                                <span class="text-brand-text/50">×</span>
+                                {#if Number.isFinite(hover.yVal)}
+                                    {meta(yKey).short} {format(yKey, hover.yVal)}{:else}—{/if}
+                            </div>
                         </div>
                     {/if}
                 </div>

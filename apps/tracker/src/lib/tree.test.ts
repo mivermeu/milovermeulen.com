@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 import type { ParsedSatellite } from './satellites/types';
+import { parseNoradId } from './satellites/tle';
 import {
     buildRoot,
     toggleNodeInTree,
@@ -7,6 +8,7 @@ import {
     extractPrefix,
     starlinkShell,
     findMatchingNodeIds,
+    isNoradQuery,
     type TreeNode
 } from './tree';
 
@@ -23,6 +25,17 @@ function satWithInc(name: string, inc: number): ParsedSatellite {
         ...sat(name),
         line2: `2 00000 ${inc.toFixed(4).padStart(8)}  0.0000 0000000   0.0000   0.0000  0.00000000  0000`
     };
+}
+
+// Line 1 with the NORAD field (cols 3-7) swapped for `id`; alpha-5 for IDs
+// past 99999 (A0000 = 100000, i.e. letter value = the leading digit(s)).
+function satNorad(name: string, id: number): ParsedSatellite {
+    const field =
+        id > 99999
+            ? String.fromCharCode(55 + Math.floor(id / 10000)) + String(id % 10000).padStart(4, '0')
+            : String(id).padStart(5, '0');
+    const line1 = sat(name).line1.replace(/^1 .{5}/, `1 ${field}`);
+    return { ...sat(name), line1, noradId: parseNoradId(line1) };
 }
 
 function getActive(root: TreeNode): number[] {
@@ -343,3 +356,89 @@ describe('findMatchingNodeIds (search)', () => {
         expect(expand.size).toBe(0);
     });
 });
+
+describe('NORAD ID search', () => {
+    // GPS pair in a group, lone science sat, alpha-5 ID in comms.
+    function noradTree(): { root: TreeNode; sats: ParsedSatellite[] } {
+        const sats = [
+            satNorad('GPS BIIF-1', 40001),
+            satNorad('GPS BIIF-2', 40002),
+            satNorad('ISS (ZARYA)', 25544),
+            satNorad('RISING-2', 102345) // alpha-5 field 'A2345'
+        ];
+        return { root: buildRoot(sats), sats };
+    }
+
+    function leafFor(
+        root: TreeNode,
+        sats: ParsedSatellite[],
+        noradId: number
+    ): TreeNode | undefined {
+        return allNodes(root).find((n) => sats[n.satelliteIndex!]?.noradId === noradId);
+    }
+
+    it('detects all-digit queries as NORAD queries', () => {
+        expect(isNoradQuery('25544')).toBe(true);
+        expect(isNoradQuery('00')).toBe(true);
+        expect(isNoradQuery('255a')).toBe(false);
+        expect(isNoradQuery('starlink-3')).toBe(false);
+        expect(isNoradQuery('')).toBe(false);
+    });
+
+    it('matches the exact NORAD ID and unfolds its ancestors', () => {
+        const { root, sats } = noradTree();
+        const { matching, expand } = findMatchingNodeIds(root, '40001', sats);
+        const leaf = leafFor(root, sats, 40001)!;
+        expect(leaf).toBeDefined();
+        expect(matching.has(leaf.id)).toBe(true);
+        // The "GPS" group, "Navigation" category and root unfold to reach the
+        // leaf; the leaf itself stays a listed row.
+        const nav = root.children.find((c) => c.label === 'Navigation')!;
+        const gpsGroup = nav.children.find((c) => c.label === 'GPS')!;
+        for (const id of ['root', 'func-navigation', nav.id, gpsGroup.id]) {
+            expect(expand.has(id)).toBe(true);
+        }
+        expect(expand.has(leaf.id)).toBe(false);
+    });
+
+    it('supports prefix matching so partial typing still narrows', () => {
+        const { root, sats } = noradTree();
+        const { matching } = findMatchingNodeIds(root, '4000', sats);
+        const leaves = [...matching].filter((id) => id.startsWith('sat-'));
+        expect(leaves).toHaveLength(2); // 40001 and 40002
+    });
+
+    it('excludes IDs that merely contain the query', () => {
+        const { root, sats } = noradTree();
+        expect(findMatchingNodeIds(root, '99999', sats).matching.size).toBe(0);
+        const full = findMatchingNodeIds(root, '40001', sats);
+        expect([...full.matching].filter((id) => id.startsWith('sat-'))).toHaveLength(1);
+    });
+
+    it('finds alpha-5 encoded IDs by their decimal value', () => {
+        const { root, sats } = noradTree();
+        const { matching } = findMatchingNodeIds(root, '102345', sats);
+        const leaf = leafFor(root, sats, 102345)!;
+        expect(leaf).toBeDefined();
+        expect(matching.has(leaf.id)).toBe(true);
+        expect(findMatchingNodeIds(root, '102344', sats).matching.size).toBe(0);
+    });
+
+    it('keeps label matching alive for digit queries too', () => {
+        const { root, sats } = noradTree();
+        // "2" hits GPS BIIF-2 by name even though 40002 doesn't start with 2.
+        const { matching } = findMatchingNodeIds(root, '2', sats);
+        const biif2 = leafFor(root, sats, 40002)!;
+        expect(matching.has(biif2.id)).toBe(true);
+    });
+
+    it('digit queries without satellite data stay label-only', () => {
+        const { root } = noradTree();
+        const { matching } = findMatchingNodeIds(root, '2');
+        expect(matching.size).toBeGreaterThan(0);
+    });
+});
+
+function allNodes(node: TreeNode): TreeNode[] {
+    return [node, ...node.children.flatMap(allNodes)];
+}

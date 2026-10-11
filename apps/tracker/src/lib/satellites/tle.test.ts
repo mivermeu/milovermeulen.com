@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'bun:test';
-import { parseTleText, tleEpochMs, partitionFresh, MAX_TLE_AGE_DAYS } from './tle';
+import {
+    parseTleText,
+    tleEpochMs,
+    epochAgeDays,
+    parseNoradId,
+    partitionFresh,
+    MAX_TLE_AGE_DAYS
+} from './tle';
 import type { ParsedSatellite } from './types';
 
 const SAMPLE_TLE = `ISS (ZARYA)
@@ -76,6 +83,48 @@ ANOTHER
     });
 });
 
+describe('parseNoradId', () => {
+    it('parses a plain 5-digit ID', () => {
+        expect(
+            parseNoradId('1 25544U 98067A   24275.50000000  .00016717  00000-0  10270-3 0  9990')
+        ).toBe(25544);
+        expect(
+            parseNoradId('1 45000U 20001A   24275.50000000  .00001000  00000-0  50000-4 0  9999')
+        ).toBe(45000);
+    });
+
+    it('decodes alpha-5 IDs (A=10 … Z=35 in the first column)', () => {
+        // A2345 → 102345, B0001 → 110001, Z9999 → 359999
+        expect(
+            parseNoradId('1 A2345U 98067A   24275.50000000  .00016717  00000-0  10270-3 0  9990')
+        ).toBe(102345);
+        expect(
+            parseNoradId('1 B0001U 98067A   24275.50000000  .00016717  00000-0  10270-3 0  9990')
+        ).toBe(110001);
+        expect(
+            parseNoradId('1 Z9999U 98067A   24275.50000000  .00016717  00000-0  10270-3 0  9990')
+        ).toBe(359999);
+    });
+
+    it('returns null for garbage or short lines', () => {
+        expect(parseNoradId('')).toBeNull();
+        expect(parseNoradId('not a tle line')).toBeNull();
+        expect(parseNoradId('1 no-ID')).toBeNull();
+    });
+
+    it('is parsed into every entry of the bundled sample catalog', async () => {
+        const { readFile } = await import('node:fs/promises');
+        const { join } = await import('node:path');
+        const text = await readFile(join(import.meta.dir, 'data/sample-tles.txt'), 'utf-8');
+        const sats = parseTleText(text);
+        expect(sats.length).toBeGreaterThan(0);
+        for (const s of sats) {
+            expect(s.noradId).not.toBeNull();
+            expect(s.noradId).toBeGreaterThan(0);
+        }
+    });
+});
+
 const L1_TEMPLATE = '1 99999U 25001A   26250.50000000  .00000000  00000-0  00000-0 0  9991';
 
 function line1At(whenMs: number): string {
@@ -110,6 +159,21 @@ describe('tleEpochMs', () => {
 
     it('returns null for garbage', () => {
         expect(tleEpochMs('not a tle line')).toBeNull();
+    });
+});
+
+describe('epochAgeDays', () => {
+    const DAY = 86400000;
+
+    it('is the signed day difference from the line-1 epoch', () => {
+        const epoch = tleEpochMs(L1_TEMPLATE)!;
+        expect(epochAgeDays(L1_TEMPLATE, epoch)).toBe(0);
+        expect(epochAgeDays(L1_TEMPLATE, epoch + 2.5 * DAY)).toBeCloseTo(2.5, 10);
+        expect(epochAgeDays(L1_TEMPLATE, epoch - 1 * DAY)).toBeCloseTo(-1, 10);
+    });
+
+    it('returns null without a parsable epoch', () => {
+        expect(epochAgeDays('not a tle line', Date.now())).toBeNull();
     });
 });
 

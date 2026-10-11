@@ -13,7 +13,11 @@
 
     const visibleIds = $derived(
         trackerState.searchQuery.length >= MIN_CHARS && trackerState.tree
-            ? findMatchingNodeIds(trackerState.tree, trackerState.searchQuery).matching
+            ? findMatchingNodeIds(
+                  trackerState.tree,
+                  trackerState.searchQuery,
+                  trackerState.satellites
+              ).matching
             : null
     );
 
@@ -28,7 +32,7 @@
                 wasSearching = true;
             }
             trackerState.searchQuery = q;
-            const result = findMatchingNodeIds(tree, q);
+            const result = findMatchingNodeIds(tree, q, trackerState.satellites);
             for (const id of result.expand) {
                 const node = findNode(tree, id);
                 if (node) node.expanded = true;

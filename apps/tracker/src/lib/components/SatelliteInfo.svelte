@@ -8,6 +8,8 @@
         degreesLong
     } from 'satellite.js';
     import { trackerState } from '$lib/state.svelte';
+    import { epochAgeDays } from '$lib/satellites/tle';
+    import { eciSpeedKms } from '$lib/utils';
     import Panel from './Panel.svelte';
 
     const DEG = 180 / Math.PI;
@@ -47,6 +49,11 @@
                 lat: degreesLat(geo.latitude),
                 lon: degreesLong(geo.longitude),
                 alt: geo.height,
+                speed:
+                    pv.velocity && typeof pv.velocity !== 'boolean'
+                        ? eciSpeedKms(pv.velocity)
+                        : null,
+                epochAgeDays: epochAgeDays(sat.line1, _t),
                 eccentricity: satrec.ecco,
                 inclination: satrec.inclo * DEG,
                 raan: satrec.nodeo * DEG,
@@ -122,6 +129,15 @@
                         {orbitalData.alt.toFixed(1)} km
                     </dd>
                 </div>
+                {#if orbitalData.speed !== null}
+                    <div class="flex justify-between">
+                        <dt class="text-brand-text">Speed</dt>
+                        <dd class="font-mono text-brand-text-highlight">
+                            {orbitalData.speed.toFixed(2)} km/s
+                            <span class="text-brand-text/50">ECI</span>
+                        </dd>
+                    </div>
+                {/if}
 
                 <div class="my-2 border-t border-brand-secondary"></div>
 
@@ -186,6 +202,23 @@
                     <dt class="text-brand-text">B̄star</dt>
                     <dd class="font-mono text-brand-text-highlight">
                         {orbitalData.bstar.toExponential(4)}
+                    </dd>
+                </div>
+
+                <div class="my-2 border-t border-brand-secondary"></div>
+
+                <div class="flex justify-between">
+                    <dt class="text-brand-text">NORAD ID</dt>
+                    <dd class="font-mono text-brand-text-highlight">
+                        {sat.noradId ?? '—'}
+                    </dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt class="text-brand-text">TLE epoch</dt>
+                    <dd class="font-mono text-brand-text-highlight">
+                        {orbitalData.epochAgeDays !== null
+                            ? `${orbitalData.epochAgeDays.toFixed(1)} d`
+                            : '—'}
                     </dd>
                 </div>
             </dl>
