@@ -135,8 +135,8 @@
         color: THREE.Color;
     }
 
-    let xKey = $state<Param>('a');
-    let yKey = $state<Param>('i');
+    let xKey = $state<Param>('perigee');
+    let yKey = $state<Param>('apogee');
 
     // Starts minimized; the + button in the corner expands it.
     let collapsed = $state(true);
