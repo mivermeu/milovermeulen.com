@@ -56,6 +56,7 @@
         if (!scene) return;
         scene.setShowOrbits(trackerState.showOrbits);
         scene.setShowEquatorial(trackerState.showEquatorial);
+        scene.setShowGroundTrack(trackerState.showGroundTrack);
     });
 
     $effect(() => {
@@ -85,6 +86,15 @@
         const filteredIdx = index >= 0 ? trackerState.activeIndices.indexOf(index) : -1;
         if (filteredIdx >= 0) scene.showHighlight(filteredIdx);
         else scene.hideHighlight();
+    });
+
+    $effect(() => {
+        if (!scene) return;
+        // Ground track follows the pin only — hover must never trigger an
+        // orbit-length worker rebuild (index maps through the active filter).
+        const pin = trackerState.pinnedIndex;
+        const filteredIdx = pin >= 0 ? trackerState.activeIndices.indexOf(pin) : -1;
+        scene.setGroundTrack(filteredIdx);
     });
 
     onDestroy(() => {

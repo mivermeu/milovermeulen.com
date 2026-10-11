@@ -54,6 +54,13 @@ export class GlobeScene {
     private readonly terminatorRing: THREE.LineLoop;
     private sunEci: Vec3 | null = null;
     private lastSunComputeMs = 0;
+    private readonly groundTrackMesh: THREE.LineSegments;
+    private readonly groundTrackGeometry: THREE.BufferGeometry;
+    private showGroundTrack = true;
+    private groundTrackIndex = -1;
+    private groundTrackReady = false;
+    private groundRequestSeq = 0;
+    private lastGroundTrackWall = 0;
 
     private readonly onPointerMove: (event: PointerEvent) => void;
     private readonly onPointerDown: (event: PointerEvent) => void;
@@ -280,6 +287,28 @@ export class GlobeScene {
         this.terminatorRing = this.buildTerminatorRing();
         this.scene.add(this.terminatorRing);
 
+        // Pinned-satellite ground track: nadir subpoint polyline on the globe
+        // surface (always ECF, no GMST rotation semantics — unlike orbit lines).
+        // Styled like the hover/pin highlight (bright accent over the surface).
+        this.groundTrackGeometry = new THREE.BufferGeometry();
+        this.groundTrackGeometry.setAttribute(
+            'position',
+            new THREE.BufferAttribute(new Float32Array(0), 3)
+        );
+        this.groundTrackMesh = new THREE.LineSegments(
+            this.groundTrackGeometry,
+            new THREE.LineBasicMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0.9,
+                depthWrite: false
+            })
+        );
+        this.groundTrackMesh.frustumCulled = false;
+        this.groundTrackMesh.renderOrder = 998;
+        this.groundTrackMesh.visible = false;
+        this.scene.add(this.groundTrackMesh);
+
         this.canvas = canvas;
         this.onPointerMove = (event: PointerEvent) => this.handlePointerMove(event);
         this.onPointerDown = (event: PointerEvent) => this.handlePointerDown(event);
@@ -338,7 +367,8 @@ export class GlobeScene {
     /** Refill the terminator ring's vertex buffer from the sun direction. */
     private updateTerminatorGeometry(sun: Vec3): void {
         // Orthonormal basis ⊥ sun for the circle in that plane.
-        const axis = Math.abs(sun.z) > 0.99 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1);
+        const axis =
+            Math.abs(sun.z) > 0.99 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1);
         const sunVec = new THREE.Vector3(sun.x, sun.y, sun.z).normalize();
         const u = new THREE.Vector3().crossVectors(axis, sunVec).normalize();
         const v = new THREE.Vector3().crossVectors(sunVec, u);
@@ -364,10 +394,7 @@ export class GlobeScene {
      */
     private updateSun(gmst: number): void {
         const nowMs = Date.now();
-        if (
-            !this.sunEci ||
-            nowMs - this.lastSunComputeMs >= SUN_RECOMPUTE_INTERVAL_MS
-        ) {
+        if (!this.sunEci || nowMs - this.lastSunComputeMs >= SUN_RECOMPUTE_INTERVAL_MS) {
             this.sunEci = sunEciDirection(nowMs);
             this.updateTerminatorGeometry(this.sunEci);
             this.lastSunComputeMs = nowMs;
@@ -377,7 +404,8 @@ export class GlobeScene {
         (mat.uniforms.uSunDirEcf.value as THREE.Vector3).set(sunEcf.x, sunEcf.y, sunEcf.z);
     }
 
-    private buildEquatorRing(): THREE.LineLoop {        const vertices: number[] = [];
+    private buildEquatorRing(): THREE.LineLoop {
+        const vertices: number[] = [];
         for (let lon = -180; lon <= 180; lon += 2) {
             const point = latLonToVector(0, lon, GLOBE_RADIUS);
             vertices.push(point.x, point.y, point.z);
@@ -427,6 +455,9 @@ export class GlobeScene {
                 break;
             case 'orbits':
                 this.onOrbits(message);
+                break;
+            case 'groundTrack':
+                this.onGroundTrack(message);
                 break;
             case 'error':
                 this.callbacks.onError?.(message.message ?? 'Worker error');
@@ -495,6 +526,23 @@ export class GlobeScene {
         this.orbitsReady = true;
         this.applyOrbitGeometry();
         if (this.highlightIndex >= 0) this.showHighlight(this.highlightIndex);
+    }
+
+    private onGroundTrack(message: WorkerResponse): void {
+        if (message.requestId !== this.groundRequestSeq) return;
+        if (message.generation !== undefined && message.generation !== this.catalogGeneration) {
+            return;
+        }
+        const positions = message.positions;
+        this.groundTrackReady = !!positions && positions.length > 0;
+        if (this.groundTrackReady && positions) {
+            this.groundTrackGeometry.setAttribute(
+                'position',
+                new THREE.BufferAttribute(positions, 3)
+            );
+        }
+        this.groundTrackMesh.visible =
+            this.groundTrackReady && this.groundTrackIndex >= 0 && this.showGroundTrack;
     }
 
     private applyOrbitGeometry(): void {
@@ -711,6 +759,46 @@ export class GlobeScene {
         this.equatorialPlane.visible = show;
     }
 
+    /**
+     * Which filtered satellite's ground track to draw (-1 = none). Called only
+     * for the pin — hover must not trigger worker rebuilds. Each new pin
+     * requests a fresh track immediately; the loop keeps it on the orbit
+     * rebuild cadence afterwards.
+     */
+    setGroundTrack(filteredIndex: number): void {
+        if (this.groundTrackIndex === filteredIndex) return;
+        this.groundTrackIndex = filteredIndex;
+        this.groundTrackReady = false;
+        this.groundTrackGeometry.setAttribute(
+            'position',
+            new THREE.BufferAttribute(new Float32Array(0), 3)
+        );
+        this.groundTrackMesh.visible = false;
+        if (filteredIndex >= 0 && this.ready && this.showGroundTrack) {
+            this.requestGroundTrack();
+        }
+    }
+
+    setShowGroundTrack(show: boolean): void {
+        this.showGroundTrack = show;
+        if (show && this.ready && this.groundTrackIndex >= 0 && !this.groundTrackReady) {
+            this.requestGroundTrack();
+        } else {
+            this.groundTrackMesh.visible =
+                show && this.groundTrackReady && this.groundTrackIndex >= 0;
+        }
+    }
+
+    private requestGroundTrack(): void {
+        this.lastGroundTrackWall = performance.now();
+        this.groundRequestSeq++;
+        propagation.buildGroundTrack(
+            Math.round(Date.now()),
+            this.groundRequestSeq,
+            this.groundTrackIndex
+        );
+    }
+
     setFilter(filteredSatellites: ParsedSatellite[], activeIndices: number[]): void {
         this.hideHighlight();
         this.orbitsReady = false;
@@ -725,6 +813,8 @@ export class GlobeScene {
         // Positions from the old catalog arrive before the new 'ready' — with
         // the generation already nulled here they are dropped.
         this.catalogGeneration = -1;
+        // Ground track belongs to the old catalog's worker indices.
+        this.setGroundTrack(-1);
         // Hide dots until onReady installs the new catalog's buffers.
         this.points.visible = false;
         this.prevPositions = null;
@@ -782,6 +872,15 @@ export class GlobeScene {
             now - this.lastOrbitBuildWall >= ORBIT_REBUILD_INTERVAL_MS
         ) {
             this.requestOrbits();
+        }
+
+        if (
+            this.showGroundTrack &&
+            this.groundTrackIndex >= 0 &&
+            this.ready &&
+            now - this.lastGroundTrackWall >= ORBIT_REBUILD_INTERVAL_MS
+        ) {
+            this.requestGroundTrack();
         }
 
         if (trackerState.referenceFrame !== this.lastReferenceFrame) {
@@ -854,6 +953,9 @@ export class GlobeScene {
         this.terminatorRing.geometry.dispose();
         (this.terminatorRing.material as THREE.Material).dispose();
         this.nightOverlay.geometry.dispose();
+        (this.nightOverlay.material as THREE.Material).dispose();
+        this.groundTrackGeometry.dispose();
+        (this.groundTrackMesh.material as THREE.Material).dispose();
         this.equatorialPlane.geometry.dispose();
         (this.equatorialPlane.material as THREE.Material).dispose();
         this.ascendingNode.geometry.dispose();

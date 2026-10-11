@@ -46,12 +46,12 @@ export function daysSinceJ2000(dateMs: number): number {
 export function gmstRadians(dateMs: number): number {
     const n = daysSinceJ2000(dateMs);
     const deg = 280.46061837 + 360.98564736629 * n;
-    return ((deg % 360) + 360) % 360 * DEG2RAD;
+    return (((deg % 360) + 360) % 360) * DEG2RAD;
 }
 
 /** Mean anomaly of the sun (deg), wrapped to [0, 360). */
 function solarMeanAnomalyDeg(n: number): number {
-    return ((357.528 + 0.9856003 * n) % 360 + 360) % 360;
+    return (((357.528 + 0.9856003 * n) % 360) + 360) % 360;
 }
 
 /**
@@ -74,10 +74,9 @@ export function sunDistanceKm(dateMs: number): number {
 export function sunEciDirection(dateMs: number): Vec3 {
     const n = daysSinceJ2000(dateMs);
     const g = solarMeanAnomalyDeg(n) * DEG2RAD;
-    const meanLon = 280.460 + 0.9856474 * n;
+    const meanLon = 280.46 + 0.9856474 * n;
     // Apparent ecliptic longitude: mean longitude + equation-of-center terms.
-    const lambda =
-        (meanLon + 1.915 * Math.sin(g) + 0.02 * Math.sin(2 * g)) * DEG2RAD;
+    const lambda = (meanLon + 1.915 * Math.sin(g) + 0.02 * Math.sin(2 * g)) * DEG2RAD;
     const eps = (OBLIQUITY_J2000_DEG - 0.0000004 * n) * DEG2RAD;
     return {
         x: Math.cos(lambda),
@@ -129,10 +128,12 @@ export function isSunlit(
     sunUnitEci: Vec3,
     earthRadiusKm = EARTH_EQUATORIAL_RADIUS_KM
 ): boolean {
-    const axial = positionEciKm.x * sunUnitEci.x +
+    const axial =
+        positionEciKm.x * sunUnitEci.x +
         positionEciKm.y * sunUnitEci.y +
         positionEciKm.z * sunUnitEci.z;
     if (axial > 0) return true; // sunward half-space
-    const perp2 = positionEciKm.x ** 2 + positionEciKm.y ** 2 + positionEciKm.z ** 2 - axial * axial;
+    const perp2 =
+        positionEciKm.x ** 2 + positionEciKm.y ** 2 + positionEciKm.z ** 2 - axial * axial;
     return perp2 >= earthRadiusKm * earthRadiusKm;
 }

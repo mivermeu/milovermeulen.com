@@ -24,8 +24,15 @@ type BuildOrbitsMessage = {
     frame: Frame;
 };
 type ModeMessage = { type: 'mode'; mode: ElementMode };
+type BuildGroundTrackMessage = {
+    type: 'buildGroundTrack';
+    epoch: number;
+    requestId: number;
+    index: number;
+};
 
-type WorkerMessage = InitMessage | PropagateMessage | BuildOrbitsMessage | ModeMessage;
+type WorkerMessage =
+    InitMessage | PropagateMessage | BuildOrbitsMessage | BuildGroundTrackMessage | ModeMessage;
 
 interface PreparedSatellite {
     rec: SatRec;
@@ -104,6 +111,15 @@ function colorFor(rec: SatRec): number[] {
     return GEO_COLOR;
 }
 
+// SGP4 position in ECI km at a unix ms instant (null on error/non-finite).
+function sgp4Position(rec: SatRec, tMs: number): Vec3 | null {
+    const state = propagate(rec, new Date(tMs));
+    if (state.position === false || state.position === undefined) return null;
+    const p = state.position as EciVec3<number>;
+    if (!isFinite(p.x + p.y + p.z)) return null;
+    return [p.x, p.y, p.z];
+}
+
 // The 7 plotted quantities now come from `$lib/orbit`'s `elementsFor` — the
 // finiteness screen there covers every element mode, so NaN rows never leave
 // the worker.
@@ -136,13 +152,7 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
         const y = p[1] * scale;
         return [x * cosR - y * sinR, x * sinR + y * cosR, p[2] * scale];
     };
-    const sgp4At = (rec: SatRec, t: number): Vec3 | null => {
-        const state = propagate(rec, new Date(t));
-        if (state.position === false || state.position === undefined) return null;
-        const p = state.position as EciVec3<number>;
-        if (!isFinite(p.x + p.y + p.z)) return null;
-        return [p.x, p.y, p.z];
-    };
+    const sgp4At = (rec: SatRec, t: number): Vec3 | null => sgp4Position(rec, t);
     // Split long chords at SGP4 mid-times until a full sweep splits nothing.
     const refine = (rec: SatRec, t: number[], p: Vec3[], maxPts: number): [number[], Vec3[]] => {
         let sweep = 0;
@@ -289,6 +299,51 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
     postMessage({ type: 'orbits', requestId, positions, ranges }, [positions.buffer]);
 }
 
+/**
+ * Nadir ground track for ONE satellite: sample SGP4 over ±1 orbital period and
+ * project each ECI position through its own GMST onto the globe surface as an
+ * ECF subpoint. Unlike ECI orbit lines there is no shared -GMST(epoch) bake —
+ * every sample carries the GMST at its own time, so the result is always
+ * earth-fixed regardless of the reference-frame toggle. Emitted as line
+ * segments with honest gaps where SGP4 fails.
+ */
+async function buildGroundTrack(message: BuildGroundTrackMessage): Promise<void> {
+    const { requestId, epoch, index } = message;
+    const sat = satellites[index];
+    if (!sat) return;
+    const rec = sat.rec;
+    const meanMotionRadPerMs = rec.no / 60000;
+    const ecc = rec.ecco;
+    // No closed period → no track (matches the orbit-drawing guard).
+    if (!(ecc < 1) || !(meanMotionRadPerMs > 0)) return;
+    const periodMs = TAU / meanMotionRadPerMs;
+    const surfaceRadius = scale * EARTH_RADIUS_KM;
+    const out: number[] = [];
+    const POINTS = 256;
+    let prev: Vec3 | null = null;
+    for (let k = 0; k <= POINTS; k++) {
+        const t = epoch - periodMs + (k / POINTS) * 2 * periodMs;
+        const p = sgp4Position(rec, t);
+        if (!p) {
+            prev = null;
+            continue;
+        }
+        const ecf = eciToEcf({ x: p[0], y: p[1], z: p[2] } as EciVec3<number>, gstime(new Date(t)));
+        const r = Math.hypot(ecf.x, ecf.y, ecf.z) || 1;
+        const point: Vec3 = [
+            (ecf.x / r) * surfaceRadius,
+            (ecf.y / r) * surfaceRadius,
+            (ecf.z / r) * surfaceRadius
+        ];
+        if (prev) out.push(prev[0], prev[1], prev[2], point[0], point[1], point[2]);
+        prev = point;
+    }
+    const positions = new Float32Array(out);
+    postMessage({ type: 'groundTrack', requestId, generation: catalogVersion, positions }, [
+        positions.buffer
+    ]);
+}
+
 function handleMessage(event: MessageEvent<WorkerMessage>): void {
     const message = event.data;
     switch (message.type) {
@@ -395,7 +450,7 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
                     }
                 }
             }
-            let colors: Float32Array | undefined;
+            let colors: Float32Array<ArrayBuffer> | undefined;
             if (eclipseChanged) {
                 colors = new Float32Array(baseColors.length);
                 for (let i = 0; i < count; i++) {
@@ -406,7 +461,7 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
                 }
                 lastSunlit = sunlit;
             }
-            const transfer: Transferable[] = [positions.buffer, elements.buffer];
+            const transfer: ArrayBuffer[] = [positions.buffer, elements.buffer];
             if (colors) transfer.push(colors.buffer);
             postMessage(
                 {
@@ -430,6 +485,11 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
         case 'buildOrbits': {
             if (!initialized) break;
             void buildOrbits(message);
+            break;
+        }
+        case 'buildGroundTrack': {
+            if (!initialized) break;
+            void buildGroundTrack(message);
             break;
         }
     }

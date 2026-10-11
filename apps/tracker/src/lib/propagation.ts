@@ -178,6 +178,11 @@ class PropagationService {
     buildOrbits(epoch: number, requestId: number, frame: 'ecf' | 'eci'): void {
         this.ensure()?.postMessage({ type: 'buildOrbits', epoch, requestId, frame });
     }
+
+    /** Nadir subpoint polyline for one satellite (worker index) over ±1 period. */
+    buildGroundTrack(epoch: number, requestId: number, index: number): void {
+        this.ensure()?.postMessage({ type: 'buildGroundTrack', epoch, requestId, index });
+    }
 }
 
 export const propagation = new PropagationService();

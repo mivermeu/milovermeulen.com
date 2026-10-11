@@ -26,11 +26,7 @@ describe('sun ephemeris', () => {
     });
 
     it('sun vector is a unit vector', () => {
-        for (const ms of [
-            0,
-            Date.UTC(2024, 5, 20),
-            Date.UTC(2024, 11, 21, 9)
-        ]) {
+        for (const ms of [0, Date.UTC(2024, 5, 20), Date.UTC(2024, 11, 21, 9)]) {
             const s = sunEciDirection(ms);
             expect(len(s)).toBeCloseTo(1, 12);
         }

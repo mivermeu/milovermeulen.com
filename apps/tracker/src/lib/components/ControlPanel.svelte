@@ -57,6 +57,15 @@
         <label class="flex cursor-pointer items-center gap-2">
             <input
                 type="checkbox"
+                bind:checked={trackerState.showGroundTrack}
+                class="h-3 w-3 accent-brand-primary"
+            />
+            <span class="text-xs text-brand-text">Ground track</span>
+        </label>
+
+        <label class="flex cursor-pointer items-center gap-2">
+            <input
+                type="checkbox"
                 bind:checked={trackerState.showEquatorial}
                 class="h-3 w-3 accent-brand-primary"
             />

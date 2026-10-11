@@ -16,6 +16,8 @@ export const trackerState = $state({
     satellites: [] as ParsedSatellite[],
     showOrbits: true,
     showEquatorial: false,
+    // Pinned satellite's nadir ground track polyline (±1 orbital period, ECF).
+    showGroundTrack: true,
     dataSource: 'loading' as DataSource,
     staleHidden: 0,
     error: '',
