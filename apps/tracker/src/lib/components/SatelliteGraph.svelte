@@ -8,21 +8,61 @@
 
     type Param = keyof OrbitalElements | 'u';
 
-    // The six fundamental Keplerian elements.
-    const FUNDAMENTAL: { key: Param; label: string; short: string }[] = [
-        { key: 'a', label: 'Semi-major axis (km)', short: 'a' },
-        { key: 'e', label: 'Eccentricity', short: 'e' },
-        { key: 'i', label: 'Inclination (°)', short: 'i' },
-        { key: 'raan', label: 'RAAN (°)', short: 'Ω' },
-        { key: 'argp', label: 'Arg. of periapsis (°)', short: 'ω' },
-        { key: 'm', label: 'Mean anomaly (°)', short: 'M' }
+    // The six fundamental Keplerian elements. `short` is the symbol, `label` the
+    // precise axis name, and `desc` a plain-language explanation for the tooltip.
+    const FUNDAMENTAL: { key: Param; label: string; short: string; desc: string }[] = [
+        {
+            key: 'a',
+            label: 'Semi-major axis (km)',
+            short: 'a',
+            desc: "The orbit's size — roughly its average distance from Earth's centre."
+        },
+        {
+            key: 'e',
+            label: 'Eccentricity',
+            short: 'e',
+            desc: "The orbit's shape: 0 is a perfect circle, higher values are more stretched."
+        },
+        {
+            key: 'i',
+            label: 'Inclination (°)',
+            short: 'i',
+            desc: 'How far the orbit is tilted from the equator (0° means it never leaves it).'
+        },
+        {
+            key: 'raan',
+            label: 'RAAN (°)',
+            short: 'Ω',
+            desc: 'Where the orbit crosses the equator heading north.'
+        },
+        {
+            key: 'argp',
+            label: 'Arg. of periapsis (°)',
+            short: 'ω',
+            desc: "Where the orbit's closest point to Earth sits within the orbit."
+        },
+        {
+            key: 'm',
+            label: 'Mean anomaly (°)',
+            short: 'M',
+            desc: 'Where the satellite is along its orbit, measured from that closest point.'
+        }
     ];
 
     // Derived quantities, shown after a separator in the pickers.
-    const DERIVED: { key: Param; label: string; short: string }[] = [
-        { key: 'u', label: 'Anomaly past asc. node (°)', short: 'u' }
+    const DERIVED: { key: Param; label: string; short: string; desc: string }[] = [
+        {
+            key: 'u',
+            label: 'Anomaly past asc. node (°)',
+            short: 'u',
+            desc: 'The angle from the equator crossing to the satellite; it advances as the satellite moves.'
+        }
     ];
     const ALL_PARAMS = [...FUNDAMENTAL, ...DERIVED];
+
+    function meta(key: Param) {
+        return ALL_PARAMS.find((p) => p.key === key) ?? ALL_PARAMS[0];
+    }
 
     // Natural bounds for parameters that have them; axes are clamped to these so
     // e.g. Ω / ω / M / u never show a tick past 360°.
@@ -68,7 +108,7 @@
     let collapsed = $state(true);
 
     // Panel is anchored bottom-left; the top-right handle resizes it.
-    let width = $state(512);
+    let width = $state(560);
     let height = $state(320);
     let resizing = $state(false);
     let resizeStart = { x: 0, y: 0, w: 0, h: 0 };
@@ -441,6 +481,22 @@
     });
 </script>
 
+{#snippet infoTip(key: Param)}
+    <span class="group relative inline-flex">
+        <button
+            type="button"
+            aria-label={`About ${meta(key).label}`}
+            class="flex h-4 w-4 items-center justify-center rounded-full border border-brand-text/30 p-0 text-[9px] font-semibold text-brand-text/60 hover:border-brand-text/60 hover:bg-transparent hover:text-brand-text"
+            >i</button
+        >
+        <span
+            role="tooltip"
+            class="pointer-events-none absolute top-5 right-0 z-40 hidden w-52 rounded border border-brand-secondary bg-brand-bg/95 p-2 text-[10px] leading-snug text-brand-text shadow-lg group-focus-within:block group-hover:block"
+            >{meta(key).desc}</span
+        >
+    </span>
+{/snippet}
+
 {#if collapsed}
     <button
         type="button"
@@ -463,34 +519,7 @@
         <div class="pointer-events-auto grid h-full w-full">
             <Panel title="Orbital graph">
                 {#snippet actions()}
-                    <div class="flex items-center gap-1 pr-4 pb-1 text-[10px] text-brand-text">
-                        <select
-                            bind:value={xKey}
-                            aria-label="X axis parameter"
-                            class="rounded border border-brand-secondary bg-brand-bg px-1 py-0.5"
-                        >
-                            {#each FUNDAMENTAL as p (p.key)}
-                                <option value={p.key}>{p.short}</option>
-                            {/each}
-                            <option disabled>──────────</option>
-                            {#each DERIVED as p (p.key)}
-                                <option value={p.key}>{p.short}</option>
-                            {/each}
-                        </select>
-                        <span class="text-brand-text/50">×</span>
-                        <select
-                            bind:value={yKey}
-                            aria-label="Y axis parameter"
-                            class="rounded border border-brand-secondary bg-brand-bg px-1 py-0.5"
-                        >
-                            {#each FUNDAMENTAL as p (p.key)}
-                                <option value={p.key}>{p.short}</option>
-                            {/each}
-                            <option disabled>──────────</option>
-                            {#each DERIVED as p (p.key)}
-                                <option value={p.key}>{p.short}</option>
-                            {/each}
-                        </select>
+                    <div class="flex items-center gap-1 pr-4 pb-1">
                         <button
                             type="button"
                             aria-label="Minimize orbital graph"
@@ -508,6 +537,40 @@
                         </button>
                     </div>
                 {/snippet}
+
+                <div
+                    class="flex shrink-0 flex-wrap items-center gap-1 pb-2 text-[10px] text-brand-text"
+                >
+                    <select
+                        bind:value={xKey}
+                        aria-label="X axis parameter"
+                        class="rounded border border-brand-secondary bg-brand-bg px-1 py-0.5"
+                    >
+                        {#each FUNDAMENTAL as p (p.key)}
+                            <option value={p.key}>{p.short} — {p.label}</option>
+                        {/each}
+                        <option disabled>──────────</option>
+                        {#each DERIVED as p (p.key)}
+                            <option value={p.key}>{p.short} — {p.label}</option>
+                        {/each}
+                    </select>
+                    {@render infoTip(xKey)}
+                    <span class="text-brand-text/50">×</span>
+                    <select
+                        bind:value={yKey}
+                        aria-label="Y axis parameter"
+                        class="rounded border border-brand-secondary bg-brand-bg px-1 py-0.5"
+                    >
+                        {#each FUNDAMENTAL as p (p.key)}
+                            <option value={p.key}>{p.short} — {p.label}</option>
+                        {/each}
+                        <option disabled>──────────</option>
+                        {#each DERIVED as p (p.key)}
+                            <option value={p.key}>{p.short} — {p.label}</option>
+                        {/each}
+                    </select>
+                    {@render infoTip(yKey)}
+                </div>
 
                 <div bind:this={host} class="relative min-h-0 flex-1">
                     <canvas
