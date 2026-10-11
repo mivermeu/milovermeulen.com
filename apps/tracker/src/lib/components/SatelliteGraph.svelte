@@ -5,6 +5,20 @@
     import { categorize } from '$lib/tree';
     import { orbitalPeriodSeconds, trueAnomalyFromMean, type OrbitalElements } from '$lib/orbit';
     import { blendInto, propagation } from '$lib/propagation';
+    import {
+        brushChipText,
+        brushFromCanvasRect,
+        brushIsActiveForAxes,
+        computeBrushMask,
+        canvasXToData,
+        canvasYToData,
+        dragPassedThreshold,
+        invalidateBrushOnAxisChange,
+        normalizedRect,
+        pointInBrush,
+        type GraphBrush,
+        type ScreenRect
+    } from '$lib/graphBrush';
     import Panel from './Panel.svelte';
     import OrbitModelModal from './OrbitModelModal.svelte';
 
@@ -188,6 +202,22 @@
     let yLog = $state(false);
     let hover = $state<{ x: number; y: number; name: string } | null>(null);
 
+    // --- Brush-select state -------------------------------------------------
+    // TODO(a11y, deferred): interaction is pointer-first; a keyboard
+    // alternative (focusable brush mode + arrow-key rect editing) is accepted
+    // follow-up work.
+    // pressActive: pointer is down on the canvas (potential brush start);
+    // brushActive: the drag passed BRUSH_DRAG_THRESHOLD_PX so the live overlay
+    // is up and picking/pinning are suppressed until release.
+    let pressActive = false;
+    let brushActive = $state(false);
+    let brushStart = { x: 0, y: 0 };
+    // Canvas-local min/max rect while dragging (clamped to the plot).
+    let brushLive = $state<ScreenRect | null>(null);
+    // True when the committed brush currently hides every visible point —
+    // toggles only when the count crosses zero, never per frame.
+    let brushEmpty = $state(false);
+
     let renderer: THREE.WebGLRenderer | undefined;
     let scene: THREE.Scene | undefined;
     let camera: THREE.OrthographicCamera | undefined;
@@ -208,6 +238,29 @@
 
     const xLabel = $derived(meta(xKey).label);
     const yLabel = $derived(meta(yKey).label);
+
+    // Chip text for the committed brush (only while its axes are selected).
+    const chipText = $derived.by(() => {
+        const brush = trackerState.graphBrush;
+        if (!brushIsActiveForAxes(brush, xKey, yKey)) return null;
+        return brushChipText(
+            brush,
+            (k) => meta(k as Param).short,
+            (k, v) => format(k as Param, v)
+        );
+    });
+
+    // Data-space min/max under the live drag rect, for the per-axis labels.
+    const brushAxesLive = $derived.by(() => {
+        const r = brushLive;
+        if (!r) return null;
+        return {
+            xMin: canvasXToData(r.x0, plot, xRange, xLog),
+            xMax: canvasXToData(r.x1, plot, xRange, xLog),
+            yMin: canvasYToData(r.y1, plot, yRange, yLog),
+            yMax: canvasYToData(r.y0, plot, yRange, yLog)
+        };
+    });
 
     // Where each parameter sits inside the worker's 7-element-per-satellite block.
     const EL_INDEX: Record<BaseParam, number> = { a: 0, e: 1, i: 2, raan: 3, argp: 4, m: 5, u: 6 };
@@ -308,7 +361,11 @@
         }
         const xv = paramValue(s, xKey);
         const yv = paramValue(s, yKey);
-        if (!Number.isFinite(xv) || !Number.isFinite(yv)) {
+        if (
+            !Number.isFinite(xv) ||
+            !Number.isFinite(yv) ||
+            !pointInBrush(trackerState.graphBrush, xKey, yKey, xv, yv)
+        ) {
             highlightPoint = null;
             return;
         }
@@ -407,6 +464,9 @@
     }
 
     // Per-frame hot path: positions only, using the ranges cached by `layout`.
+    // Brush filtering happens HERE, at render time: a sample outside the brush
+    // keeps its array slot (uIndex) and is parked offscreen instead of being
+    // removed or reordered — the pick raycast then simply can't hit it.
     function updatePoints(): void {
         if (!renderer || !camera || !geometry || !scene) return;
         const n = Math.min(samples.length, MAX_POINTS);
@@ -417,21 +477,32 @@
             return;
         }
 
+        const brush = trackerState.graphBrush;
+        const brushing = brush !== null;
         const position = geometry.getAttribute('position') as THREE.BufferAttribute;
         const l = plot.l;
         const t = plot.t;
         const w = plot.w;
         const h = plot.h;
+        let visible = 0;
         for (let k = 0; k < n; k++) {
             const s = samples[k];
-            const xn = norm(paramValue(s, xKey), xRange, xLog);
-            const yn = norm(paramValue(s, yKey), yRange, yLog);
-            if (!Number.isFinite(xn) || !Number.isFinite(yn)) {
-                // NaN row (failed propagation off the worker) — park the dot far
-                // offscreen so it can't poison the geometry's bounding sphere.
+            const xv = paramValue(s, xKey);
+            const yv = paramValue(s, yKey);
+            const xn = norm(xv, xRange, xLog);
+            const yn = norm(yv, yRange, yLog);
+            if (
+                !Number.isFinite(xn) ||
+                !Number.isFinite(yn) ||
+                (brushing && !pointInBrush(brush, xKey, yKey, xv, yv))
+            ) {
+                // NaN row (failed propagation off the worker) or brushed-out
+                // point — park the dot far offscreen so it can't poison the
+                // geometry's bounding sphere.
                 position.setXYZ(k, -10000, -10000, 0);
                 continue;
             }
+            visible++;
             position.setXYZ(k, l + xn * w, t + (1 - yn) * h, 0);
         }
         position.needsUpdate = true;
@@ -439,6 +510,9 @@
         // Keep pick raycasts honest: invalidate the cached bounding sphere (it
         // is recomputed lazily from the live buffer on the next pick).
         geometry.boundingSphere = null;
+        // Only meaningful with an active brush; the no-op $state write when it
+        // doesn't change is free.
+        brushEmpty = brushing && visible === 0;
         updateHighlight();
         renderer.render(scene, camera);
     }
@@ -467,7 +541,41 @@
         return hit?.index !== undefined ? hit.index : null;
     }
 
+    // --- Brush-select interaction -------------------------------------------
+    // A press starts a potential brush; only once the drag passes
+    // BRUSH_DRAG_THRESHOLD_PX does the live overlay open and picking/pinning
+    // get suppressed, so plain hover and click-to-pin behave exactly as today.
+
+    function canvasPoint(event: PointerEvent): { x: number; y: number } {
+        const rect = canvas!.getBoundingClientRect();
+        return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    }
+
+    function onPointerDown(event: PointerEvent): void {
+        // Only the primary pointer drives the brush; a second touch during a
+        // drag must not clobber the rect.
+        if (pressActive || !event.isPrimary || !canvas) return;
+        pressActive = true;
+        brushStart = canvasPoint(event);
+        // Capture so a drag ending over the chip/axis row still commits.
+        canvas.setPointerCapture(event.pointerId);
+    }
+
     function onPointerMove(event: PointerEvent): void {
+        if (pressActive && !brushActive) {
+            const p = canvasPoint(event);
+            if (dragPassedThreshold(brushStart.x, brushStart.y, p.x, p.y)) {
+                // Brush begins: suppress hover/picking for the whole drag.
+                brushActive = true;
+                hover = null;
+                trackerState.hoveredIndex = -1;
+            }
+        }
+        if (brushActive) {
+            // Rect updates bypass the hover throttle so the overlay is fluid.
+            brushLive = updateBrushRect(canvasPoint(event));
+            return;
+        }
         const now = performance.now();
         if (now - lastMoveWall < 33) return;
         lastMoveWall = now;
@@ -487,16 +595,80 @@
         };
     }
 
+    function updateBrushRect(p: { x: number; y: number }): ScreenRect | null {
+        const { l, t, w, h } = plot;
+        const x = Math.min(Math.max(p.x, l), l + w);
+        const y = Math.min(Math.max(p.y, t), t + h);
+        // Clamp to plot bounds so the rect stays inside the axes even when the
+        // pointer leaves the canvas (pointer capture keeps events flowing).
+        return normalizedRect(brushStart.x, brushStart.y, x, y);
+    }
+
+    function releaseBrushCapture(event: PointerEvent): void {
+        const el = event.currentTarget as HTMLElement;
+        if (el.hasPointerCapture(event.pointerId)) el.releasePointerCapture(event.pointerId);
+    }
+
+    function onPointerUp(event: PointerEvent): void {
+        releaseBrushCapture(event);
+        if (!brushActive) {
+            // Sub-threshold press → exactly the old click behavior.
+            const index = pick(event);
+            if (index !== null) trackerState.pinnedIndex = samples[index].index;
+            // Clicking empty space unpins, matching the globe's click behavior.
+            else trackerState.pinnedIndex = -1;
+            return;
+        }
+        // Released drag ≥ threshold → commit (or clear via a null brush from a
+        // tiny/hairline rect, per brushFromCanvasRect).
+        const rect = brushLive;
+        endBrushInteraction();
+        if (!rect) return;
+        const brush = brushFromCanvasRect(rect, { xKey, yKey, plot, xRange, yRange, xLog, yLog });
+        trackerState.graphBrush = brush;
+        if (brush) clearFocusOutsideBrush(brush);
+    }
+
     function onPointerLeave(): void {
         hover = null;
         trackerState.hoveredIndex = -1;
     }
 
-    function onPointerUp(event: PointerEvent): void {
-        const index = pick(event);
-        if (index !== null) trackerState.pinnedIndex = samples[index].index;
-        // Clicking empty space unpins, matching the globe's click behavior.
-        else trackerState.pinnedIndex = -1;
+    function onPointerCancel(event: PointerEvent): void {
+        // Cancelled drag: abort without commit, keep today's state intact.
+        releaseBrushCapture(event);
+        endBrushInteraction();
+    }
+
+    function endBrushInteraction(): void {
+        pressActive = false;
+        brushActive = false;
+        brushLive = null;
+    }
+
+    // A committed brush filters both views — satellites it ignores can't stay
+    // hovered or pinned (mirrors the tree filter's unpin behavior).
+    function clearFocusOutsideBrush(brush: GraphBrush): void {
+        for (const index of [trackerState.hoveredIndex, trackerState.pinnedIndex]) {
+            if (index < 0) continue;
+            const s = samplesByIndex.get(index);
+            if (!s) continue;
+            const xv = paramValue(s, xKey);
+            const yv = paramValue(s, yKey);
+            if (!pointInBrush(brush, xKey, yKey, xv, yv)) {
+                if (trackerState.hoveredIndex === index) {
+                    trackerState.hoveredIndex = -1;
+                    // Also drop the globe-side hover payload so a stale tooltip
+                    // doesn't linger until the next globe pointermove.
+                    trackerState.hovered = null;
+                }
+                if (trackerState.pinnedIndex === index) trackerState.pinnedIndex = -1;
+            }
+        }
+    }
+
+    function clearBrush(): void {
+        trackerState.graphBrush = null;
     }
 
     let panelBox: HTMLDivElement | undefined = $state();
@@ -556,6 +728,23 @@
         else if (blend > 1) blend = 1;
         blendInto(elPrev, elNext, elCurrent, blend, 7, [3, 4, 5, 6]);
         updatePoints();
+    }
+
+    // --- Brush → globe bridge ------------------------------------------------
+    // Publish the composed (tree ∩ brush) visible mask for the globe. Values
+    // come from the freshest snapshot (elNext); the graph itself re-checks
+    // membership per frame in updatePoints, while the globe refreshes once per
+    // snapshot and whenever the brush/tree set/axes change. trackerState reads
+    // here are untracked on purpose — callers track what must retrigger this
+    // (a tracked deep read inside history effects caused catalog re-inits).
+    function publishBrushMask(): void {
+        trackerState.brushMask = computeBrushMask(
+            trackerState.graphBrush,
+            xKey,
+            yKey,
+            samples,
+            (s) => ({ x: paramValueAt(elNext, s, xKey), y: paramValueAt(elNext, s, yKey) })
+        );
     }
 
     // Set up three.js once the canvas/host refs exist, and subscribe to the
@@ -625,6 +814,7 @@
                 elNextEpoch = message.epoch;
                 elCurrent = new Float32Array(message.elements);
                 layout();
+                publishBrushMask();
                 return;
             }
             elPrev = elNext;
@@ -636,6 +826,7 @@
                 elCurrent.set(message.elements);
             }
             layout();
+            publishBrushMask();
         });
         rafId = requestAnimationFrame(frame);
 
@@ -662,6 +853,29 @@
         void xKey;
         void yKey;
         untrack(() => layout());
+    });
+
+    // Axis-change policy: a brush drawn in one parameter space is meaningless
+    // in another — switching x/y axes CLEARS the committed brush (the region
+    // is never silently re-evaluated). Valid brushes keep their reference so
+    // this stays a no-op.
+    $effect(() => {
+        const brush = trackerState.graphBrush;
+        const validated = invalidateBrushOnAxisChange(brush, xKey, yKey);
+        if (validated !== brush) trackerState.graphBrush = validated;
+    });
+
+    // Republish the globe's brush mask when the brush, the tree-filtered set,
+    // or the axes change. The writes that feed computeBrushMask (element
+    // arrays) are deliberately untracked — snapshot-driven refreshes come from
+    // the propagation callback, not from per-frame reactive churn (history:
+    // a tracked deep read caused catalog re-inits).
+    $effect(() => {
+        void trackerState.graphBrush;
+        void samples;
+        void xKey;
+        void yKey;
+        untrack(publishBrushMask);
     });
 </script>
 
@@ -761,6 +975,28 @@
                         class="flex h-5 items-center justify-center rounded border border-brand-text/30 p-0 px-1.5 text-[9px] font-semibold text-brand-text/60 hover:border-brand-text/60 hover:bg-transparent hover:text-brand-text"
                         onclick={() => (showModel = true)}>?</button
                     >
+                    {#if chipText}
+                        <div
+                            class="flex items-center gap-1 rounded border border-brand-text/50 bg-brand-bg px-1.5 py-0.5 text-[10px] text-brand-text-highlight"
+                        >
+                            <span class="whitespace-nowrap">Brush {chipText}</span>
+                            <button
+                                type="button"
+                                aria-label="Clear brush filter"
+                                class="flex h-4 w-4 items-center justify-center rounded border-0 p-0 text-brand-text/70 hover:bg-white/10 hover:text-brand-text"
+                                onclick={clearBrush}
+                            >
+                                <svg viewBox="0 0 10 10" class="h-2.5 w-2.5" aria-hidden="true">
+                                    <path
+                                        d="M1 1 9 9M9 1 1 9"
+                                        stroke="currentColor"
+                                        stroke-width="1.6"
+                                        fill="none"
+                                    />
+                                </svg>
+                            </button>
+                        </div>
+                    {/if}
                 </div>
 
                 <div bind:this={host} class="relative min-h-0 flex-1">
@@ -770,9 +1006,11 @@
                         role="img"
                         aria-label={`Orbital element scatter plot: ${xLabel} versus ${yLabel}, ${samples.length} satellites`}
                         class="block h-full w-full cursor-crosshair touch-none"
+                        onpointerdown={onPointerDown}
                         onpointermove={onPointerMove}
                         onpointerleave={onPointerLeave}
                         onpointerup={onPointerUp}
+                        onpointercancel={onPointerCancel}
                     ></canvas>
 
                     {#if plot.w > 0}
@@ -844,11 +1082,44 @@
                         ></div>
                     {/if}
 
+                    {#if brushLive && brushAxesLive}
+                        <div
+                            class="pointer-events-none absolute z-10 border border-brand-text/70 bg-brand-text/10"
+                            style:left="{brushLive.x0}px"
+                            style:top="{brushLive.y0}px"
+                            style:width="{brushLive.x1 - brushLive.x0}px"
+                            style:height="{brushLive.y1 - brushLive.y0}px"
+                        >
+                            <span
+                                class="absolute bottom-0.5 left-0.5 rounded bg-brand-bg/85 px-1 py-px text-[9px] text-brand-text"
+                            >
+                                {format(xKey, brushAxesLive.xMin)}–{format(
+                                    xKey,
+                                    brushAxesLive.xMax
+                                )}
+                            </span>
+                            <span
+                                class="absolute top-0.5 right-0.5 rounded bg-brand-bg/85 px-1 py-px text-[9px] text-brand-text"
+                            >
+                                {format(yKey, brushAxesLive.yMin)}–{format(
+                                    yKey,
+                                    brushAxesLive.yMax
+                                )}
+                            </span>
+                        </div>
+                    {/if}
+
                     {#if samples.length === 0}
                         <div
                             class="pointer-events-none absolute inset-0 flex items-center justify-center text-xs text-brand-text/60"
                         >
                             No active satellites
+                        </div>
+                    {:else if brushEmpty}
+                        <div
+                            class="pointer-events-none absolute inset-0 flex items-center justify-center text-xs text-brand-text/60"
+                        >
+                            No satellites in brush
                         </div>
                     {/if}
 

@@ -2,6 +2,7 @@ import { browser } from '$app/environment';
 import { loadCatalog } from '$lib/satellites/tle';
 import type { DataSource, ParsedSatellite } from '$lib/satellites/types';
 import { type TreeNode, buildRoot, toggleNodeInTree, findNode, collectLeaves } from '$lib/tree';
+import type { GraphBrush } from '$lib/graphBrush';
 
 export type { TreeNode, TriState } from '$lib/tree';
 
@@ -30,7 +31,13 @@ export const trackerState = $state({
     panelsOpen: typeof matchMedia !== 'undefined' && matchMedia('(min-width: 768px)').matches,
     tree: null as TreeNode | null,
     activeIndices: [] as number[],
-    searchQuery: ''
+    searchQuery: '',
+    // Orbital-parameter brush committed on the scatter (graphBrush.ts); null = off.
+    graphBrush: null as GraphBrush | null,
+    // Visible flags over the worker's TREE-filtered index space (1 = in brush),
+    // published by the graph and applied by the globe at render time. Kept in
+    // filtered slot order — never reordered/compacted (see graphBrush.ts).
+    brushMask: null as Uint8Array | null
 });
 
 export function toggleNode(id: string): void {

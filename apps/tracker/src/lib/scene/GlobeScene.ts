@@ -69,6 +69,10 @@ export class GlobeScene {
     private orbitPositions: Float32Array | null = null;
     private orbitBuildGmst = 0;
     private highlightIndex = -1;
+    // Indices of filtered-space slots hidden by the graph's orbital-parameter
+    // brush (1 = visible). Kept in slot order — brushing must never reorder or
+    // compact the worker arrays (graphBrush.ts).
+    private brushMask: Uint8Array | null = null;
     private pointerOverCanvas = false;
     private lastPointerMoveWall = 0;
     private pointerDownX = 0;
@@ -457,8 +461,13 @@ export class GlobeScene {
         let best = -1;
         let bestDist = Infinity;
         const v = new THREE.Vector3();
+        const mask = this.brushMask;
+        const maskLen = mask ? Math.min(mask.length, this.satellites.length) : 0;
 
         for (let i = 0; i < this.satellites.length; i++) {
+            // Brushed-out satellites are unpickable even before the occlusion
+            // test, in case a stale frame still has them anywhere in view.
+            if (i < maskLen && !mask![i]) continue;
             v.set(
                 this.positionArray[i * 3],
                 this.positionArray[i * 3 + 1],
@@ -594,6 +603,9 @@ export class GlobeScene {
 
     setFilter(filteredSatellites: ParsedSatellite[], activeIndices: number[]): void {
         this.hideHighlight();
+        // A new tree-filtered layout invalidates the old slot mask; the graph
+        // republishes a fresh one right after.
+        this.brushMask = null;
         this.orbitsReady = false;
         this.orbitPositions = null;
         this.orbitRanges = [];
@@ -640,6 +652,16 @@ export class GlobeScene {
 
     getOriginalIndex(filteredIndex: number): number {
         return this.filteredToOriginal.get(filteredIndex) ?? -1;
+    }
+
+    /**
+     * Apply the graph's orbital-parameter brush as a render-time cull: the
+     * flags are indexed by the filtered (tree) space slots this scene already
+     * uses, so passing a mask never re-inits the worker or reorders anything.
+     * A null mask clears the brush and restores every slot on the next blend.
+     */
+    setBrushMask(mask: Uint8Array | null): void {
+        this.brushMask = mask;
     }
 
     private requestOrbits(): void {
@@ -708,6 +730,21 @@ export class GlobeScene {
         if (blend < 0) blend = 0;
         if (blend > 1) blend = 1;
         blendInto(this.prevPositions, this.nextPositions, this.positionArray, blend, 3, []);
+        // Brush culling at render time: brushed-out satellites keep their
+        // position slot and are parked at the center of the earth each frame —
+        // occluded by the opaque globe surface and skipped by raycasts — so
+        // clearing the brush restores them on the next blend with no re-init.
+        const mask = this.brushMask;
+        if (mask) {
+            const n = Math.min(mask.length, this.positionArray.length / 3);
+            for (let i = 0; i < n; i++) {
+                if (mask[i]) continue;
+                const o = i * 3;
+                this.positionArray[o] = 0;
+                this.positionArray[o + 1] = 0;
+                this.positionArray[o + 2] = 0;
+            }
+        }
         this.pointsGeometry.attributes.position.needsUpdate = true;
     }
 
