@@ -17,7 +17,7 @@
     const SCALE = EARTH_UNITS / EARTH_RADIUS_KM;
     const ORBIT_SAMPLES = 256;
 
-    let el = $state<OrbitalElements>({ a: 8000, e: 0.2, i: 51.5, raan: 40, argp: 60, m: 0 });
+    let el = $state<OrbitalElements>({ a: 11000, e: 0.2, i: 51.5, raan: 40, argp: 60, m: 0 });
 
     const u = $derived(argumentOfLatitudeFromElements(el));
     const nu = $derived(trueAnomalyFromMean(el.m, el.e));
