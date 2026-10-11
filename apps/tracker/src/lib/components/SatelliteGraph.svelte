@@ -3,6 +3,7 @@
     import { trackerState } from '$lib/state.svelte';
     import { categorize } from '$lib/tree';
     import { orbitalElements, argumentOfLatitudeAt, type OrbitalElements } from '$lib/orbit';
+    import { propagation } from '$lib/propagation';
     import Panel from './Panel.svelte';
 
     type Param = keyof OrbitalElements | 'u';
@@ -84,25 +85,36 @@
     const xLabel = $derived(ALL_PARAMS.find((p) => p.key === xKey)?.label ?? '');
     const yLabel = $derived(ALL_PARAMS.find((p) => p.key === yKey)?.label ?? '');
 
-    // Argument of latitude is evaluated at the current time (matching the globe).
+    // Argument of latitude comes from the shared propagation service (the same SGP4
+    // pass the globe uses), so the graph does no propagation of its own.
     const usesU = $derived(xKey === 'u' || yKey === 'u');
 
     // Only the active (filtered/selected) satellites, with a valid orbit.
     const samples = $derived.by(() => {
         const sats = trackerState.satellites;
         const needU = usesU;
+        const active = trackerState.activeIndices;
+        const shared = needU ? propagation.latest() : null;
         const t = needU ? now : 0;
         const out: Sample[] = [];
-        for (const index of trackerState.activeIndices) {
+        for (let i = 0; i < active.length; i++) {
+            const index = active[i];
             const sat = sats[index];
             if (!sat) continue;
             const el = orbitalElements(sat.line2);
             if (!el) continue;
             const category = categorize(sat.name, sat.objectType, sat.category);
+            let u = 0;
+            if (needU) {
+                const fromShared = shared && i < shared.u.length ? shared.u[i] : NaN;
+                u = Number.isFinite(fromShared)
+                    ? fromShared
+                    : (argumentOfLatitudeAt(sat.line1, sat.line2, t) ?? 0);
+            }
             out.push({
                 index,
                 el,
-                u: needU ? (argumentOfLatitudeAt(sat.line1, sat.line2, t) ?? 0) : 0,
+                u,
                 color: new THREE.Color(CATEGORY_COLORS[category] ?? CATEGORY_COLORS.other)
             });
         }

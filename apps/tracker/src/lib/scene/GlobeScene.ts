@@ -7,6 +7,7 @@ import { gstime } from 'satellite.js';
 import { base } from '$app/paths';
 import { trackerState } from '$lib/state.svelte';
 import type { ParsedSatellite } from '$lib/satellites/types';
+import { propagation, type WorkerResponse } from '$lib/propagation';
 
 const EARTH_RADIUS_KM = 6371;
 export const GLOBE_RADIUS = 6.4;
@@ -25,23 +26,12 @@ export interface GlobeSceneCallbacks {
     onSelect?: (index: number) => void;
 }
 
-interface WorkerResponse {
-    type: string;
-    requestId?: number;
-    count?: number;
-    epoch?: number;
-    colors?: Float32Array;
-    positions?: Float32Array;
-    message?: string;
-    ranges?: number[];
-}
-
 export class GlobeScene {
     private readonly renderer: THREE.WebGLRenderer;
     private readonly scene: THREE.Scene;
     private readonly camera: THREE.PerspectiveCamera;
     private readonly controls: OrbitControls;
-    private readonly worker: Worker;
+    private readonly unsubscribe: () => void;
     private readonly points: THREE.Points;
     private readonly pointsGeometry: THREE.BufferGeometry;
     private positionArray: Float32Array;
@@ -263,19 +253,8 @@ export class GlobeScene {
         this.resizeObserver.observe(canvas.parentElement ?? canvas);
         this.handleResize();
 
-        this.worker = new Worker(new URL('../workers/sgp4.worker.ts', import.meta.url), {
-            type: 'module'
-        });
-        this.worker.onmessage = (event) => this.handleWorkerMessage(event);
-        this.worker.onerror = (event) => {
-            this.positionRequestPending = false;
-            this.callbacks.onError?.(event.message || 'Worker error');
-        };
-        this.worker.postMessage({
-            type: 'init',
-            satellites: satellites.map(({ name, line1, line2 }) => ({ name, line1, line2 })),
-            scale: SCALE
-        });
+        this.unsubscribe = propagation.subscribe((message) => this.handleWorkerMessage(message));
+        propagation.init(satellites, SCALE);
 
         this.raf = requestAnimationFrame(() => this.loop());
     }
@@ -321,8 +300,7 @@ export class GlobeScene {
         this.camera.updateProjectionMatrix();
     }
 
-    private handleWorkerMessage(event: MessageEvent<WorkerResponse>): void {
-        const message = event.data;
+    private handleWorkerMessage(message: WorkerResponse): void {
         switch (message.type) {
             case 'ready':
                 this.onReady(message);
@@ -334,6 +312,7 @@ export class GlobeScene {
                 this.onOrbits(message);
                 break;
             case 'error':
+                this.positionRequestPending = false;
                 this.callbacks.onError?.(message.message ?? 'Worker error');
                 break;
         }
@@ -644,15 +623,7 @@ export class GlobeScene {
             'position',
             new THREE.BufferAttribute(this.positionArray, 3)
         );
-        this.worker.postMessage({
-            type: 'init',
-            satellites: filteredSatellites.map(({ name, line1, line2 }) => ({
-                name,
-                line1,
-                line2
-            })),
-            scale: SCALE
-        });
+        propagation.init(filteredSatellites, SCALE);
     }
 
     getOriginalIndex(filteredIndex: number): number {
@@ -668,22 +639,20 @@ export class GlobeScene {
         if (!this.ready || this.positionRequestPending) return;
         this.positionRequestPending = true;
         this.positionRequestSeq++;
-        this.worker.postMessage({
-            type: 'propagate',
-            epoch: Math.round(Date.now() + this.positionCadenceMs()),
-            requestId: this.positionRequestSeq
-        });
+        propagation.propagate(
+            Math.round(Date.now() + this.positionCadenceMs()),
+            this.positionRequestSeq
+        );
     }
 
     private requestOrbits(): void {
         this.lastOrbitBuildWall = performance.now();
         this.orbitRequestSeq++;
-        this.worker.postMessage({
-            type: 'buildOrbits',
-            epoch: Math.round(Date.now()),
-            requestId: this.orbitRequestSeq,
-            frame: trackerState.referenceFrame
-        });
+        propagation.buildOrbits(
+            Math.round(Date.now()),
+            this.orbitRequestSeq,
+            trackerState.referenceFrame
+        );
     }
 
     private loop = (): void => {
@@ -770,7 +739,7 @@ export class GlobeScene {
         this.canvas.removeEventListener('pointerup', this.onPointerUp);
         this.canvas.removeEventListener('pointerenter', this.onPointerEnter);
         this.canvas.removeEventListener('pointerleave', this.onPointerLeave);
-        this.worker.terminate();
+        this.unsubscribe();
         this.controls.dispose();
         this.pointsGeometry.dispose();
         (this.points.material as THREE.PointsMaterial).map?.dispose();

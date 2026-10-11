@@ -1,6 +1,7 @@
 import { twoline2satrec, propagate, eciToEcf, gstime } from 'satellite.js';
 import type { EciVec3, SatRec } from 'satellite.js';
 import type { ParsedSatellite } from '$lib/satellites/types';
+import { argumentOfLatitudeFromState } from '$lib/orbit';
 
 const EARTH_RADIUS_KM = 6371;
 const MU_KM3_S2 = 398600.4418;
@@ -293,17 +294,22 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
             const date = new Date(epoch);
             const gmst = gstime(date);
             const positions = new Float32Array(satellites.length * 3);
+            const u = new Float32Array(satellites.length);
             for (let i = 0; i < satellites.length; i++) {
                 const state = propagate(satellites[i].rec, date);
                 if (state.position === false || state.position === undefined) continue;
-                const ecf = eciToEcf(state.position as EciVec3<number>, gmst);
+                const eci = state.position as EciVec3<number>;
+                const ecf = eciToEcf(eci, gmst);
                 positions[i * 3] = ecf.x * scale;
                 positions[i * 3 + 1] = ecf.y * scale;
                 positions[i * 3 + 2] = ecf.z * scale;
+                if (state.velocity && typeof state.velocity !== 'boolean') {
+                    u[i] = argumentOfLatitudeFromState(eci, state.velocity);
+                }
             }
             postMessage(
-                { type: 'positions', requestId, epoch, count: satellites.length, positions },
-                [positions.buffer]
+                { type: 'positions', requestId, epoch, count: satellites.length, positions, u },
+                [positions.buffer, u.buffer]
             );
             break;
         }
