@@ -9,8 +9,9 @@
     } from 'satellite.js';
     import { trackerState } from '$lib/state.svelte';
     import { epochAgeDays } from '$lib/satellites/tle';
+    import { noradId } from '$lib/url-state';
     import Panel from './Panel.svelte';
-    import { isFavorite, satelliteNorad, toggleFavorite } from '$lib/favorites';
+    import { isFavorite, toggleFavorite } from '$lib/favorites';
 
     const DEG = 180 / Math.PI;
 
@@ -19,7 +20,7 @@
     let sat = $derived(pinnedIndex >= 0 ? trackerState.satellites[pinnedIndex] : null);
 
     // Favorites are stored by NORAD id; collapsible list lives in ControlPanel.
-    let norad = $derived(satelliteNorad(sat));
+    let norad = $derived(sat ? noradId(sat) : null);
     let satFavorited = $derived(isFavorite(trackerState.favorites, norad));
 
     function toggleStar(): void {

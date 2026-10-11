@@ -4,38 +4,26 @@
  * are unit-testable; the reactive persistence lives in `url-sync.svelte.ts`.
  */
 
-import { noradIdFromLine1 } from '$lib/url-state';
+import { isValidNorad } from '$lib/url-state';
 
-export interface KeyValueStore {
-    getItem(key: string): string | null;
-    setItem(key: string, value: string): void;
-}
+export type KeyValueStore = Pick<Storage, 'getItem' | 'setItem'>;
 
 export const FAVORITES_KEY = 'tracker:favorites';
 
-/** Load favorites from `store`, tolerating junk — only finite integers survive, deduped, in insertion order. */
+/** Load favorites from `store`, tolerating junk — only valid NORAD ids survive, deduped, in insertion order. */
 export function loadFavorites(store: KeyValueStore | null | undefined): number[] {
     if (!store) return [];
-    const raw = store.getItem(FAVORITES_KEY);
-    if (!raw) return [];
-    return saveFormatFilter(loadAsArray(raw));
-}
-
-function loadAsArray(raw: string): unknown[] {
+    let parsed: unknown;
     try {
-        const parsed = JSON.parse(raw);
-        return Array.isArray(parsed) ? parsed : [];
+        parsed = JSON.parse(store.getItem(FAVORITES_KEY) ?? '');
     } catch {
         return [];
     }
-}
-
-function saveFormatFilter(items: unknown[]): number[] {
+    if (!Array.isArray(parsed)) return [];
     const out: number[] = [];
     const seen = new Set<number>();
-    for (const item of items) {
-        if (typeof item !== 'number' || !Number.isInteger(item) || item < 0 || item >= 100000)
-            continue;
+    for (const item of parsed) {
+        if (typeof item !== 'number' || !isValidNorad(item)) continue;
         if (seen.has(item)) continue;
         seen.add(item);
         out.push(item);
@@ -67,9 +55,4 @@ export function toggleFavorite(ids: readonly number[], norad: number): number[] 
 
 export function isFavorite(ids: readonly number[], norad: number | null): boolean {
     return norad !== null && ids.includes(norad);
-}
-
-/** NORAD id of the pinned satellite (used for the star button), or null. */
-export function satelliteNorad(sat: { line1: string } | null | undefined): number | null {
-    return sat ? noradIdFromLine1(sat.line1) : null;
 }

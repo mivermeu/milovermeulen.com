@@ -8,6 +8,9 @@ import {
     extractPrefix,
     starlinkShell,
     findMatchingNodeIds,
+    findLeafByIndex,
+    activateLeafNode,
+    revealLeafNode,
     type TreeNode
 } from './tree';
 
@@ -200,6 +203,72 @@ describe('grouping', () => {
         const comms = root.children.find((c) => c.label === 'Communications')!;
         expect(comms.children.map((c) => c.label)).toContain('INMARSAT 6-F1');
         expect(comms.children.map((c) => c.label)).toContain('EUTELSAT 10B');
+    });
+});
+
+describe('satellite lookup/activation helpers', () => {
+    // Fixture: ISS (index 0) is science → selected by default; GPS BIIF-2
+    // (index 2) hides two levels deep (Navigation > GPS > leaf); NOAA-19
+    // (index 3) is a hidden lone leaf under Weather.
+    function fixture(): TreeNode {
+        return buildRoot([
+            sat('ISS (ZARYA)'),
+            sat('GPS BIIF-1'),
+            sat('GPS BIIF-2'),
+            sat('NOAA-19')
+        ]);
+    }
+
+    it('findLeafByIndex locates leaves by catalog index, or null when absent', () => {
+        const root = fixture();
+        expect(findLeafByIndex(root, 0)?.label).toBe('ISS (ZARYA)');
+        expect(findLeafByIndex(root, 2)?.label).toBe('GPS BIIF-2');
+        expect(findLeafByIndex(root, 3)?.label).toBe('NOAA-19');
+        expect(findLeafByIndex(root, 99)).toBeNull();
+    });
+
+    it('activateLeafNode leaves an already-selected leaf untouched', () => {
+        const root = fixture();
+        const leaf = findLeafByIndex(root, 0)!;
+        expect(leaf.selected).toBe(true);
+        const before = getActive(root);
+        const after = activateLeafNode(root, leaf);
+        expect(after).toEqual(before);
+        expect(after).toEqual([0]);
+    });
+
+    it('activating a hidden lone leaf selects it and recomputes tri-states', () => {
+        const root = fixture();
+        const leaf = findLeafByIndex(root, 3)!;
+        expect(leaf.selected).toBe(false);
+        const after = activateLeafNode(root, leaf);
+        expect(leaf.selected).toBe(true);
+        expect(after).toContain(0);
+        expect(after).toContain(3);
+        expect(root.children.find((c) => c.label === 'Weather')!.triState).toBe('all');
+        expect(root.children.find((c) => c.label === 'Science')!.triState).toBe('all');
+    });
+
+    it('activating a hidden leaf deep in a folder selects it, leaving its sibling off', () => {
+        const root = fixture();
+        const leaf = findLeafByIndex(root, 2)!;
+        expect(leaf.selected).toBe(false);
+        const after = activateLeafNode(root, leaf);
+        expect(after).toContain(2);
+        expect(after).not.toContain(1); // sibling GPS BIIF-1 stays off
+        const nav = root.children.find((c) => c.label === 'Navigation')!;
+        expect(nav.triState).toBe('some');
+    });
+
+    it('revealLeafNode expands exactly the ancestors on the path', () => {
+        const root = fixture();
+        const leaf = findLeafByIndex(root, 2)!;
+        revealLeafNode(root, leaf);
+        const nav = root.children.find((c) => c.label === 'Navigation')!;
+        expect(nav.expanded).toBe(true);
+        expect(findInChildren(nav.children, 'GPS')!.expanded).toBe(true);
+        // Unrelated branches stay collapsed; the leaf has no children to open.
+        expect(root.children.find((c) => c.label === 'Weather')!.expanded).toBe(false);
     });
 });
 

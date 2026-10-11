@@ -14,7 +14,7 @@
         paramMeta,
         LIMITS,
         LOG_FLOOR,
-        isLogParam,
+        LOG_PARAMS,
         type ParamKey,
         type BaseParamKey
     } from '$lib/graph-params';
@@ -328,8 +328,8 @@
     }
 
     function computeRanges(): void {
-        const xIsLog = isLogParam(xKey);
-        const yIsLog = isLogParam(yKey);
+        const xIsLog = LOG_PARAMS.has(xKey);
+        const yIsLog = LOG_PARAMS.has(yKey);
         xLog = xIsLog;
         yLog = yIsLog;
         xRange = scanRange(xKey, xIsLog, LIMITS[xKey]);

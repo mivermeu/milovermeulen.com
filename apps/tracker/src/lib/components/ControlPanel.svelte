@@ -9,7 +9,9 @@
     const favoriteEntries = $derived.by(() => {
         // Track the ids and the catalog reference; scan the TLE lines untracked
         // (deep proxy reads must not become dependencies — a tracked deep read
-        // re-fires on any catalog object mutation).
+        // re-fires on any catalog object mutation). The NORAD index itself is
+        // cached by array reference in catalogByNorad, so repeated favorites
+        // changes don't rescan the catalog.
         const ids = trackerState.favorites;
         const sats = trackerState.satellites;
         if (ids.length === 0 || sats.length === 0) return [];

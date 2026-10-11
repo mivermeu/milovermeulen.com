@@ -96,9 +96,8 @@ export const DERIVED: ParamMeta[] = [
 ];
 
 export const ALL_PARAMS: ParamMeta[] = [...FUNDAMENTAL, ...DERIVED];
-export const ALL_PARAM_KEYS: readonly ParamKey[] = ALL_PARAMS.map((p) => p.key);
 
-const PARAM_KEYS = new Set<string>(ALL_PARAM_KEYS);
+const PARAM_KEYS = new Set<string>(ALL_PARAMS.map((p) => p.key));
 
 /** True when `key` is a valid graph axis parameter. */
 export function isParamKey(key: string): key is ParamKey {
@@ -114,10 +113,6 @@ export const EARTH_RADIUS_KM = 6371;
 // orbits) doesn't blow up log10; it never affects `a` or period.
 export const LOG_FLOOR = 1;
 export const LOG_PARAMS = new Set<ParamKey>(['a', 'period', 'perigee', 'apogee']);
-
-export function isLogParam(key: ParamKey): boolean {
-    return LOG_PARAMS.has(key);
-}
 
 // Natural bounds for parameters that have them; axes are clamped to these so
 // e.g. Ω / ω / M / u never show a tick past 360°.

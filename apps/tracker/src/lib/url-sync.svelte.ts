@@ -56,10 +56,9 @@ export function initTrackerUrlSync(): () => void {
             if (params.gx !== undefined) trackerState.graphXKey = params.gx;
             if (params.gy !== undefined) trackerState.graphYKey = params.gy;
 
-            if (params.sat !== undefined) {
-                const index = untrack(() =>
-                    catalogByNorad(trackerState.satellites).get(params.sat ?? -1)
-                );
+            const satId = params.sat;
+            if (satId !== undefined) {
+                const index = untrack(() => catalogByNorad(trackerState.satellites).get(satId));
                 if (index !== undefined) {
                     // Activate via the filter tree + reveal, then pin.
                     untrack(() => pinSatellite(index));
@@ -100,14 +99,13 @@ export function initTrackerUrlSync(): () => void {
         });
 
         // --- Favorites: load once, save on change ---------------------------
-        let store: KeyValueStore;
+        // localStorage access itself can throw in some privacy modes; both
+        // store helpers accept null.
+        let store: KeyValueStore | null = null;
         try {
             store = window.localStorage;
         } catch {
-            store = {
-                getItem: () => null,
-                setItem: () => undefined
-            };
+            store = null;
         }
 
         if (trackerState.favorites.length === 0) trackerState.favorites = loadFavorites(store);

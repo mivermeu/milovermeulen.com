@@ -13,9 +13,27 @@
 
 import type { ElementMode } from '$lib/orbit';
 import { isParamKey, type ParamKey } from '$lib/graph-params';
+import type { InitialUrlParams } from '$lib/state.svelte';
 
-export const ELEMENT_MODES = ['epoch', 'smoothed', 'instantaneous'] as const;
-export const REFERENCE_FRAMES = ['ecf', 'eci'] as const;
+/**
+ * Encoder defaults, derived from state.svelte.ts's INITIAL_URL_PARAMS — the
+ * single source of truth for trackerState's initial values and these. The
+ * values are repeated here but typed against the `as const` literals, so a
+ * changed default in state is a compile error here instead of silent drift.
+ * Types-only import keeps this module framework-free (the state module's
+ * runes must not be evaluated under bun test).
+ */
+export const DEFAULT_URL_PARAMS: {
+    mode: InitialUrlParams['mode'];
+    frame: InitialUrlParams['frame'];
+    gx: InitialUrlParams['graphXKey'];
+    gy: InitialUrlParams['graphYKey'];
+} = {
+    mode: 'smoothed',
+    frame: 'ecf',
+    gx: 'perigee',
+    gy: 'apogee'
+};
 
 export interface TrackerUrlParams {
     sat?: number;
@@ -25,15 +43,18 @@ export interface TrackerUrlParams {
     gy?: ParamKey;
 }
 
-const ELEMENT_MODE_SET = new Set<string>(ELEMENT_MODES);
-const FRAME_SET = new Set<string>(REFERENCE_FRAMES);
+const ELEMENT_MODE_SET = new Set<string>(['epoch', 'smoothed', 'instantaneous']);
+const FRAME_SET = new Set<string>(['ecf', 'eci']);
 
-export const DEFAULT_URL_PARAMS: Required<Omit<TrackerUrlParams, 'sat'>> = {
-    mode: 'smoothed',
-    frame: 'ecf',
-    gx: 'perigee',
-    gy: 'apogee'
-};
+/**
+ * NORAD catalog numbers below 100000 pass validation. Note: ids ≥ 100000 are
+ * alphanumeric in the SATCAT scheme and do exist in the wild (`NNNNNA`).
+ * Decimal-only encoding is a deliberate simplification today — alphanumeric
+ * ids are simply not matched, in URLs or favorites.
+ */
+export function isValidNorad(id: number): boolean {
+    return Number.isInteger(id) && id >= 0 && id < 100000;
+}
 
 /** NORAD catalog number from a TLE's first line (cols 3–7), or null if unparsable. */
 export function noradIdFromLine1(line1: string): number | null {
@@ -43,30 +64,37 @@ export function noradIdFromLine1(line1: string): number | null {
     // mis-split garbage lines that happen to start with digits.
     if (!/^\d+$/.test(raw)) return null;
     const id = parseInt(raw, 10);
-    return id >= 0 && id < 100000 ? id : null;
+    return isValidNorad(id) ? id : null;
 }
 
 /** NORAD catalog number of a parsed satellite, or null if unparsable. */
-export function noradId(sat: ParsedSatelliteRef): number | null {
+export function noradId(sat: { line1: string }): number | null {
     return noradIdFromLine1(sat.line1);
 }
 
-interface ParsedSatelliteRef {
-    line1: string;
+interface Cache {
+    source: ReadonlyArray<{ line1: string }>;
+    map: Map<number, number>;
 }
 
+const byNoradCache: { current: Cache | null } = { current: null };
+
 /**
- * Index the catalog by NORAD id. Returns a Map even for unknown ids (missing =
- * not present). The catalog is immutable once loaded, so callers that want to
- * scan it should pass the (already read) array value in, untracked.
+ * Index the catalog by NORAD id, cached by the satellites array reference
+ * (the catalog is replaced wholesale on load, never mutated in place — but it
+ * IS large, and rebuilding on every favorites toggle would be wasteful).
+ * Returns a Map even for unknown ids (missing = not present).
  */
 export function catalogByNorad(satellites: ReadonlyArray<{ line1: string }>): Map<number, number> {
+    const cached = byNoradCache.current;
+    if (cached && cached.source === satellites) return cached.map;
     const map = new Map<number, number>();
     for (let i = 0; i < satellites.length; i++) {
         const id = noradId(satellites[i]);
         if (id === null || map.has(id)) continue;
         map.set(id, i);
     }
+    byNoradCache.current = { source: satellites, map };
     return map;
 }
 
@@ -76,17 +104,14 @@ export function catalogByNorad(satellites: ReadonlyArray<{ line1: string }>): Ma
  */
 export function parseTrackerUrlParams(search: string): TrackerUrlParams {
     const out: TrackerUrlParams = {};
-    let params: URLSearchParams;
-    try {
-        params = new URLSearchParams(search);
-    } catch {
-        return out;
-    }
+    const params = new URLSearchParams(search);
 
     const satRaw = params.get('sat');
     if (satRaw) {
-        const sat = Number(satRaw);
-        if (Number.isInteger(sat) && sat >= 0 && sat < 100000) out.sat = sat;
+        // Strict digits only — Number() would accept '0x1f' or ' 25544'.
+        if (/^\d+$/.test(satRaw) && isValidNorad(Number(satRaw))) {
+            out.sat = Number(satRaw);
+        }
     }
 
     const modeRaw = params.get('mode');

@@ -67,6 +67,14 @@ describe('parseTrackerUrlParams', () => {
         expect(parseTrackerUrlParams('?sat=999999').sat).toBeUndefined();
     });
 
+    it('rejects values Number() would accept but the NORAD id scheme does not', () => {
+        expect(parseTrackerUrlParams('?sat=0x1f').sat).toBeUndefined();
+        // '+' decodes to a space in application/x-www-form-urlencoded.
+        expect(parseTrackerUrlParams('?sat=+25544').sat).toBeUndefined();
+        expect(parseTrackerUrlParams('?sat=25544').sat).toBe(25544);
+        expect(parseTrackerUrlParams('?sat=00000').sat).toBe(0);
+    });
+
     it('rejects unknown graph param keys', () => {
         expect(parseTrackerUrlParams('?gx=radius').gx).toBeUndefined();
         expect(parseTrackerUrlParams('?gy=nu').gy).toBe('nu'); // valid derived param

@@ -22,6 +22,21 @@ export interface HoverInfo {
     screenY: number;
 }
 
+/**
+ * Initial values for the URL-mirrored state fields — the single source of
+ * truth for both `trackerState`'s defaults and the URL encoder's defaults
+ * (`url-state.ts` types its DEFAULT_URL_PARAMS against these `as const`
+ * literals, so a change here breaks compilation there instead of drifting).
+ */
+export const INITIAL_URL_PARAMS = {
+    mode: 'smoothed',
+    frame: 'ecf',
+    graphXKey: 'perigee',
+    graphYKey: 'apogee'
+} as const;
+
+export type InitialUrlParams = typeof INITIAL_URL_PARAMS;
+
 export const trackerState = $state({
     satellites: [] as ParsedSatellite[],
     showOrbits: true,
@@ -31,17 +46,19 @@ export const trackerState = $state({
     dataSource: 'loading' as DataSource,
     staleHidden: 0,
     error: '',
-    referenceFrame: 'ecf' as 'ecf' | 'eci',
+    // Casts widen the literal initial values from INITIAL_URL_PARAMS to the
+    // full unions these fields hold at runtime.
+    referenceFrame: INITIAL_URL_PARAMS.frame as 'ecf' | 'eci',
     // Which orbital-element set the graph plots and the explorer draws.
-    elementMode: 'smoothed' as 'epoch' | 'smoothed' | 'instantaneous',
+    elementMode: INITIAL_URL_PARAMS.mode as 'epoch' | 'smoothed' | 'instantaneous',
     hovered: null as HoverInfo | null,
     // Satellite under the pointer in either view (globe or graph), or -1.
     hoveredIndex: -1,
     pinnedIndex: -1,
     // Graph axis keys — component-local before, but shared state so URL deep
     // links (`gx`/`gy`) can seed and mirror them.
-    graphXKey: 'perigee' as ParamKey,
-    graphYKey: 'apogee' as ParamKey,
+    graphXKey: INITIAL_URL_PARAMS.graphXKey as ParamKey,
+    graphYKey: INITIAL_URL_PARAMS.graphYKey as ParamKey,
     // Favorited satellites by NORAD catalog number (persisted to localStorage).
     favorites: [] as number[],
     // Right-hand panels drawer; open by default on desktop-sized viewports.

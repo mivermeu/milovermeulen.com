@@ -4,7 +4,6 @@ import {
     saveFavorites,
     toggleFavorite,
     isFavorite,
-    satelliteNorad,
     FAVORITES_KEY,
     type KeyValueStore
 } from './favorites';
@@ -83,17 +82,5 @@ describe('isFavorite', () => {
         expect(isFavorite([25544], 25544)).toBe(true);
         expect(isFavorite([25544], 45000)).toBe(false);
         expect(isFavorite([25544], null)).toBe(false);
-    });
-});
-
-describe('satelliteNorad', () => {
-    it('extracts the NORAD id from a satellite', () => {
-        expect(
-            satelliteNorad({
-                line1: '1 25544U 98067A   24275.50000000  .00016717  00000-0  10270-3 0  9990'
-            })
-        ).toBe(25544);
-        expect(satelliteNorad(null)).toBeNull();
-        expect(satelliteNorad(undefined)).toBeNull();
     });
 });
