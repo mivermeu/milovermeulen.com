@@ -611,14 +611,14 @@
             <button
                 type="button"
                 aria-label="Resize graph"
-                class="absolute top-0 right-0 z-30 flex h-4 w-4 cursor-nesw-resize items-center justify-center p-0 text-brand-text/40 hover:text-brand-text"
+                class="absolute top-0 right-0 z-30 flex h-4 w-4 cursor-nesw-resize items-center justify-center rounded border-0 p-0 text-brand-text/40 hover:bg-transparent hover:text-brand-text"
                 onpointerdown={onHandleDown}
                 onpointermove={onHandleMove}
                 onpointerup={onHandleUp}
             >
                 <svg viewBox="0 0 10 10" class="h-3 w-3" fill="currentColor" aria-hidden="true">
                     <path
-                        d="M9 1 1 9M9 5 5 9"
+                        d="M1 1 9 9M5 1 9 5"
                         stroke="currentColor"
                         stroke-width="1.4"
                         fill="none"
