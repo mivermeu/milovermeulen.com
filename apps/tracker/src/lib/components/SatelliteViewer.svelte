@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { onDestroy } from 'svelte';
+    import { onDestroy, untrack } from 'svelte';
     import { GlobeScene } from '$lib/scene/GlobeScene';
     import { propagation } from '$lib/propagation';
     import { trackerState } from '$lib/state.svelte';
@@ -71,7 +71,10 @@
         trackerState.hovered = null;
         trackerState.hoveredIndex = -1;
         trackerState.pinnedIndex = -1;
-        scene.setFilter(filtered, indices);
+        // Untrack: setFilter re-reads elementMode (for the worker init). If the
+        // effect tracked it, a mode toggle would re-walk the whole catalog and
+        // re-bump the worker's generation — which pins the graph in snap mode.
+        untrack(() => scene?.setFilter(filtered, indices));
     });
 
     $effect(() => {
