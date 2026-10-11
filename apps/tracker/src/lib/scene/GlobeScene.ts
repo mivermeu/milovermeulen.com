@@ -14,9 +14,6 @@ export const GLOBE_RADIUS = 6.4;
 export const SCALE = GLOBE_RADIUS / EARTH_RADIUS_KM;
 
 const DEG2RAD = Math.PI / 180;
-const MIN_POSITION_CADENCE_MS = 120;
-const MAX_POSITION_CADENCE_MS = 600;
-const PROPAGATION_THROUGHPUT_PER_MS = 100;
 const ORBIT_REBUILD_INTERVAL_MS = 5000;
 const POINTER_THROTTLE_MS = 66;
 
@@ -62,11 +59,8 @@ export class GlobeScene {
 
     private ready = false;
     private lastFrameWall = performance.now();
-    private lastRequestWall = 0;
     private lastOrbitBuildWall = 0;
     private lastReferenceFrame: 'ecf' | 'eci' = 'ecf';
-    private positionRequestPending = false;
-    private positionRequestSeq = 0;
     private orbitRequestSeq = 0;
     private showOrbits = true;
     private orbitsAutoDisabled = false;
@@ -312,7 +306,6 @@ export class GlobeScene {
                 this.onOrbits(message);
                 break;
             case 'error':
-                this.positionRequestPending = false;
                 this.callbacks.onError?.(message.message ?? 'Worker error');
                 break;
         }
@@ -335,13 +328,11 @@ export class GlobeScene {
             return;
         }
         this.callbacks.onError?.('');
-        this.requestPositions();
         if (this.showOrbits) this.requestOrbits();
     }
 
     private onPositions(message: WorkerResponse): void {
         if (!this.ready) return;
-        this.positionRequestPending = false;
         const positions = message.positions;
         const epoch = message.epoch ?? Date.now();
         if (!positions) return;
@@ -593,7 +584,6 @@ export class GlobeScene {
             new THREE.BufferAttribute(new Float32Array(0), 3)
         );
         this.ready = false;
-        this.positionRequestPending = false;
         // Hide dots until onReady installs the new catalog's buffers.
         this.points.visible = false;
         this.prevPositions = null;
@@ -630,21 +620,6 @@ export class GlobeScene {
         return this.filteredToOriginal.get(filteredIndex) ?? -1;
     }
 
-    private positionCadenceMs(): number {
-        const scaled = this.satellites.length / PROPAGATION_THROUGHPUT_PER_MS;
-        return Math.min(MAX_POSITION_CADENCE_MS, Math.max(MIN_POSITION_CADENCE_MS, scaled));
-    }
-
-    private requestPositions(): void {
-        if (!this.ready || this.positionRequestPending) return;
-        this.positionRequestPending = true;
-        this.positionRequestSeq++;
-        propagation.propagate(
-            Math.round(Date.now() + this.positionCadenceMs()),
-            this.positionRequestSeq
-        );
-    }
-
     private requestOrbits(): void {
         this.lastOrbitBuildWall = performance.now();
         this.orbitRequestSeq++;
@@ -660,17 +635,6 @@ export class GlobeScene {
         const now = performance.now();
         this.lastFrameWall = now;
 
-        const cadence = this.positionCadenceMs();
-
-        if (this.positionRequestPending && now - this.lastRequestWall > 3 * cadence) {
-            this.positionRequestPending = false;
-        }
-
-        if (this.ready && !this.positionRequestPending && now - this.lastRequestWall >= cadence) {
-            this.lastRequestWall = now;
-            this.requestPositions();
-        }
-
         if (
             (this.showOrbits || this.highlightIndex >= 0) &&
             this.ready &&
@@ -681,7 +645,6 @@ export class GlobeScene {
 
         if (trackerState.referenceFrame !== this.lastReferenceFrame) {
             this.lastReferenceFrame = trackerState.referenceFrame;
-            this.positionRequestPending = false;
             if ((this.showOrbits || this.highlightIndex >= 0) && this.ready) this.requestOrbits();
         }
 
