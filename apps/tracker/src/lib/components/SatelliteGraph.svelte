@@ -491,7 +491,6 @@
                                 <option value={p.key}>{p.short}</option>
                             {/each}
                         </select>
-                        <span class="text-brand-text/50">{samples.length}</span>
                         <button
                             type="button"
                             aria-label="Minimize orbital graph"
