@@ -358,12 +358,22 @@ export class GlobeScene {
         this.prevEpoch = this.nextEpoch;
         this.nextPositions = positions;
         this.nextEpoch = epoch;
+        this.applySunlitColors(message.colors);
         if (!this.prevPositions) {
             this.prevPositions = new Float32Array(positions.length);
             this.prevPositions.set(positions);
             this.prevEpoch = epoch;
         }
         this.points.visible = true;
+    }
+
+    /** Swap the per-point colors for the latest sunlit/eclipsed classification. */
+    private applySunlitColors(colors: Float32Array | undefined): void {
+        if (!colors || colors.length === 0) return;
+        const attr = this.pointsGeometry.getAttribute('color') as THREE.BufferAttribute | undefined;
+        if (!attr || colors.length !== attr.count * 3) return;
+        (attr.array as Float32Array).set(colors);
+        attr.needsUpdate = true;
     }
 
     private onOrbits(message: WorkerResponse): void {

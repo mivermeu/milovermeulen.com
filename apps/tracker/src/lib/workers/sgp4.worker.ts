@@ -2,6 +2,7 @@ import { twoline2satrec, propagate, eciToEcf, gstime } from 'satellite.js';
 import type { EciVec3, SatRec } from 'satellite.js';
 import type { ParsedSatellite } from '$lib/satellites/types';
 import { elementsFor, type ElementMode, type OrbitalElements } from '$lib/orbit';
+import { isSunlit, sunEciDirection } from '$lib/sun';
 
 const EARTH_RADIUS_KM = 6371;
 const MU_KM3_S2 = 398600.4418;
@@ -79,6 +80,15 @@ let orbitBuildId = 0;
 // Bumped on every init; stamped onto responses so views can drop stale snapshots.
 let catalogVersion = 0;
 let elementMode: ElementMode = 'smoothed';
+// Per-sat base class colors (LEO/MEO/GEO/ECC); the ready colors buffer is
+// transferred away, so keep a copy to re-scale per propagate tick.
+let baseColors = new Float32Array(0);
+// Last announced sunlit status per satellite: colors ride the positions
+// message only when an eclipse boundary is crossed, not every tick.
+let lastSunlit: Uint8Array | null = null;
+// Multiplicative dimming of eclipsed dots — darker but hue-preserving so the
+// altitude color coding stays readable.
+const ECLIPSE_DIM = 0.35;
 
 function altitudeKm(rec: SatRec): number {
     const meanMotionRadPerSec = rec.no / 60;
@@ -319,6 +329,8 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
                 colors[index * 3 + 1] = color[1];
                 colors[index * 3 + 2] = color[2];
             });
+            baseColors = Float32Array.from(colors);
+            lastSunlit = null;
             initialized = true;
             orbitBuildId++;
             catalogVersion++;
@@ -338,11 +350,18 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
             // NaN = "unknown" for a satellite whose propagation failed — views
             // skip NaN rows instead of plotting fake zeros at the origin.
             const elements = new Float32Array(count * 7).fill(NaN);
+            const sunUnit = sunEciDirection(epoch);
+            const sunlit = new Uint8Array(count);
             for (let i = 0; i < count; i++) {
                 const sat = satellites[i];
                 const state = propagate(sat.rec, date);
-                if (state.position === false || state.position === undefined) continue;
+                if (state.position === false || state.position === undefined) {
+                    // Unknown propagation → keep the previous eclipse status.
+                    sunlit[i] = lastSunlit ? (lastSunlit[i] ?? 1) : 1;
+                    continue;
+                }
                 const eci = state.position as EciVec3<number>;
+                sunlit[i] = isSunlit(eci, sunUnit) ? 1 : 0;
                 const ecf = eciToEcf(eci, gmst);
                 positions[i * 3] = ecf.x * scale;
                 positions[i * 3 + 1] = ecf.y * scale;
@@ -365,6 +384,30 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
                 elements[i * 7 + 5] = el.m;
                 elements[i * 7 + 6] = el.u;
             }
+            // Only re-send the color buffer when some satellite crossed an
+            // eclipse boundary — the query is cheap, the transfer is not.
+            let eclipseChanged = !lastSunlit || lastSunlit.length !== count;
+            if (!eclipseChanged) {
+                for (let i = 0; i < count; i++) {
+                    if (sunlit[i] !== lastSunlit![i]) {
+                        eclipseChanged = true;
+                        break;
+                    }
+                }
+            }
+            let colors: Float32Array | undefined;
+            if (eclipseChanged) {
+                colors = new Float32Array(baseColors.length);
+                for (let i = 0; i < count; i++) {
+                    const f = sunlit[i] ? 1 : ECLIPSE_DIM;
+                    colors[i * 3] = baseColors[i * 3] * f;
+                    colors[i * 3 + 1] = baseColors[i * 3 + 1] * f;
+                    colors[i * 3 + 2] = baseColors[i * 3 + 2] * f;
+                }
+                lastSunlit = sunlit;
+            }
+            const transfer: Transferable[] = [positions.buffer, elements.buffer];
+            if (colors) transfer.push(colors.buffer);
             postMessage(
                 {
                     type: 'positions',
@@ -373,9 +416,10 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
                     count,
                     generation: catalogVersion,
                     positions,
-                    elements
+                    elements,
+                    colors
                 },
-                [positions.buffer, elements.buffer]
+                transfer
             );
             break;
         }
