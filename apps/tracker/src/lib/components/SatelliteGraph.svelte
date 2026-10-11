@@ -2,12 +2,16 @@
     import * as THREE from 'three';
     import { trackerState } from '$lib/state.svelte';
     import { categorize } from '$lib/tree';
-    import type { OrbitalElements } from '$lib/orbit';
+    import { orbitalPeriodSeconds, trueAnomalyFromMean, type OrbitalElements } from '$lib/orbit';
     import { propagation } from '$lib/propagation';
     import Panel from './Panel.svelte';
     import OrbitModelModal from './OrbitModelModal.svelte';
 
-    type Param = keyof OrbitalElements | 'u';
+    type BaseParam = keyof OrbitalElements | 'u';
+    type DerivedParam = 'perigee' | 'apogee' | 'period' | 'nu';
+    type Param = BaseParam | DerivedParam;
+
+    const EARTH_RADIUS_KM = 6371;
 
     // The six fundamental Keplerian elements. `short` is the symbol, `label` the
     // precise axis name, and `desc` a plain-language explanation for the tooltip.
@@ -50,13 +54,38 @@
         }
     ];
 
-    // Derived quantities, shown after a separator in the pickers.
+    // Derived quantities, shown after a separator in the pickers. All are pure
+    // functions of the live element set, so they work in every mode.
     const DERIVED: { key: Param; label: string; short: string; desc: string }[] = [
         {
             key: 'u',
             label: 'Anomaly past asc. node (°)',
             short: 'u',
             desc: 'The angle from the equator crossing to the satellite; it advances as the satellite moves.'
+        },
+        {
+            key: 'perigee',
+            label: 'Perigee altitude (km)',
+            short: 'peri',
+            desc: 'How low the orbit gets — its closest approach to the surface.'
+        },
+        {
+            key: 'apogee',
+            label: 'Apogee altitude (km)',
+            short: 'apo',
+            desc: 'How high the orbit gets — its farthest point from the surface.'
+        },
+        {
+            key: 'period',
+            label: 'Orbital period (min)',
+            short: 'T',
+            desc: 'How long one full orbit takes.'
+        },
+        {
+            key: 'nu',
+            label: 'True anomaly (°)',
+            short: 'ν',
+            desc: "The satellite's actual angle from perigee — its real position along the orbit."
         }
     ];
     const ALL_PARAMS = [...FUNDAMENTAL, ...DERIVED];
@@ -73,7 +102,8 @@
         raan: [0, 360],
         argp: [0, 360],
         m: [0, 360],
-        u: [0, 360]
+        u: [0, 360],
+        nu: [0, 360]
     };
 
     const CATEGORY_COLORS: Record<string, number> = {
@@ -144,7 +174,7 @@
     const yLabel = $derived(ALL_PARAMS.find((p) => p.key === yKey)?.label ?? '');
 
     // Where each parameter sits inside the worker's 7-element-per-satellite block.
-    const EL_INDEX: Record<Param, number> = { a: 0, e: 1, i: 2, raan: 3, argp: 4, m: 5, u: 6 };
+    const EL_INDEX: Record<BaseParam, number> = { a: 0, e: 1, i: 2, raan: 3, argp: 4, m: 5, u: 6 };
 
     // Static per-satellite data; recomputed only when the catalog/filter changes.
     const samples = $derived.by(() => {
@@ -170,8 +200,23 @@
         trackerState.hoveredIndex >= 0 ? trackerState.hoveredIndex : trackerState.pinnedIndex
     );
 
-    function paramValue(s: Sample, key: Param): number {
+    function baseValue(s: Sample, key: BaseParam): number {
         return elCurrent[s.uIndex * 7 + EL_INDEX[key]] ?? 0;
+    }
+
+    function paramValue(s: Sample, key: Param): number {
+        switch (key) {
+            case 'perigee':
+                return baseValue(s, 'a') * (1 - baseValue(s, 'e')) - EARTH_RADIUS_KM;
+            case 'apogee':
+                return baseValue(s, 'a') * (1 + baseValue(s, 'e')) - EARTH_RADIUS_KM;
+            case 'period':
+                return orbitalPeriodSeconds(baseValue(s, 'a')) / 60;
+            case 'nu':
+                return trueAnomalyFromMean(baseValue(s, 'm'), baseValue(s, 'e'));
+            default:
+                return baseValue(s, key);
+        }
     }
 
     function axisRange(
@@ -212,7 +257,8 @@
 
     function format(key: Param, value: number): string {
         if (key === 'e') return value.toFixed(3);
-        if (key === 'a') return Math.round(value).toLocaleString();
+        if (key === 'a' || key === 'perigee' || key === 'apogee')
+            return Math.round(value).toLocaleString();
         return value.toFixed(1);
     }
 
@@ -272,8 +318,8 @@
 
         // The semi-major axis spans LEO (~6,800 km) to deep-space probes
         // (>500,000 km), so it gets a log scale; the others stay linear.
-        const xIsLog = xKey === 'a';
-        const yIsLog = yKey === 'a';
+        const xIsLog = xKey === 'a' || xKey === 'period';
+        const yIsLog = yKey === 'a' || yKey === 'period';
         const xr = axisRange(xmin, xmax, xIsLog, LIMITS[xKey]);
         const yr = axisRange(ymin, ymax, yIsLog, LIMITS[yKey]);
         xRange = xr;
