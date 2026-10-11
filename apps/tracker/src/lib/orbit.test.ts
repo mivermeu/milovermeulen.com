@@ -8,7 +8,9 @@ import {
     argumentOfLatitudeFromElements,
     meanAnomalyFromArgumentOfLatitude,
     elementsToPosition,
-    orbitalPeriodSeconds
+    orbitalPeriodSeconds,
+    secularRates,
+    propagateMeanElements
 } from './orbit';
 
 // ISS, real TLE line 2.
@@ -109,5 +111,34 @@ describe('two-body elements model', () => {
     it('computes an ISS-like period (~93 min)', () => {
         expect(orbitalPeriodSeconds(6796) / 60).toBeGreaterThan(90);
         expect(orbitalPeriodSeconds(6796) / 60).toBeLessThan(95);
+    });
+});
+
+describe('mean-element propagation', () => {
+    const N = (15.49 * 2 * Math.PI) / 86400; // ISS-like mean motion, rad/s
+
+    it('gives LEO J2 rates of the right sign and magnitude', () => {
+        const { raanDot, argpDot } = secularRates(6796, 0.0005, 51.64, N);
+        const raanDegPerDay = ((raanDot * 180) / Math.PI) * 86400;
+        const argpDegPerDay = ((argpDot * 180) / Math.PI) * 86400;
+        expect(raanDegPerDay).toBeLessThan(-3);
+        expect(raanDegPerDay).toBeGreaterThan(-8);
+        expect(argpDegPerDay).toBeGreaterThan(2);
+        expect(argpDegPerDay).toBeLessThan(6);
+    });
+
+    it('advances M by a full revolution per period', () => {
+        const el = { a: 6796, e: 0.0005, i: 51.64, raan: 100, argp: 50, m: 30 };
+        const out = propagateMeanElements(el, N, (2 * Math.PI) / N);
+        expect(out.m).toBeCloseTo(30, 3);
+    });
+
+    it('holds a, e, i and advances M a quarter turn in T/4', () => {
+        const el = { a: 6796, e: 0.0005, i: 51.64, raan: 100, argp: 50, m: 0 };
+        const out = propagateMeanElements(el, N, (2 * Math.PI) / N / 4);
+        expect(out.a).toBe(el.a);
+        expect(out.e).toBe(el.e);
+        expect(out.i).toBe(el.i);
+        expect(out.m).toBeCloseTo(90, 3);
     });
 });

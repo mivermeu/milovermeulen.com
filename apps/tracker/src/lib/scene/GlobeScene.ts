@@ -248,7 +248,7 @@ export class GlobeScene {
         this.handleResize();
 
         this.unsubscribe = propagation.subscribe((message) => this.handleWorkerMessage(message));
-        propagation.init(satellites, SCALE);
+        propagation.init(satellites, SCALE, trackerState.elementMode);
 
         this.raf = requestAnimationFrame(() => this.loop());
     }
@@ -613,7 +613,7 @@ export class GlobeScene {
             'position',
             new THREE.BufferAttribute(this.positionArray, 3)
         );
-        propagation.init(filteredSatellites, SCALE);
+        propagation.init(filteredSatellites, SCALE, trackerState.elementMode);
     }
 
     getOriginalIndex(filteredIndex: number): number {

@@ -20,6 +20,8 @@ export const trackerState = $state({
     staleHidden: 0,
     error: '',
     referenceFrame: 'ecf' as 'ecf' | 'eci',
+    // Which orbital-element set the graph plots and the explorer draws.
+    elementMode: 'smoothed' as 'epoch' | 'smoothed' | 'instantaneous',
     hovered: null as HoverInfo | null,
     // Satellite under the pointer in either view (globe or graph), or -1.
     hoveredIndex: -1,

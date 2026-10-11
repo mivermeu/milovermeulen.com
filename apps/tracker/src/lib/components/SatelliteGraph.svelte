@@ -2,7 +2,7 @@
     import * as THREE from 'three';
     import { trackerState } from '$lib/state.svelte';
     import { categorize } from '$lib/tree';
-    import { orbitalElements, type OrbitalElements } from '$lib/orbit';
+    import type { OrbitalElements } from '$lib/orbit';
     import { propagation } from '$lib/propagation';
     import Panel from './Panel.svelte';
     import OrbitModelModal from './OrbitModelModal.svelte';
@@ -98,7 +98,6 @@
     interface Sample {
         index: number;
         uIndex: number;
-        el: OrbitalElements;
         color: THREE.Color;
     }
 
@@ -132,21 +131,20 @@
     let raycaster: THREE.Raycaster | undefined;
     let lastMoveWall = 0;
 
-    // Live argument of latitude, indexed by the filtered/active position. The
-    // shared propagation service emits a fresh snapshot each tick; we blend the
-    // previous and next snapshots per frame so the points glide (like the globe).
-    let uPrev: Float32Array<ArrayBufferLike> = new Float32Array(0);
-    let uNext: Float32Array<ArrayBufferLike> = new Float32Array(0);
-    let uCurrent: Float32Array<ArrayBufferLike> = new Float32Array(0);
-    let uPrevEpoch = 0;
-    let uNextEpoch = 0;
+    // Live orbital elements from the shared propagation service, 7 per satellite
+    // (a, e, i, raan, argp, m, u), indexed by the filtered/active position. We
+    // blend the previous and next snapshots per frame so the points glide.
+    let elPrev: Float32Array<ArrayBufferLike> = new Float32Array(0);
+    let elNext: Float32Array<ArrayBufferLike> = new Float32Array(0);
+    let elCurrent: Float32Array<ArrayBufferLike> = new Float32Array(0);
+    let elPrevEpoch = 0;
+    let elNextEpoch = 0;
 
     const xLabel = $derived(ALL_PARAMS.find((p) => p.key === xKey)?.label ?? '');
     const yLabel = $derived(ALL_PARAMS.find((p) => p.key === yKey)?.label ?? '');
-    let uOnAxis = false;
-    $effect(() => {
-        uOnAxis = xKey === 'u' || yKey === 'u';
-    });
+
+    // Where each parameter sits inside the worker's 7-element-per-satellite block.
+    const EL_INDEX: Record<Param, number> = { a: 0, e: 1, i: 2, raan: 3, argp: 4, m: 5, u: 6 };
 
     // Static per-satellite data; recomputed only when the catalog/filter changes.
     const samples = $derived.by(() => {
@@ -157,13 +155,10 @@
             const index = active[i];
             const sat = sats[index];
             if (!sat) continue;
-            const el = orbitalElements(sat.line2);
-            if (!el) continue;
             const category = categorize(sat.name, sat.objectType, sat.category);
             out.push({
                 index,
                 uIndex: i,
-                el,
                 color: new THREE.Color(CATEGORY_COLORS[category] ?? CATEGORY_COLORS.other)
             });
         }
@@ -176,7 +171,7 @@
     );
 
     function paramValue(s: Sample, key: Param): number {
-        return key === 'u' ? (uCurrent[s.uIndex] ?? 0) : s.el[key];
+        return elCurrent[s.uIndex * 7 + EL_INDEX[key]] ?? 0;
     }
 
     function axisRange(
@@ -383,24 +378,24 @@
 
     let rafId = 0;
 
-    // Per-frame: blend the last two snapshots into the current argument of latitude.
+    // Per-frame: blend the last two snapshots into the current element values.
     function frame(): void {
         rafId = requestAnimationFrame(frame);
-        if (!uOnAxis || uCurrent.length === 0) return;
-        const span = uNextEpoch - uPrevEpoch;
-        let blend = span > 0 ? (Date.now() - uPrevEpoch) / span : 1;
+        if (elCurrent.length === 0) return;
+        const span = elNextEpoch - elPrevEpoch;
+        let blend = span > 0 ? (Date.now() - elPrevEpoch) / span : 1;
         if (blend < 0) blend = 0;
         else if (blend > 1) blend = 1;
-        for (let k = 0; k < uCurrent.length; k++) {
-            const a = k < uPrev.length ? uPrev[k] : (uNext[k] ?? 0);
-            const b = k < uNext.length ? uNext[k] : a;
-            uCurrent[k] = a + (b - a) * blend;
+        for (let k = 0; k < elCurrent.length; k++) {
+            const a = k < elPrev.length ? elPrev[k] : (elNext[k] ?? 0);
+            const b = k < elNext.length ? elNext[k] : a;
+            elCurrent[k] = a + (b - a) * blend;
         }
         draw();
     }
 
     // Set up three.js once the canvas/host refs exist, and subscribe to the
-    // shared propagation service for positions + argument of latitude.
+    // shared propagation service for positions + orbital elements.
     $effect(() => {
         if (!canvas || !host) return;
         const r = new THREE.WebGLRenderer({ canvas, antialias: false });
@@ -443,17 +438,19 @@
         draw();
 
         const unsubscribe = propagation.subscribe((message) => {
-            if (message.type !== 'positions' || !message.u || message.epoch === undefined) return;
-            if (uNext.length !== message.u.length) {
-                uPrev = message.u;
-                uPrevEpoch = message.epoch;
+            if (message.type !== 'positions' || !message.elements || message.epoch === undefined)
+                return;
+            if (elNext.length !== message.elements.length) {
+                elPrev = message.elements;
+                elPrevEpoch = message.epoch;
             } else {
-                uPrev = uNext;
-                uPrevEpoch = uNextEpoch;
+                elPrev = elNext;
+                elPrevEpoch = elNextEpoch;
             }
-            uNext = message.u;
-            uNextEpoch = message.epoch;
-            if (uCurrent.length !== message.u.length) uCurrent = new Float32Array(message.u.length);
+            elNext = message.elements;
+            elNextEpoch = message.epoch;
+            if (elCurrent.length !== message.elements.length)
+                elCurrent = new Float32Array(message.elements.length);
         });
         rafId = requestAnimationFrame(frame);
 

@@ -1,5 +1,7 @@
 import type { ParsedSatellite } from '$lib/satellites/types';
 
+export type ElementMode = 'epoch' | 'smoothed' | 'instantaneous';
+
 export interface WorkerResponse {
     type: string;
     requestId?: number;
@@ -7,7 +9,7 @@ export interface WorkerResponse {
     epoch?: number;
     colors?: Float32Array;
     positions?: Float32Array;
-    u?: Float32Array;
+    elements?: Float32Array;
     message?: string;
     ranges?: number[];
 }
@@ -16,7 +18,7 @@ export interface PropagationSnapshot {
     epoch: number;
     count: number;
     positions: Float32Array;
-    u: Float32Array;
+    elements: Float32Array;
 }
 
 type Listener = (message: WorkerResponse) => void;
@@ -74,13 +76,13 @@ class PropagationService {
             this.lastRequestWall = 0;
             if (this.count > 0) this.startLoop();
             else this.stopLoop();
-        } else if (message.type === 'positions' && message.positions && message.u) {
+        } else if (message.type === 'positions' && message.positions && message.elements) {
             this.pending = false;
             this.snapshot = {
                 epoch: message.epoch ?? Date.now(),
                 count: message.count ?? message.positions.length / 3,
                 positions: message.positions,
-                u: message.u
+                elements: message.elements
             };
         }
         this.emit(message);
@@ -123,19 +125,25 @@ class PropagationService {
         return () => this.listeners.delete(listener);
     }
 
-    init(satellites: ParsedSatellite[], scale: number): void {
+    init(satellites: ParsedSatellite[], scale: number, mode: ElementMode): void {
         this.ensure()?.postMessage({
             type: 'init',
             satellites: satellites.map(({ name, line1, line2 }) => ({ name, line1, line2 })),
-            scale
+            scale,
+            mode
         });
+    }
+
+    /** Switch which orbital-element set the worker emits. */
+    setMode(mode: ElementMode): void {
+        this.ensure()?.postMessage({ type: 'mode', mode });
     }
 
     buildOrbits(epoch: number, requestId: number, frame: 'ecf' | 'eci'): void {
         this.ensure()?.postMessage({ type: 'buildOrbits', epoch, requestId, frame });
     }
 
-    /** Latest propagated snapshot (positions + argument of latitude), or null. */
+    /** Latest propagated snapshot (positions + orbital elements), or null. */
     latest(): PropagationSnapshot | null {
         return this.snapshot;
     }

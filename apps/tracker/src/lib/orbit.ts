@@ -11,6 +11,8 @@ export interface OrbitalElements {
 }
 
 const EARTH_MU = 398600.4418; // km^3/s^2
+const EARTH_EQUATORIAL_RADIUS_KM = 6378.137;
+const J2 = 1.08262668e-3;
 const RAD2DEG = 180 / Math.PI;
 const DEG2RAD = Math.PI / 180;
 
@@ -153,4 +155,124 @@ export function elementsToPosition(el: OrbitalElements): [number, number, number
 /** Two-body orbital period (seconds) for a semi-major axis in km. */
 export function orbitalPeriodSeconds(aKm: number): number {
     return 2 * Math.PI * Math.sqrt(aKm ** 3 / EARTH_MU);
+}
+
+export interface StateElements extends OrbitalElements {
+    nu: number; // true anomaly (deg)
+    u: number; // argument of latitude (deg)
+}
+
+/**
+ * Osculating classical elements from an ECI position/velocity state (km, km/s).
+ * Returns null for degenerate states. The periapsis-referenced angles (ω, ν, M)
+ * are ill-conditioned for near-circular orbits; `u` comes from the node and stays
+ * well-defined there.
+ */
+export function elementsFromState(r: EciVec3<number>, v: EciVec3<number>): StateElements | null {
+    const rn = Math.hypot(r.x, r.y, r.z);
+    const v2 = v.x * v.x + v.y * v.y + v.z * v.z;
+    if (rn === 0 || v2 === 0) return null;
+
+    const hx = r.y * v.z - r.z * v.y;
+    const hy = r.z * v.x - r.x * v.z;
+    const hz = r.x * v.y - r.y * v.x;
+    const hn = Math.hypot(hx, hy, hz);
+    if (hn === 0) return null;
+
+    const rv = r.x * v.x + r.y * v.y + r.z * v.z;
+    const k = v2 - EARTH_MU / rn;
+    const ex = (k * r.x - rv * v.x) / EARTH_MU;
+    const ey = (k * r.y - rv * v.y) / EARTH_MU;
+    const ez = (k * r.z - rv * v.z) / EARTH_MU;
+    const e = Math.hypot(ex, ey, ez);
+
+    const a = 1 / (2 / rn - v2 / EARTH_MU);
+    const i = Math.acos(Math.min(1, Math.max(-1, hz / hn))) * RAD2DEG;
+
+    const hhx = hx / hn;
+    const hhy = hy / hn;
+    const hhz = hz / hn;
+
+    // Ascending-node direction n = ẑ × h = (-hy, hx, 0).
+    const nn = Math.hypot(hx, hy);
+    const raan = nn > 0 ? Math.atan2(hx, -hy) * RAD2DEG : 0;
+
+    let argp = 0;
+    let nu = 0;
+    if (e > 1e-10) {
+        const exu = ex / e;
+        const eyu = ey / e;
+        const ezu = ez / e;
+        const rx = r.x / rn;
+        const ry = r.y / rn;
+        const rz = r.z / rn;
+        if (nn > 0) {
+            const nxu = -hy / nn;
+            const nyu = hx / nn;
+            // ω = in-plane angle from n̂ to ê.
+            const cx = nyu * ezu;
+            const cy = -nxu * ezu;
+            const cz = nxu * eyu - nyu * exu;
+            argp = Math.atan2(hhx * cx + hhy * cy + hhz * cz, nxu * exu + nyu * eyu) * RAD2DEG;
+        }
+        // ν = in-plane angle from ê to r̂.
+        const dx = eyu * rz - ezu * ry;
+        const dy = ezu * rx - exu * rz;
+        const dz = exu * ry - eyu * rx;
+        nu = Math.atan2(hhx * dx + hhy * dy + hhz * dz, exu * rx + eyu * ry + ezu * rz) * RAD2DEG;
+    }
+
+    const wrap = (d: number): number => ((d % 360) + 360) % 360;
+    const nuWrapped = wrap(nu);
+    return {
+        a,
+        e,
+        i,
+        raan: wrap(raan),
+        argp: wrap(argp),
+        m: meanAnomalyFromTrue(nuWrapped, e),
+        nu: nuWrapped,
+        u: argumentOfLatitudeFromState(r, v)
+    };
+}
+
+/**
+ * First-order J2 secular rates (rad/s) for the ascending node and periapsis.
+ * `nRadPerSec` is the mean motion.
+ */
+export function secularRates(
+    aKm: number,
+    e: number,
+    iDeg: number,
+    nRadPerSec: number
+): { raanDot: number; argpDot: number } {
+    const p = aKm * (1 - e * e);
+    const factor = 1.5 * J2 * (EARTH_EQUATORIAL_RADIUS_KM / p) ** 2 * nRadPerSec;
+    const ci = Math.cos(iDeg * DEG2RAD);
+    return {
+        raanDot: -factor * ci,
+        argpDot: 0.5 * factor * (5 * ci * ci - 1)
+    };
+}
+
+/**
+ * Propagate a TLE's mean elements to `dtSeconds` after its epoch, using the
+ * first-order J2 secular rates for the node and periapsis and `n` for the mean
+ * anomaly. `a`, `e`, `i` are held (they barely change).
+ */
+export function propagateMeanElements(
+    el: OrbitalElements,
+    nRadPerSec: number,
+    dtSeconds: number
+): OrbitalElements {
+    const { raanDot, argpDot } = secularRates(el.a, el.e, el.i, nRadPerSec);
+    const wrap = (d: number): number => ((d % 360) + 360) % 360;
+    return {
+        a: el.a,
+        e: el.e,
+        i: el.i,
+        raan: wrap(el.raan + raanDot * RAD2DEG * dtSeconds),
+        argp: wrap(el.argp + argpDot * RAD2DEG * dtSeconds),
+        m: wrap(el.m + nRadPerSec * RAD2DEG * dtSeconds)
+    };
 }

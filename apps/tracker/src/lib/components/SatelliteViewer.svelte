@@ -1,6 +1,7 @@
 <script lang="ts">
     import { onDestroy } from 'svelte';
     import { GlobeScene } from '$lib/scene/GlobeScene';
+    import { propagation } from '$lib/propagation';
     import { trackerState } from '$lib/state.svelte';
 
     let canvas: HTMLCanvasElement;
@@ -55,6 +56,10 @@
         if (!scene) return;
         scene.setShowOrbits(trackerState.showOrbits);
         scene.setShowEquatorial(trackerState.showEquatorial);
+    });
+
+    $effect(() => {
+        propagation.setMode(trackerState.elementMode);
     });
 
     $effect(() => {

@@ -1,13 +1,26 @@
 import { twoline2satrec, propagate, eciToEcf, gstime } from 'satellite.js';
 import type { EciVec3, SatRec } from 'satellite.js';
 import type { ParsedSatellite } from '$lib/satellites/types';
-import { argumentOfLatitudeFromState } from '$lib/orbit';
+import {
+    argumentOfLatitudeFromElements,
+    elementsFromState,
+    propagateMeanElements,
+    type OrbitalElements
+} from '$lib/orbit';
 
 const EARTH_RADIUS_KM = 6371;
 const MU_KM3_S2 = 398600.4418;
+const RAD2DEG = 180 / Math.PI;
+const JULIAN_UNIX_EPOCH = 2440587.5;
 
 type Frame = 'ecf' | 'eci';
-type InitMessage = { type: 'init'; satellites: ParsedSatellite[]; scale: number };
+type ElementMode = 'epoch' | 'smoothed' | 'instantaneous';
+type InitMessage = {
+    type: 'init';
+    satellites: ParsedSatellite[];
+    scale: number;
+    mode: ElementMode;
+};
 type PropagateMessage = { type: 'propagate'; epoch: number; requestId: number };
 type BuildOrbitsMessage = {
     type: 'buildOrbits';
@@ -15,11 +28,15 @@ type BuildOrbitsMessage = {
     requestId: number;
     frame: Frame;
 };
+type ModeMessage = { type: 'mode'; mode: ElementMode };
 
-type WorkerMessage = InitMessage | PropagateMessage | BuildOrbitsMessage;
+type WorkerMessage = InitMessage | PropagateMessage | BuildOrbitsMessage | ModeMessage;
 
 interface PreparedSatellite {
     rec: SatRec;
+    epochEl: OrbitalElements;
+    nRadPerSec: number;
+    epochMs: number;
 }
 
 const TAU = Math.PI * 2;
@@ -65,6 +82,7 @@ let satellites: PreparedSatellite[] = [];
 let scale = 1;
 let initialized = false;
 let orbitBuildId = 0;
+let elementMode: ElementMode = 'smoothed';
 
 function altitudeKm(rec: SatRec): number {
     const meanMotionRadPerSec = rec.no / 60;
@@ -78,6 +96,24 @@ function colorFor(rec: SatRec): number[] {
     if (altitude < 2000) return LEO_COLOR;
     if (altitude < 35000) return MEO_COLOR;
     return GEO_COLOR;
+}
+
+// The 7 plotted quantities for one satellite, per the selected element mode.
+function elementsFor(
+    sat: PreparedSatellite,
+    r: EciVec3<number>,
+    velocity: unknown,
+    epochMs: number
+): { a: number; e: number; i: number; raan: number; argp: number; m: number; u: number } {
+    if (elementMode === 'instantaneous' && velocity && typeof velocity !== 'boolean') {
+        const el = elementsFromState(r, velocity as EciVec3<number>);
+        if (el) return el;
+    }
+    const base =
+        elementMode === 'epoch'
+            ? sat.epochEl
+            : propagateMeanElements(sat.epochEl, sat.nRadPerSec, (epochMs - sat.epochMs) / 1000);
+    return { ...base, u: argumentOfLatitudeFromElements(base) };
 }
 
 async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
@@ -267,11 +303,31 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
         case 'init': {
             satellites = [];
             scale = message.scale;
+            elementMode = message.mode;
             for (const sat of message.satellites) {
                 try {
                     const rec = twoline2satrec(sat.line1, sat.line2);
                     if (rec.error !== 0) continue;
-                    satellites.push({ rec });
+                    const nRadPerSec = rec.no / 60;
+                    if (!(nRadPerSec > 0)) continue;
+                    const a = Math.cbrt(MU_KM3_S2 / (nRadPerSec * nRadPerSec));
+                    const epochEl: OrbitalElements = {
+                        a,
+                        e: rec.ecco,
+                        i: rec.inclo * RAD2DEG,
+                        raan: rec.nodeo * RAD2DEG,
+                        argp: rec.argpo * RAD2DEG,
+                        m: rec.mo * RAD2DEG
+                    };
+                    const jd =
+                        rec.jdsatepoch +
+                        ((rec as unknown as { jdsatepochF?: number }).jdsatepochF ?? 0);
+                    satellites.push({
+                        rec,
+                        epochEl,
+                        nRadPerSec,
+                        epochMs: (jd - JULIAN_UNIX_EPOCH) * 86400000
+                    });
                 } catch {
                     // skip malformed TLE entries
                 }
@@ -293,24 +349,35 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
             const { epoch, requestId } = message;
             const date = new Date(epoch);
             const gmst = gstime(date);
-            const positions = new Float32Array(satellites.length * 3);
-            const u = new Float32Array(satellites.length);
-            for (let i = 0; i < satellites.length; i++) {
-                const state = propagate(satellites[i].rec, date);
+            const count = satellites.length;
+            const positions = new Float32Array(count * 3);
+            const elements = new Float32Array(count * 7);
+            for (let i = 0; i < count; i++) {
+                const sat = satellites[i];
+                const state = propagate(sat.rec, date);
                 if (state.position === false || state.position === undefined) continue;
                 const eci = state.position as EciVec3<number>;
                 const ecf = eciToEcf(eci, gmst);
                 positions[i * 3] = ecf.x * scale;
                 positions[i * 3 + 1] = ecf.y * scale;
                 positions[i * 3 + 2] = ecf.z * scale;
-                if (state.velocity && typeof state.velocity !== 'boolean') {
-                    u[i] = argumentOfLatitudeFromState(eci, state.velocity);
-                }
+                const el = elementsFor(sat, eci, state.velocity, epoch);
+                elements[i * 7] = el.a;
+                elements[i * 7 + 1] = el.e;
+                elements[i * 7 + 2] = el.i;
+                elements[i * 7 + 3] = el.raan;
+                elements[i * 7 + 4] = el.argp;
+                elements[i * 7 + 5] = el.m;
+                elements[i * 7 + 6] = el.u;
             }
-            postMessage(
-                { type: 'positions', requestId, epoch, count: satellites.length, positions, u },
-                [positions.buffer, u.buffer]
-            );
+            postMessage({ type: 'positions', requestId, epoch, count, positions, elements }, [
+                positions.buffer,
+                elements.buffer
+            ]);
+            break;
+        }
+        case 'mode': {
+            elementMode = message.mode;
             break;
         }
         case 'buildOrbits': {
