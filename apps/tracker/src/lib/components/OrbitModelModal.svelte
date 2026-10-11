@@ -13,6 +13,7 @@
     let { onclose }: { onclose: () => void } = $props();
 
     const EARTH_RADIUS_KM = 6371;
+    const EARTH_MU = 398600.4418; // km^3/s^2
     const EARTH_UNITS = 6.4;
     const SCALE = EARTH_UNITS / EARTH_RADIUS_KM;
     const ORBIT_SAMPLES = 256;
@@ -41,6 +42,53 @@
         { key: 'm', label: 'Mean anomaly', symbol: 'M', min: 0, max: 360, step: 1 }
     ];
 
+    // Derived sliders: each sets `a` (holding `e`), so moving one moves the others.
+    const DERIVED_SLIDERS: {
+        key: 'perigee' | 'apogee' | 'period';
+        label: string;
+        symbol: string;
+        min: number;
+        max: number;
+        step: number;
+        value: () => number;
+        set: (v: number) => void;
+        format: (v: number) => string;
+    }[] = [
+        {
+            key: 'perigee',
+            label: 'Perigee altitude',
+            symbol: 'peri',
+            min: 0,
+            max: 40000,
+            step: 10,
+            value: () => perigeeAlt,
+            set: setPerigee,
+            format: (v) => `${Math.round(v).toLocaleString()} km`
+        },
+        {
+            key: 'apogee',
+            label: 'Apogee altitude',
+            symbol: 'apo',
+            min: 0,
+            max: 40000,
+            step: 10,
+            value: () => apogeeAlt,
+            set: setApogee,
+            format: (v) => `${Math.round(v).toLocaleString()} km`
+        },
+        {
+            key: 'period',
+            label: 'Orbital period',
+            symbol: 'T',
+            min: 80,
+            max: 1500,
+            step: 1,
+            value: () => periodMin,
+            set: setPeriod,
+            format: (v) => `${v.toFixed(1)} min`
+        }
+    ];
+
     let canvas: HTMLCanvasElement | undefined = $state();
     let host: HTMLDivElement | undefined = $state();
 
@@ -58,6 +106,18 @@
 
     function setU(value: number): void {
         el = { ...el, m: meanAnomalyFromArgumentOfLatitude(value, el) };
+    }
+
+    function setPerigee(value: number): void {
+        el = { ...el, a: (value + EARTH_RADIUS_KM) / (1 - el.e) };
+    }
+
+    function setApogee(value: number): void {
+        el = { ...el, a: (value + EARTH_RADIUS_KM) / (1 + el.e) };
+    }
+
+    function setPeriod(value: number): void {
+        el = { ...el, a: Math.cbrt(EARTH_MU * ((value * 60) / (2 * Math.PI)) ** 2) };
     }
 
     function formatValue(key: keyof OrbitalElements, value: number): string {
@@ -329,23 +389,34 @@
                         />
                     </label>
 
+                    {#each DERIVED_SLIDERS as s (s.key)}
+                        <label class="block">
+                            <span class="flex items-baseline justify-between gap-2">
+                                <span class="text-brand-text"
+                                    >{s.label}
+                                    <span class="text-brand-text/50">{s.symbol}</span></span
+                                >
+                                <span class="font-mono text-brand-text-highlight"
+                                    >{s.format(s.value())}</span
+                                >
+                            </span>
+                            <input
+                                type="range"
+                                min={s.min}
+                                max={s.max}
+                                step={s.step}
+                                value={s.value()}
+                                oninput={(event) => s.set(+event.currentTarget.value)}
+                                class="mt-1 w-full accent-brand-primary"
+                            />
+                        </label>
+                    {/each}
+
                     <dl
                         class="grid grid-cols-2 gap-x-2 gap-y-1 border-t border-brand-secondary pt-3 text-[10px] text-brand-text/70"
                     >
                         <dt>True anomaly ν</dt>
                         <dd class="text-right font-mono text-brand-text">{nu.toFixed(1)}°</dd>
-                        <dt>Period</dt>
-                        <dd class="text-right font-mono text-brand-text">
-                            {periodMin.toFixed(1)} min
-                        </dd>
-                        <dt>Perigee altitude</dt>
-                        <dd class="text-right font-mono text-brand-text">
-                            {Math.round(perigeeAlt).toLocaleString()} km
-                        </dd>
-                        <dt>Apogee altitude</dt>
-                        <dd class="text-right font-mono text-brand-text">
-                            {Math.round(apogeeAlt).toLocaleString()} km
-                        </dd>
                     </dl>
                 </div>
             </div>
