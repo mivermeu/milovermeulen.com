@@ -80,6 +80,9 @@ class PropagationService {
             this.worker = new Worker(new URL('./workers/sgp4.worker.ts', import.meta.url), {
                 type: 'module'
             });
+            // Hook visibility only after a worker actually exists (constructor
+            // can throw) so retries never stack listeners.
+            document.addEventListener('visibilitychange', this.onVisibility);
             this.worker.onmessage = (event: MessageEvent<WorkerResponse>) =>
                 this.handle(event.data);
             this.worker.onerror = (event) => {
@@ -110,6 +113,11 @@ class PropagationService {
     private emit(message: WorkerResponse): void {
         for (const listener of this.listeners) listener(message);
     }
+
+    private readonly onVisibility = (): void => {
+        if (document.hidden) this.stopLoop();
+        else if (this.count > 0 && this.listeners.size > 0) this.startLoop();
+    };
 
     private startLoop(): void {
         if (this.timer !== undefined) return;

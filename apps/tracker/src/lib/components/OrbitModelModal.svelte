@@ -326,10 +326,13 @@
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onclick={onclose}>
+<div
+    class="app-shell fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-2 md:p-4"
+    onclick={onclose}
+>
     <div
         bind:this={dialog}
-        class="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg border border-brand-secondary bg-brand-secondary/95 shadow-2xl backdrop-blur-sm"
+        class="flex max-h-full w-full max-w-4xl flex-col overflow-hidden rounded-lg border border-brand-secondary bg-brand-secondary/95 shadow-2xl backdrop-blur-sm"
         role="dialog"
         aria-modal="true"
         aria-label="Orbital element explorer"
@@ -372,7 +375,7 @@
             </div>
 
             <div
-                class="w-full shrink-0 overflow-y-auto border-t border-brand-secondary p-4 md:w-80 md:border-t-0 md:border-l"
+                class="w-full shrink-0 overflow-y-auto border-t border-brand-secondary p-3 md:w-80 md:border-t-0 md:border-l md:p-4"
             >
                 <div class="space-y-3 text-xs">
                     {#each SLIDERS as s (s.key)}

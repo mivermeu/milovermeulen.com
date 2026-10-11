@@ -94,12 +94,12 @@
 {/if}
 
 {#if sat && orbitalData}
-    <div class="pointer-events-auto absolute top-4 left-4 z-30 w-72">
+    <div class="pointer-events-auto absolute top-1.5 left-1.5 z-30 w-64 md:top-4 md:left-4 md:w-72">
         <Panel title={sat.name}>
             {#snippet actions()}
                 <button
                     type="button"
-                    class="-mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-brand-text opacity-60 transition-opacity hover:opacity-100"
+                    class="-mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded p-0 text-xs text-brand-text opacity-60 transition-opacity hover:opacity-100"
                     onclick={() => (trackerState.pinnedIndex = -1)}
                     aria-label="Close"
                 >

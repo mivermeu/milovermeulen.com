@@ -8,18 +8,58 @@
     import { sourceLabel } from '$lib/utils';
     import { trackerState } from '$lib/state.svelte';
 
-    let panelsOpen = $state(
-        typeof matchMedia !== 'undefined' && matchMedia('(min-width: 768px)').matches
-    );
+    // Phones treat the drawer as a modal (backdrop, ✕ close, Escape, inert toggle).
+    let isMobile = $state(false);
+
+    $effect(() => {
+        const mq = matchMedia('(max-width: 767px)');
+        const update = () => (isMobile = mq.matches);
+        update();
+        mq.addEventListener('change', update);
+        return () => mq.removeEventListener('change', update);
+    });
+
+    let wasOpen = false;
+
+    // Focus management for the mobile modal drawer: land on its close button
+    // when it OPENS (not on later breakpoint flips with the drawer already
+    // open); on close, return focus to the toggle (if focus dropped). Focus is
+    // deferred past the slide-in transition AND told not to scroll — focusing
+    // the off-screen drawer mid-slide otherwise scrolls the whole map
+    // container (visible as an entire-screen shift).
+    $effect(() => {
+        if (typeof document === 'undefined') return;
+        if (trackerState.panelsOpen && isMobile && !wasOpen) {
+            const timer = setTimeout(() => {
+                document.getElementById('panels-close')?.focus({ preventScroll: true });
+            }, 350);
+            return () => clearTimeout(timer);
+        }
+        if (wasOpen && !trackerState.panelsOpen && document.activeElement === document.body) {
+            document.getElementById('panels-toggle')?.focus();
+        }
+        wasOpen = trackerState.panelsOpen;
+    });
+
+    function onKeydown(event: KeyboardEvent): void {
+        if (event.key !== 'Escape' || !trackerState.panelsOpen) return;
+        // Don't steal Escape from the explorer modal or form fields.
+        if (document.querySelector('[role="dialog"]')) return;
+        const target = event.target as HTMLElement | null;
+        if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
+        trackerState.panelsOpen = false;
+    }
 </script>
 
 <svelte:head>
     <title>Satellite Tracker</title>
 </svelte:head>
 
-<div class="flex h-screen w-screen flex-col bg-brand-bg text-brand-text">
+<svelte:window onkeydown={onKeydown} />
+
+<div class="app-shell flex h-dvh w-full flex-col bg-brand-bg text-brand-text">
     <header
-        class="flex items-center justify-between border-b border-brand-secondary bg-brand-bg px-4 py-2"
+        class="flex items-center justify-between border-b border-brand-secondary bg-brand-bg px-3 py-1.5 md:px-4 md:py-2"
     >
         <h1 class="text-lg font-semibold text-brand-text-highlight">Satellite Tracker</h1>
         <div class="flex items-center gap-3">
@@ -46,27 +86,29 @@
             <SatelliteInfo />
         </div>
         <SatelliteGraph />
-        <div
-            class="pointer-events-none absolute top-3 right-3 bottom-3 z-20 flex w-80 flex-col gap-3 transition-transform duration-300"
-            class:translate-x-[calc(100%+0.75rem)]={!panelsOpen}
-        >
-            <div class="shrink-0">
-                <ControlPanel />
-            </div>
-            <div class="flex min-h-0 flex-col">
-                <FilterPanel />
-            </div>
-        </div>
+        {#if trackerState.panelsOpen}
+            <!-- Mobile: the drawer is a modal overlay — tap anywhere outside to close. -->
+            <button
+                type="button"
+                aria-label="Hide panels"
+                onclick={() => (trackerState.panelsOpen = false)}
+                class="pointer-events-auto absolute inset-0 z-10 rounded-none border-0 bg-black/50 p-0 md:hidden"
+            ></button>
+        {/if}
+
         <button
             type="button"
-            class="pointer-events-auto absolute top-3 z-30 flex aspect-square h-8 cursor-pointer items-center justify-center rounded-lg border border-brand-secondary bg-brand-secondary/85 p-1 shadow-lg backdrop-blur-sm transition-all duration-300 hover:bg-white/15"
-            style:right={panelsOpen ? 'calc(20rem + 1.5rem)' : '0.75rem'}
-            onclick={() => (panelsOpen = !panelsOpen)}
-            aria-label={panelsOpen ? 'Minimize panels' : 'Show panels'}
+            id="panels-toggle"
+            inert={isMobile && trackerState.panelsOpen}
+            class="pointer-events-auto absolute top-1.5 z-30 flex aspect-square h-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-brand-secondary bg-brand-secondary/85 p-1 shadow-lg backdrop-blur-sm transition-all duration-300 hover:bg-white/15 md:top-3 {trackerState.panelsOpen
+                ? 'max-md:right-1.5 max-md:opacity-0 md:right-[calc(20rem+1.25rem)]'
+                : 'right-1.5 md:right-3'}"
+            onclick={() => (trackerState.panelsOpen = !trackerState.panelsOpen)}
+            aria-label={trackerState.panelsOpen ? 'Minimize panels' : 'Show panels'}
         >
             <svg
                 class="h-full w-full text-brand-text transition-transform duration-300"
-                class:rotate-180={!panelsOpen}
+                class:rotate-180={!trackerState.panelsOpen}
                 viewBox="0 0 20 20"
                 fill="currentColor"
             >
@@ -77,5 +119,19 @@
                 />
             </svg>
         </button>
+
+        <div
+            inert={!trackerState.panelsOpen}
+            class="pointer-events-none absolute top-1.5 right-1.5 bottom-1.5 z-20 flex w-80 flex-col gap-1.5 transition-transform duration-300 md:top-3 md:right-3 md:bottom-3 md:gap-3 {trackerState.panelsOpen
+                ? 'translate-x-0'
+                : 'max-md:translate-x-[calc(100%+0.375rem)] md:translate-x-[calc(100%+0.75rem)]'}"
+        >
+            <div class="shrink-0">
+                <ControlPanel />
+            </div>
+            <div class="flex min-h-0 flex-col">
+                <FilterPanel />
+            </div>
+        </div>
     </div>
 </div>

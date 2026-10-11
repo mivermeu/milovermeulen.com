@@ -26,6 +26,24 @@
 {/snippet}
 
 <Panel title="Controls">
+    {#snippet actions()}
+        <button
+            type="button"
+            id="panels-close"
+            aria-label="Hide panels"
+            onclick={() => (trackerState.panelsOpen = false)}
+            class="flex h-6 w-6 items-center justify-center rounded border border-brand-secondary bg-brand-secondary/85 p-0 text-brand-text hover:bg-white/10 md:hidden"
+        >
+            <svg viewBox="0 0 12 12" class="h-3 w-3" aria-hidden="true">
+                <path
+                    d="M2 2 10 10M10 2 2 10"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    fill="none"
+                />
+            </svg>
+        </button>
+    {/snippet}
     <div class="space-y-3">
         <label class="flex cursor-pointer items-center gap-2">
             <input
@@ -115,5 +133,12 @@
         border-color: var(--color-brand-text-highlight);
         background-color: rgba(255, 255, 255, 0.2);
         color: var(--color-brand-text-highlight);
+    }
+    /* Unlayered component styles win the cascade; grow tap targets on touch. */
+    @media (pointer: coarse) {
+        .speed-btn {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+        }
     }
 </style>

@@ -132,6 +132,11 @@
     const MAX_W = 1400;
     const MAX_H = 1000;
 
+    // Touch screens get a wider/taller default sheet (the compact desktop
+    // profile wastes most of a phone); sizes stay user-resizable either way.
+    const coarsePointer =
+        typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
+
     interface Sample {
         index: number;
         uIndex: number;
@@ -145,17 +150,32 @@
     let collapsed = $state(true);
     let showModel = $state(false);
 
-    // Panel is anchored bottom-left; the top-right handle resizes it.
+    // Panel is anchored bottom-left; the top-right handle resizes it. Mobile
+    // takes nearly the full viewport beside its 6px edges; desktop clamps to
+    // the compact 560px profile. The SSR fallback (592px) yields DEFAULT_W.
     let width = $state(
         Math.min(
-            MAX_W,
-            Math.min(
-                DEFAULT_W,
-                Math.max(MIN_W, typeof window === 'undefined' ? 560 : window.innerWidth - 32)
+            coarsePointer ? MAX_W : Math.min(MAX_W, DEFAULT_W),
+            Math.max(
+                MIN_W,
+                (typeof window === 'undefined' ? 592 : window.innerWidth) -
+                    (coarsePointer ? 16 : 32)
             )
         )
     );
-    let height = $state(320);
+    let height = $state(
+        coarsePointer
+            ? Math.round(
+                  Math.min(
+                      560,
+                      Math.max(
+                          320,
+                          (typeof window === 'undefined' ? 840 : window.innerHeight) * 0.5
+                      )
+                  )
+              )
+            : 320
+    );
     let resizing = $state(false);
     let resizeStart = { x: 0, y: 0, w: 0, h: 0 };
 
@@ -436,6 +456,8 @@
         if (!canvas || !raycaster || !camera || !points) return null;
         const rect = canvas.getBoundingClientRect();
         if (rect.width === 0 || rect.height === 0) return null;
+        // Touch has no hover to pre-refine a tap — widen the catch radius.
+        raycaster.params.Points.threshold = event.pointerType === 'touch' ? 14 : 5;
         const pointer = new THREE.Vector2(
             ((event.clientX - rect.left) / rect.width) * 2 - 1,
             -((event.clientY - rect.top) / rect.height) * 2 + 1
@@ -477,9 +499,19 @@
         else trackerState.pinnedIndex = -1;
     }
 
+    let panelBox: HTMLDivElement | undefined = $state();
+
     function onHandleDown(event: PointerEvent): void {
         resizing = true;
-        resizeStart = { x: event.clientX, y: event.clientY, w: width, h: height };
+        // Baseline from the rendered box: on mobile the panel is CSS-clamped
+        // (max-w/max-h), so drag math must start from the clamped size.
+        const rect = panelBox?.getBoundingClientRect();
+        resizeStart = {
+            x: event.clientX,
+            y: event.clientY,
+            w: Math.round(rect?.width ?? width),
+            h: Math.round(rect?.height ?? height)
+        };
         (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
     }
 
@@ -490,8 +522,10 @@
     }
 
     function onHandleUp(event: PointerEvent): void {
+        // pointercancel implies capture is already released (NotFoundError otherwise).
+        const el = event.currentTarget as HTMLElement;
+        if (el.hasPointerCapture(event.pointerId)) el.releasePointerCapture(event.pointerId);
         resizing = false;
-        (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
     }
 
     function circleTexture(): THREE.Texture {
@@ -636,7 +670,7 @@
         <button
             type="button"
             aria-label={`About ${meta(key).label}`}
-            class="flex h-4 w-4 items-center justify-center rounded-full border border-brand-text/30 p-0 text-[9px] font-semibold text-brand-text/60 hover:border-brand-text/60 hover:bg-transparent hover:text-brand-text"
+            class="flex h-5 w-5 items-center justify-center rounded-full border border-brand-text/30 p-0 text-[9px] font-semibold text-brand-text/60 hover:border-brand-text/60 hover:bg-transparent hover:text-brand-text"
             >i</button
         >
         <span
@@ -652,7 +686,7 @@
         type="button"
         aria-label="Expand orbital graph"
         title="Orbital graph"
-        class="pointer-events-auto absolute bottom-3 left-3 z-20 flex items-center gap-2 rounded-lg border border-brand-secondary bg-brand-secondary/85 px-3 py-2 text-xs font-semibold text-brand-text-highlight shadow-lg backdrop-blur-sm transition-colors hover:bg-brand-secondary"
+        class="pointer-events-auto absolute bottom-1.5 left-1.5 z-20 flex items-center gap-2 rounded-lg border border-brand-secondary bg-brand-secondary/85 px-3 py-2 text-xs font-semibold text-brand-text-highlight shadow-lg backdrop-blur-sm transition-colors hover:bg-brand-secondary md:bottom-3 md:left-3"
         onclick={() => (collapsed = false)}
     >
         <svg viewBox="0 0 12 12" class="h-3 w-3" aria-hidden="true">
@@ -662,14 +696,15 @@
     </button>
 {:else}
     <div
-        class="pointer-events-none absolute bottom-3 left-3 z-20 max-w-[calc(100vw-1.5rem)]"
+        bind:this={panelBox}
+        class="pointer-events-none absolute bottom-1.5 left-1.5 z-20 max-md:max-h-[calc(100%-0.75rem)] max-md:max-w-[calc(100%-0.75rem)] md:bottom-3 md:left-3 md:max-w-[calc(100%-1.5rem)]"
         style:width="{width}px"
         style:height="{height}px"
     >
         <div class="pointer-events-auto grid h-full w-full">
             <Panel title="Orbital graph">
                 {#snippet actions()}
-                    <div class="flex items-center gap-1 pr-4 pb-1">
+                    <div class="flex items-center gap-1 pr-6 pb-1">
                         <button
                             type="button"
                             aria-label="Minimize orbital graph"
@@ -723,7 +758,7 @@
                     <button
                         type="button"
                         aria-label="Open the orbital element explorer"
-                        class="flex h-4 items-center justify-center rounded border border-brand-text/30 p-0 px-1.5 text-[9px] font-semibold text-brand-text/60 hover:border-brand-text/60 hover:bg-transparent hover:text-brand-text"
+                        class="flex h-5 items-center justify-center rounded border border-brand-text/30 p-0 px-1.5 text-[9px] font-semibold text-brand-text/60 hover:border-brand-text/60 hover:bg-transparent hover:text-brand-text"
                         onclick={() => (showModel = true)}>?</button
                     >
                 </div>
@@ -734,7 +769,7 @@
                         bind:this={canvas}
                         role="img"
                         aria-label={`Orbital element scatter plot: ${xLabel} versus ${yLabel}, ${samples.length} satellites`}
-                        class="block h-full w-full cursor-crosshair"
+                        class="block h-full w-full cursor-crosshair touch-none"
                         onpointermove={onPointerMove}
                         onpointerleave={onPointerLeave}
                         onpointerup={onPointerUp}
@@ -832,12 +867,18 @@
             <button
                 type="button"
                 aria-label="Resize graph"
-                class="absolute top-0 right-0 z-30 flex h-4 w-4 cursor-nesw-resize items-center justify-center rounded border-0 p-0 text-brand-text/40 hover:bg-transparent hover:text-brand-text"
+                class="absolute top-0 right-0 z-30 flex h-6 w-6 cursor-nesw-resize touch-none items-center justify-center rounded border-0 p-1.5 text-brand-text/40 hover:bg-transparent hover:text-brand-text"
                 onpointerdown={onHandleDown}
                 onpointermove={onHandleMove}
                 onpointerup={onHandleUp}
+                onpointercancel={onHandleUp}
             >
-                <svg viewBox="0 0 10 10" class="h-3 w-3" fill="currentColor" aria-hidden="true">
+                <svg
+                    viewBox="0 0 10 10"
+                    class="h-full w-full"
+                    fill="currentColor"
+                    aria-hidden="true"
+                >
                     <path
                         d="M1 1 9 9M5 1 9 5"
                         stroke="currentColor"

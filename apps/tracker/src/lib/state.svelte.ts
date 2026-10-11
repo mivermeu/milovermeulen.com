@@ -26,6 +26,8 @@ export const trackerState = $state({
     // Satellite under the pointer in either view (globe or graph), or -1.
     hoveredIndex: -1,
     pinnedIndex: -1,
+    // Right-hand panels drawer; open by default on desktop-sized viewports.
+    panelsOpen: typeof matchMedia !== 'undefined' && matchMedia('(min-width: 768px)').matches,
     tree: null as TreeNode | null,
     activeIndices: [] as number[],
     searchQuery: ''

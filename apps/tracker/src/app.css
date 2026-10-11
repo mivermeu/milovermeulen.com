@@ -9,6 +9,8 @@ body {
 
 body {
     @apply text-sm;
+    /* Full-viewport app: no rubber-banding / pull-to-refresh fighting the overlays. */
+    overscroll-behavior: none;
 }
 
 @layer base {
@@ -38,5 +40,39 @@ body {
 
     input[type='number']:focus {
         @apply border-brand-primary outline-none;
+    }
+}
+
+/* Full-viewport in a viewport-fit=cover page: keep controls clear of the
+   notch / Dynamic Island / home bar. env() resolves to 0 where unsupported. */
+.app-shell {
+    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+        env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+}
+
+/*
+ * Touch ergonomics. Unlayered rules beat utilities in the cascade, so this
+ * scales up the small desktop-first tap targets and type sizes on coarse
+ * pointers without touching desktop visuals. Form fonts >= 16px stop iOS
+ * Safari's zoom-on-focus from blowing out the layout.
+ */
+@media (pointer: coarse) {
+    input,
+    select,
+    textarea {
+        font-size: 1rem;
+    }
+
+    input[type='range'] {
+        height: 1.75rem;
+    }
+
+    input[type='checkbox'] {
+        width: 1.125rem;
+        height: 1.125rem;
+    }
+
+    [role='treeitem'] {
+        padding-block: 0.375rem;
     }
 }

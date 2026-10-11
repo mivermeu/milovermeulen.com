@@ -431,13 +431,15 @@ export class GlobeScene {
     private raycastSatellite(event: PointerEvent): number {
         const rect = this.canvas.getBoundingClientRect();
         if (rect.width === 0 || rect.height === 0) return -1;
+        // Fingertips are imprecise and touch has no hover — widen the catch
+        // radius so a tap on/near a dot selects it.
+        const threshold = event.pointerType === 'touch' ? 18 : 10;
         const mx = event.clientX - rect.left;
         const my = event.clientY - rect.top;
 
         const camPos = this.camera.position;
         const earthCenter = this.earth.position;
         const earthR = GLOBE_RADIUS;
-        const threshold = 10;
 
         let best = -1;
         let bestDist = Infinity;
