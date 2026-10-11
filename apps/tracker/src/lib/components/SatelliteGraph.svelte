@@ -5,6 +5,7 @@
     import { orbitalElements, type OrbitalElements } from '$lib/orbit';
     import { propagation } from '$lib/propagation';
     import Panel from './Panel.svelte';
+    import OrbitModelModal from './OrbitModelModal.svelte';
 
     type Param = keyof OrbitalElements | 'u';
 
@@ -106,6 +107,7 @@
 
     // Starts minimized; the + button in the corner expands it.
     let collapsed = $state(true);
+    let showModel = $state(false);
 
     // Panel is anchored bottom-left; the top-right handle resizes it.
     let width = $state(560);
@@ -570,6 +572,12 @@
                         {/each}
                     </select>
                     {@render infoTip(yKey)}
+                    <button
+                        type="button"
+                        aria-label="Open the orbital element explorer"
+                        class="flex h-4 items-center justify-center rounded border border-brand-text/30 p-0 px-1.5 text-[9px] font-semibold text-brand-text/60 hover:border-brand-text/60 hover:bg-transparent hover:text-brand-text"
+                        onclick={() => (showModel = true)}>?</button
+                    >
                 </div>
 
                 <div bind:this={host} class="relative min-h-0 flex-1">
@@ -689,4 +697,8 @@
             </button>
         </div>
     </div>
+{/if}
+
+{#if showModel}
+    <OrbitModelModal onclose={() => (showModel = false)} />
 {/if}

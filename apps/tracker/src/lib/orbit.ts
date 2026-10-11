@@ -12,6 +12,7 @@ export interface OrbitalElements {
 
 const EARTH_MU = 398600.4418; // km^3/s^2
 const RAD2DEG = 180 / Math.PI;
+const DEG2RAD = Math.PI / 180;
 
 /**
  * Classical (Keplerian) orbital elements from a TLE line 2.
@@ -76,4 +77,80 @@ export function argumentOfLatitudeAt(line1: string, line2: string, dateMs: numbe
     if (typeof r === 'boolean' || typeof v === 'boolean' || !r || !v) return null;
     const u = argumentOfLatitudeFromState(r as EciVec3<number>, v as EciVec3<number>);
     return Number.isFinite(u) ? u : null;
+}
+
+/**
+ * Solve Kepler's equation `M = E - e·sin E` for the eccentric anomaly `E`
+ * (radians) by Newton–Raphson. `M` is the mean anomaly in radians.
+ */
+export function eccentricAnomaly(mRad: number, e: number): number {
+    let E = mRad;
+    for (let k = 0; k < 16; k++) {
+        const step = (E - e * Math.sin(E) - mRad) / (1 - e * Math.cos(E));
+        E -= step;
+        if (Math.abs(step) < 1e-12) break;
+    }
+    return E;
+}
+
+/** True anomaly (deg, [0, 360)) from mean anomaly (deg) and eccentricity. */
+export function trueAnomalyFromMean(mDeg: number, e: number): number {
+    const E = eccentricAnomaly(mDeg * DEG2RAD, e);
+    const nu =
+        2 * Math.atan2(Math.sqrt(1 + e) * Math.sin(E / 2), Math.sqrt(1 - e) * Math.cos(E / 2));
+    return (((nu * RAD2DEG) % 360) + 360) % 360;
+}
+
+/** Mean anomaly (deg, [0, 360)) from true anomaly (deg) and eccentricity. */
+export function meanAnomalyFromTrue(nuDeg: number, e: number): number {
+    const nu = nuDeg * DEG2RAD;
+    const E =
+        2 * Math.atan2(Math.sqrt(1 - e) * Math.sin(nu / 2), Math.sqrt(1 + e) * Math.cos(nu / 2));
+    return ((((E - e * Math.sin(E)) * RAD2DEG) % 360) + 360) % 360;
+}
+
+/** Argument of latitude `u = ω + ν` (deg, [0, 360)) for a set of elements. */
+export function argumentOfLatitudeFromElements(el: OrbitalElements): number {
+    return (((el.argp + trueAnomalyFromMean(el.m, el.e)) % 360) + 360) % 360;
+}
+
+/**
+ * Mean anomaly (deg) that puts the satellite at argument of latitude `uDeg`,
+ * keeping the other elements fixed — the inverse of `argumentOfLatitudeFromElements`.
+ */
+export function meanAnomalyFromArgumentOfLatitude(uDeg: number, el: OrbitalElements): number {
+    return meanAnomalyFromTrue((((uDeg - el.argp) % 360) + 360) % 360, el.e);
+}
+
+/**
+ * ECI position (km) for the given classical elements — an idealized two-body
+ * orbit (no perturbations), for drawing an explanatory orbit.
+ */
+export function elementsToPosition(el: OrbitalElements): [number, number, number] {
+    const E = eccentricAnomaly(el.m * DEG2RAD, el.e);
+    const r = el.a * (1 - el.e * Math.cos(E));
+    const nu =
+        2 *
+        Math.atan2(Math.sqrt(1 + el.e) * Math.sin(E / 2), Math.sqrt(1 - el.e) * Math.cos(E / 2));
+    const xp = r * Math.cos(nu);
+    const yp = r * Math.sin(nu);
+    const w = el.argp * DEG2RAD;
+    const O = el.raan * DEG2RAD;
+    const inc = el.i * DEG2RAD;
+    const cw = Math.cos(w);
+    const sw = Math.sin(w);
+    const cO = Math.cos(O);
+    const sO = Math.sin(O);
+    const ci = Math.cos(inc);
+    const si = Math.sin(inc);
+    return [
+        (cO * cw - sO * sw * ci) * xp + (-cO * sw - sO * cw * ci) * yp,
+        (sO * cw + cO * sw * ci) * xp + (-sO * sw + cO * cw * ci) * yp,
+        sw * si * xp + cw * si * yp
+    ];
+}
+
+/** Two-body orbital period (seconds) for a semi-major axis in km. */
+export function orbitalPeriodSeconds(aKm: number): number {
+    return 2 * Math.PI * Math.sqrt(aKm ** 3 / EARTH_MU);
 }
