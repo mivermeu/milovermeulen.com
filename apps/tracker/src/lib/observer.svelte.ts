@@ -1,5 +1,4 @@
 import { browser } from '$app/environment';
-import { parseLatitude, parseLongitude } from './geo';
 
 /**
  * Observer location state for the pass finder. The geolocation API is only
@@ -61,17 +60,15 @@ function restore(): void {
 
 restore();
 
-/** Roundtrip numbers to 4 decimals so persisted values stay tidy. */
-function clampRound(value: number, min: number, max: number): number {
-    const clipped = Math.min(max, Math.max(min, value));
-    return Math.round(clipped * 10000) / 10000;
+/** Round to 4 decimals so persisted values stay tidy. */
+function round4(value: number): number {
+    return Math.round(value * 10000) / 10000;
 }
 
-/** Enter coordinates manually (already validated by the form via `parse*`). */
+/** Enter coordinates (already range-validated upstream — parse or geolocation). */
 export function setManualLocation(latDeg: number, lonDeg: number): void {
-    if (!Number.isFinite(latDeg) || !Number.isFinite(lonDeg)) return;
-    observerState.lat = clampRound(latDeg, -90, 90);
-    observerState.lon = clampRound(lonDeg, -180, 180);
+    observerState.lat = round4(latDeg);
+    observerState.lon = round4(lonDeg);
     observerState.status = 'set';
     observerState.error = '';
     persist();
@@ -114,15 +111,4 @@ export function requestGeolocation(): void {
         },
         { timeout: 15000, maximumAge: 5 * 60_000, enableHighAccuracy: false }
     );
-}
-
-/** Parse + validate a pair of manual-entry strings; returns null on any error. */
-export function parseManualEntry(
-    latText: string,
-    lonText: string
-): { lat: number; lon: number } | null {
-    const lat = parseLatitude(latText);
-    const lon = parseLongitude(lonText);
-    if (lat === null || lon === null) return null;
-    return { lat, lon };
 }

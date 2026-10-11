@@ -8,6 +8,12 @@ import {
     type SatRec
 } from 'satellite.js';
 import { secularRates } from './orbit';
+import {
+    EARTH_EQUATORIAL_RADIUS_KM,
+    meanMotionRadPerSec,
+    semiMajorAxisKm,
+    tleEpochMs
+} from './astro';
 import type { EciVec3 } from 'satellite.js';
 
 /**
@@ -40,34 +46,23 @@ import type { EciVec3 } from 'satellite.js';
  * them low-elevation, low-value passes near the 10° ring.
  */
 
-const EARTH_RADIUS_KM = 6378.137;
-const MU_KM3_S2 = 398600.4418;
 const RAD2DEG = 180 / Math.PI;
 const DEG2RAD = Math.PI / 180;
 // Earth's sidereal rotation rate (rad/s). Always added to the satellite's
 // inertial rate when bounding how fast the observer-to-satellite geometry can
 // change — correct for prograde, conservative for retrograde.
 const OMEGA_EARTH = 7.2921159553e-5;
-const JULIAN_UNIX_EPOCH = 2440587.5;
-
-/** satellite.js stores rec.no in rad/MINUTE; convert helpers. */
-const meanMotionRadPerSec = (rec: SatRec): number => rec.no / 60;
-/** Semi-major axis (km) implied by the TLE's mean motion (quasi-Kepler via a). */
-function semiMajorAxisKm(rec: SatRec): number {
-    const n = meanMotionRadPerSec(rec);
-    return Math.cbrt(MU_KM3_S2 / (n * n));
-}
 
 /** Higher-altitude bodies (GEO) coarse-step at most every hour. */
 const MAX_STEP_MS = 3_600_000;
+/** Single definition site for the search-candidate cap (worker + UI note surface). */
+export const PASS_SEARCH_MAX_SATS = 2000;
 /** Bisection convergence for rise/set times (milliseconds). */
 const BISECT_TOL_MS = 20;
 const BISECT_MAX_ITERS = 30;
 /** Golden-section cap for the maximum-elevation search. */
 const MAX_EL_MAX_ITERS = 60;
-/** Global coarse-sample budget; past it the search reports a partial result. */
-const MAX_COARSE_SAMPLES = 2_000_000;
-/** Heartbeat cadence: coarse samples evaluated per generator yield. */
+/** Heartbeat cadence: coarse samples evaluated per generator yield (macrotask slicing). */
 const YIELD_EVERY = 400;
 
 export interface ObserverLocation {
@@ -147,18 +142,13 @@ export interface PassSearchParams {
     wallBudgetMs?: number;
 }
 
-/** Periodic heartbeat with the number of coarse samples evaluated so far. */
-export interface PassSearchProgress {
-    processed: number;
-}
-
 /** Max elevation search uses the golden-section conjugate. */
 const INV_PHI = (Math.sqrt(5) - 1) / 2;
 
 export interface PassSearchResult {
     /** Passes above the elevation threshold, sorted by start, at most `maxPasses`. */
     passes: PassRow[];
-    /** True when the search stopped early (sample budget) — results are incomplete. */
+    /** True when the search stopped early (wall-clock budget) — results are incomplete. */
     partial: boolean;
 }
 
@@ -230,7 +220,7 @@ function lookDegAt(rec: SatRec, tMs: number, observerGd: ObserverGd): { az: numb
  */
 function maxCentralAngleDeg(radiusKm: number, minElDeg: number): number {
     const e = Math.min(minElDeg, 89.999) * DEG2RAD;
-    const arg = (EARTH_RADIUS_KM / radiusKm) * Math.cos(e);
+    const arg = (EARTH_EQUATORIAL_RADIUS_KM / radiusKm) * Math.cos(e);
     if (arg >= 1) return 180; // degenerate small radius: treat as always-in-cone
     return Math.max(0, (Math.acos(Math.min(1, arg)) - e) * RAD2DEG);
 }
@@ -250,7 +240,7 @@ function maxAboveThresholdSec(rec: SatRec, minElDeg: number): number {
     return (2 * psiDeg * DEG2RAD) / (n + OMEGA_EARTH);
 }
 
-const epochMsOf = (rec: SatRec): number => (rec.jdsatepoch - JULIAN_UNIX_EPOCH) * 86400000;
+const epochMsOf = tleEpochMs;
 
 interface ResolvedParams {
     minElDeg: number;
@@ -546,13 +536,15 @@ interface CandidateSearchState {
 }
 
 /**
- * Search for up to `maxPasses` passes over the observer. Yields progress
- * heartbeats (coarse samples processed) so a Web Worker driver can keep its
- * event loop responsive; the generator's return value is the final result.
+ * Search for up to `maxPasses` passes over the observer. Periodically yields
+ * nothing (`undefined`) purely so a Web Worker driver can slice the search
+ * with macrotask yields and keep its event loop responsive; the generator's
+ * return value is the final result. `wallBudgetMs` is the sole fuse guarding
+ * pathological searches — past it the result reports `partial: true`.
  */
 export function* findPasses(
     params: PassSearchParams
-): Generator<PassSearchProgress, PassSearchResult, void> {
+): Generator<undefined, PassSearchResult, void> {
     const resolved = resolveParams(params);
     const observerGd: ObserverGd = {
         latitude: resolved.latRad,
@@ -565,7 +557,6 @@ export function* findPasses(
         params.wallBudgetMs !== undefined ? performance.now() + params.wallBudgetMs : null;
     // Top-N by start time, kept sorted ascending.
     const top: PassRow[] = [];
-    let processed = 0;
     let partial = false;
 
     const insert = (row: PassRow): void => {
@@ -624,10 +615,9 @@ export function* findPasses(
             exitCheckDue = false;
             if (mayStopEarly()) break;
         }
-        if (
-            processed >= MAX_COARSE_SAMPLES ||
-            (budgetDeadline !== null && performance.now() >= budgetDeadline)
-        ) {
+        // The wall-clock budget is the single fuse; without it, only the
+        // window, the heap, or an unbeatable top list ends the search.
+        if (budgetDeadline !== null && performance.now() >= budgetDeadline) {
             partial = true;
             break;
         }
@@ -636,7 +626,6 @@ export function* findPasses(
         const [t, si] = popped;
         const s = states[si];
         const la = lookAnglesAt(s.candidate.rec, t, observerGd, gate);
-        processed++;
         samplesSinceYield++;
         const above = !!la && la.visible && la.look.elevation * RAD2DEG >= minEl;
 
@@ -670,7 +659,7 @@ export function* findPasses(
 
         if (samplesSinceYield >= YIELD_EVERY) {
             samplesSinceYield = 0;
-            yield { processed };
+            yield undefined;
         }
     }
 

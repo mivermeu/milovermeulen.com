@@ -2,18 +2,17 @@ import { twoline2satrec, propagate, eciToEcf, gstime } from 'satellite.js';
 import type { EciVec3, SatRec } from 'satellite.js';
 import type { ParsedSatellite } from '$lib/satellites/types';
 import { elementsFor, type ElementMode, type OrbitalElements } from '$lib/orbit';
+import { EARTH_MEAN_RADIUS_KM, semiMajorAxisKm, tleEpochMs } from '$lib/astro';
 import {
     capCandidates,
     findPasses,
+    PASS_SEARCH_MAX_SATS,
     type PassCandidate,
     type PassSearchResult,
     type PassVisibilityGate
 } from '$lib/passes';
 
-const EARTH_RADIUS_KM = 6371;
-const MU_KM3_S2 = 398600.4418;
 const RAD2DEG = 180 / Math.PI;
-const JULIAN_UNIX_EPOCH = 2440587.5;
 
 type Frame = 'ecf' | 'eci';
 type InitMessage = {
@@ -38,7 +37,7 @@ type PassesMessage = {
     endMs: number;
     minElDeg?: number;
     maxPasses?: number;
-    /** Search-cap: at most this many satellites are searched (shortest-period first). */
+    /** Search-cap override (default: passes.ts's PASS_SEARCH_MAX_SATS). */
     maxSats?: number;
     /**
      * Original-catalog index of every satellite in the last `init` — same
@@ -121,9 +120,7 @@ const passVisibilityGate: PassVisibilityGate | undefined = undefined;
 const PASS_SEARCH_BUDGET_MS = 4000;
 
 function altitudeKm(rec: SatRec): number {
-    const meanMotionRadPerSec = rec.no / 60;
-    const semiMajorAxis = Math.cbrt(MU_KM3_S2 / (meanMotionRadPerSec * meanMotionRadPerSec));
-    return semiMajorAxis - EARTH_RADIUS_KM;
+    return semiMajorAxisKm(rec) - EARTH_MEAN_RADIUS_KM;
 }
 
 function colorFor(rec: SatRec): number[] {
@@ -332,7 +329,7 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
  * re-init (stale — discard).
  */
 async function drivePassSearch(
-    iter: Generator<{ processed: number }, PassSearchResult, void>,
+    iter: Generator<undefined, PassSearchResult, void>,
     generation: number
 ): Promise<PassSearchResult | null> {
     for (;;) {
@@ -358,7 +355,7 @@ async function runPassSearch(message: PassesMessage): Promise<void> {
         rec: sat.rec,
         index: message.originalIndices[sat.srcIndex] ?? sat.srcIndex
     }));
-    const cap = capCandidates(candidates, message.maxSats ?? 2000);
+    const cap = capCandidates(candidates, message.maxSats ?? PASS_SEARCH_MAX_SATS);
     const iter = findPasses({
         candidates: cap.capped,
         observer: message.observer,
@@ -401,7 +398,7 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
                     if (rec.error !== 0) continue;
                     const nRadPerSec = rec.no / 60;
                     if (!(nRadPerSec > 0)) continue;
-                    const a = Math.cbrt(MU_KM3_S2 / (nRadPerSec * nRadPerSec));
+                    const a = semiMajorAxisKm(rec);
                     const epochEl: OrbitalElements = {
                         a,
                         e: rec.ecco,
@@ -415,7 +412,9 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
                         epochEl,
                         nRadPerSec,
                         // satellite.js stores the full Julian date in jdsatepoch.
-                        epochMs: (rec.jdsatepoch - JULIAN_UNIX_EPOCH) * 86400000,
+                        // satellite.js stores the full Julian date in jdsatepoch.
+                        // satellite.js stores the full Julian date in jdsatepoch.
+                        epochMs: tleEpochMs(rec),
                         name: sat.name,
                         srcIndex
                     });

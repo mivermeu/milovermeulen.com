@@ -1,9 +1,9 @@
 <script lang="ts">
     import { trackerState } from '$lib/state.svelte';
+    import { parseLatitude, parseLongitude } from '$lib/geo';
     import {
         clearLocation,
         observerState,
-        parseManualEntry,
         requestGeolocation,
         setManualLocation
     } from '$lib/observer.svelte';
@@ -11,11 +11,12 @@
     import type { PassRow } from '$lib/passes';
     import Panel from './Panel.svelte';
 
-    // Search configuration: horizon, window length, list size, satellite cap.
+    // Search configuration: horizon, window length, list size. The satellite
+    // cap lives with the worker (passes.ts's PASS_SEARCH_MAX_SATS) and is
+    // surfaced through the response's capInfo.
     const MIN_EL_DEG = 10;
     const WINDOW_DAYS = 7;
     const MAX_PASSES = 20;
-    const MAX_SATS = 2000;
 
     let latText = $state('');
     let lonText = $state('');
@@ -95,7 +96,6 @@
                 endMs: Date.now() + WINDOW_DAYS * 86_400_000,
                 minElDeg: MIN_EL_DEG,
                 maxPasses: MAX_PASSES,
-                maxSats: MAX_SATS,
                 originalIndices: indices
             });
         }, 600);
@@ -117,21 +117,21 @@
             endMs: Date.now() + WINDOW_DAYS * 86_400_000,
             minElDeg: MIN_EL_DEG,
             maxPasses: MAX_PASSES,
-            maxSats: MAX_SATS,
             originalIndices: indices
         });
     }
 
     function submitManual(event: SubmitEvent): void {
         event.preventDefault();
-        const entry = parseManualEntry(latText, lonText);
-        if (!entry) {
+        const lat = parseLatitude(latText);
+        const lon = parseLongitude(lonText);
+        if (lat === null || lon === null) {
             formError =
                 'Enter valid coordinates — latitude −90…90, longitude −180…180 (decimal degrees).';
             return;
         }
         formError = '';
-        setManualLocation(entry.lat, entry.lon);
+        setManualLocation(lat, lon);
         formOpen = false;
     }
 
