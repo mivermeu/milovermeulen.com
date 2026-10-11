@@ -363,7 +363,7 @@
         </div>
 
         <div class="flex min-h-0 flex-1 flex-col md:flex-row">
-            <div bind:this={host} class="relative min-h-72 flex-1 md:min-h-0">
+            <div bind:this={host} class="relative h-[38vh] shrink-0 md:h-auto md:min-h-0 md:flex-1">
                 <canvas
                     bind:this={canvas}
                     class="block h-full w-full cursor-grab active:cursor-grabbing"
@@ -375,7 +375,7 @@
             </div>
 
             <div
-                class="w-full shrink-0 overflow-y-auto border-t border-brand-secondary p-3 md:w-80 md:border-t-0 md:border-l md:p-4"
+                class="min-h-0 w-full flex-1 overflow-y-auto border-t border-brand-secondary p-3 md:w-80 md:flex-none md:shrink-0 md:border-t-0 md:border-l md:p-4"
             >
                 <div class="space-y-3 text-xs">
                     {#each SLIDERS as s (s.key)}
