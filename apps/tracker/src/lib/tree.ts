@@ -286,13 +286,16 @@ export function findMatchingNodeIds(
     const lower = query.toLowerCase();
 
     function walk(node: TreeNode): boolean {
-        let hasMatch = node.label.toLowerCase().includes(lower);
+        const selfMatch = node.label.toLowerCase().includes(lower);
+        let childMatch = false;
         for (const child of node.children) {
-            if (walk(child)) {
-                expand.add(node.id);
-                hasMatch = true;
-            }
+            if (walk(child)) childMatch = true;
         }
+        // A node that matches the query itself stays collapsed — the user said
+        // "starlink", not "all 10,000 starlinks" — and only unfurls to reveal
+        // matched descendants when its own label doesn't match.
+        if (childMatch && !selfMatch) expand.add(node.id);
+        const hasMatch = selfMatch || childMatch;
         if (hasMatch) matching.add(node.id);
         return hasMatch;
     }

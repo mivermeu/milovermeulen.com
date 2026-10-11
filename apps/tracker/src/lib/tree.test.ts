@@ -6,6 +6,7 @@ import {
     collectLeaves,
     extractPrefix,
     starlinkShell,
+    findMatchingNodeIds,
     type TreeNode
 } from './tree';
 
@@ -277,5 +278,68 @@ describe('single satellites', () => {
         const root = buildRoot([sat('A-1 (ASTERIX)')]);
         const other = root.children.find((c) => c.label === 'Other')!;
         expect(other.children.map((c) => c.label)).toEqual(['A-1 (ASTERIX)']);
+    });
+});
+
+describe('findMatchingNodeIds (search)', () => {
+    function searchTree(): TreeNode {
+        // STARLINK 53° shell with three sats; NOAA is unrelated.
+        return buildRoot([
+            satWithInc('STARLINK-3001', 53.0),
+            satWithInc('STARLINK-3002', 53.1),
+            satWithInc('STARLINK-3003', 53.2),
+            sat('NOAA-19')
+        ]);
+    }
+
+    it('keeps a self-matching group collapsed even when its children match', () => {
+        // Every STARLINK sat name contains "starlink", so the shells match;
+        // they must NOT unfold into thousands of rows. The unmatched wrappers
+        // (root, Communications) do unfold — to reveal the shell rows.
+        const { matching, expand } = findMatchingNodeIds(searchTree(), 'starlink');
+        expect(matching.has('root')).toBe(true);
+        const comms = searchTree().children.find((c) => c.label === 'Communications')!;
+        expect(expand.has('root')).toBe(true);
+        expect(expand.has(comms.id)).toBe(true);
+        for (const shell of comms.children) {
+            expect(expand.has(shell.id)).toBe(false);
+            expect(matching.has(shell.id)).toBe(true);
+        }
+    });
+
+    it('expands only groups whose own label does not match', () => {
+        // "starlink-3" matches the sat names but not the shell label
+        // ("STARLINK 53°"), so the shell unfolds to show its matched sats.
+        const { matching, expand } = findMatchingNodeIds(searchTree(), 'starlink-3');
+        const root = searchTree();
+        const shell = root.children
+            .find((c) => c.label === 'Communications')!
+            .children.find((c) => c.label.startsWith('STARLINK'))!;
+        expect(expand.has(shell.id)).toBe(true);
+        expect(matching.has(shell.id)).toBe(true);
+        // Unmatched ancestors only expand to reveal the shell.
+        expect(expand.has('root')).toBe(true);
+        expect(expand.has('func-communications')).toBe(true);
+    });
+
+    it('matched leaves list without expanding anything', () => {
+        // Leaf-only query: the leaf matches, its parents unfold to reach it.
+        const { matching, expand } = findMatchingNodeIds(searchTree(), 'noaa');
+        const root = searchTree();
+        const noaa = findInChildren(
+            root.children.find((c) => c.label === 'Weather')!.children,
+            'NOAA-19'
+        )!;
+        expect(noaa).toBeDefined();
+        expect(matching.has(noaa.id)).toBe(true);
+        expect(expand.has('root')).toBe(true);
+        expect(expand.has('func-weather')).toBe(true);
+        expect(expand.size).toBe(2); // only the wrappers on the path to the leaf
+    });
+
+    it('empty query matches nothing', () => {
+        const { matching, expand } = findMatchingNodeIds(searchTree(), '');
+        expect(matching.size).toBe(0);
+        expect(expand.size).toBe(0);
     });
 });
