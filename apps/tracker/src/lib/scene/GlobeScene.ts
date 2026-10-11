@@ -53,6 +53,7 @@ export class GlobeScene {
     private readonly nightOverlay: THREE.Mesh;
     private readonly terminatorRing: THREE.LineLoop;
     private sunEci: Vec3 | null = null;
+    private sunEcf: Vec3 = { x: 1, y: 0, z: 0 };
     private lastSunComputeMs = 0;
     private readonly groundTrackMesh: THREE.LineSegments;
     private readonly groundTrackGeometry: THREE.BufferGeometry;
@@ -309,6 +310,10 @@ export class GlobeScene {
         this.groundTrackMesh.visible = false;
         this.scene.add(this.groundTrackMesh);
 
+        // Prime the sun state so frame 0 already has the terminator and the
+        // night overlay oriented correctly.
+        this.updateSun(gstime(new Date()));
+
         this.canvas = canvas;
         this.onPointerMove = (event: PointerEvent) => this.handlePointerMove(event);
         this.onPointerDown = (event: PointerEvent) => this.handlePointerDown(event);
@@ -399,9 +404,15 @@ export class GlobeScene {
             this.updateTerminatorGeometry(this.sunEci);
             this.lastSunComputeMs = nowMs;
         }
-        const sunEcf = eciDirectionToEcf(this.sunEci, gmst);
+        // Per-frame ECF rotation of the cached ECI sun vector — one rotation,
+        // no allocation, and exactly in sync with the frame's GMST.
+        this.sunEcf = eciDirectionToEcf(this.sunEci, gmst);
         const mat = this.nightOverlay.material as THREE.ShaderMaterial;
-        (mat.uniforms.uSunDirEcf.value as THREE.Vector3).set(sunEcf.x, sunEcf.y, sunEcf.z);
+        (mat.uniforms.uSunDirEcf.value as THREE.Vector3).set(
+            this.sunEcf.x,
+            this.sunEcf.y,
+            this.sunEcf.z
+        );
     }
 
     private buildEquatorRing(): THREE.LineLoop {
@@ -493,12 +504,15 @@ export class GlobeScene {
         const positions = message.positions;
         const epoch = message.epoch ?? Date.now();
         if (!positions) return;
+        // Eclipse colors describe "now", not the snapshot's epoch — applying
+        // them before the stale-snapshot drop means a crossed eclipse boundary
+        // is never lost to a duplicate/out-of-order positions message.
+        this.applySunlitColors(message.colors);
         if (epoch <= this.nextEpoch && this.nextPositions) return;
         this.prevPositions = this.nextPositions;
         this.prevEpoch = this.nextEpoch;
         this.nextPositions = positions;
         this.nextEpoch = epoch;
-        this.applySunlitColors(message.colors);
         if (!this.prevPositions) {
             this.prevPositions = new Float32Array(positions.length);
             this.prevPositions.set(positions);

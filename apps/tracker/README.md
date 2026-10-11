@@ -10,8 +10,14 @@ panels.
 
 - **3D globe** with landmass coastlines (Natural Earth 110m data)
 - **Live satellite positions** propagated via SGP4 in a Web Worker
+- **Day/night terminator** on the globe (hand-rolled low-precision solar ephemeris) with subtle
+  night-hemisphere dimming
+- **Sunlit vs. eclipsed** satellite dots — live per-tick classification against the cylindrical
+  Earth shadow, eclipsed dots dimmed
 - **Hover** to see satellite name + orbit highlight
-- **Click** to pin — detailed orbital info panel (eccentricity, inclination, RAAN, altitude, etc.)
+- **Click** to pin — detailed orbital info panel (eccentricity, inclination, RAAN, altitude, etc.),
+  a white **ground track** (nadir subpoints over ±1 orbital period, always ECF) behind the orbit
+  highlight
 - **Time controls** — pause, speed up to 60×, scrub ±30 days
 - **ECF/ECI reference frame** toggle
 - **Data sources** — local API → CelesTrak (live) → bundled sample catalog
@@ -96,10 +102,22 @@ src/
 
 - **All positions computed in ECI** (inertial). ECF display achieved by rotating earth/graticule by
   `-gmst` while dots and orbits stay in ECI.
-- **Single draw call** for all satellite dots (radial gradient texture, vertex colors).
-- **Zoom-adaptive point size** — dots scale relative to the globe as you zoom in.
+- **Sun model is hand-rolled** (`src/lib/sun.ts`) — USNO low-precision solar ephemeris + standard
+  GMST polynomial, pure and unit-tested against equinox/solstice subsolar points and known eclipse
+  geometry. The worker recomputes it per propagate tick for the cylindrical-shadow classification
+  and ships a color buffer only when some satellite crosses an eclipse boundary.
+- **Night dimming** is a slightly oversized sphere with a small custom `ShaderMaterial` whose alpha
+  follows each fragment's normal·sunECF; the ECI sun vector is recomputed on a 60 s wall cadence and
+  rotated to ECF with the frame's GMST. `renderOrder = -1` keeps it under dots/orbit lines.
 - **Orbit ellipses** sampled over one full period in ECI (closed loops), rotated by delta GMST for
   ECF display.
+- **Orbit ellipses** sampled over one full period in ECI (closed loops), rotated by delta GMST for
+  ECF display.
+- **Ground track** is always ECF (each sample rotated by its own GMST, ±1 period at 256 samples) and
+  is never affected by the reference-frame toggle; rebuilt on the same 5 s cadence as orbits, only
+  while a satellite is pinned ("Ground track" toggle in the controls).
+- **Single draw call** for all satellite dots (radial gradient texture, vertex colors).
+- **Zoom-adaptive point size** — dots scale relative to the globe as you zoom in.
 - **Hover highlight** extracts one satellite's orbit from the shared buffer; pin persists it.
 
 ## Tech Stack
