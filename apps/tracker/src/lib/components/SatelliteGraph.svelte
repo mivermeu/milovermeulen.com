@@ -64,6 +64,9 @@
     let xKey = $state<Param>('a');
     let yKey = $state<Param>('i');
 
+    // Starts minimized; the + button in the corner expands it.
+    let collapsed = $state(true);
+
     // Panel is anchored bottom-left; the top-right handle resizes it.
     let width = $state(512);
     let height = $state(320);
@@ -438,153 +441,190 @@
     });
 </script>
 
-<div
-    class="pointer-events-none absolute bottom-3 left-3 z-20"
-    style:width="{width}px"
-    style:height="{height}px"
->
-    <div class="pointer-events-auto grid h-full w-full">
-        <Panel title="Orbital graph">
-            {#snippet actions()}
-                <div class="flex items-center gap-1 pr-4 pb-1 text-[10px] text-brand-text">
-                    <select
-                        bind:value={xKey}
-                        aria-label="X axis parameter"
-                        class="rounded border border-brand-secondary bg-brand-bg px-1 py-0.5"
-                    >
-                        {#each FUNDAMENTAL as p (p.key)}
-                            <option value={p.key}>{p.short}</option>
-                        {/each}
-                        <option disabled>──────────</option>
-                        {#each DERIVED as p (p.key)}
-                            <option value={p.key}>{p.short}</option>
-                        {/each}
-                    </select>
-                    <span class="text-brand-text/50">×</span>
-                    <select
-                        bind:value={yKey}
-                        aria-label="Y axis parameter"
-                        class="rounded border border-brand-secondary bg-brand-bg px-1 py-0.5"
-                    >
-                        {#each FUNDAMENTAL as p (p.key)}
-                            <option value={p.key}>{p.short}</option>
-                        {/each}
-                        <option disabled>──────────</option>
-                        {#each DERIVED as p (p.key)}
-                            <option value={p.key}>{p.short}</option>
-                        {/each}
-                    </select>
-                    <span class="text-brand-text/50">{samples.length}</span>
-                </div>
-            {/snippet}
+{#if collapsed}
+    <button
+        type="button"
+        aria-label="Expand orbital graph"
+        title="Orbital graph"
+        class="pointer-events-auto absolute bottom-3 left-3 z-20 flex items-center gap-2 rounded-lg border border-brand-secondary bg-brand-secondary/85 px-3 py-2 text-xs font-semibold text-brand-text-highlight shadow-lg backdrop-blur-sm transition-colors hover:bg-brand-secondary"
+        onclick={() => (collapsed = false)}
+    >
+        <svg viewBox="0 0 12 12" class="h-3 w-3" aria-hidden="true">
+            <path d="M6 1v10M1 6h10" stroke="currentColor" stroke-width="1.6" fill="none" />
+        </svg>
+        Orbital graph
+    </button>
+{:else}
+    <div
+        class="pointer-events-none absolute bottom-3 left-3 z-20"
+        style:width="{width}px"
+        style:height="{height}px"
+    >
+        <div class="pointer-events-auto grid h-full w-full">
+            <Panel title="Orbital graph">
+                {#snippet actions()}
+                    <div class="flex items-center gap-1 pr-4 pb-1 text-[10px] text-brand-text">
+                        <select
+                            bind:value={xKey}
+                            aria-label="X axis parameter"
+                            class="rounded border border-brand-secondary bg-brand-bg px-1 py-0.5"
+                        >
+                            {#each FUNDAMENTAL as p (p.key)}
+                                <option value={p.key}>{p.short}</option>
+                            {/each}
+                            <option disabled>──────────</option>
+                            {#each DERIVED as p (p.key)}
+                                <option value={p.key}>{p.short}</option>
+                            {/each}
+                        </select>
+                        <span class="text-brand-text/50">×</span>
+                        <select
+                            bind:value={yKey}
+                            aria-label="Y axis parameter"
+                            class="rounded border border-brand-secondary bg-brand-bg px-1 py-0.5"
+                        >
+                            {#each FUNDAMENTAL as p (p.key)}
+                                <option value={p.key}>{p.short}</option>
+                            {/each}
+                            <option disabled>──────────</option>
+                            {#each DERIVED as p (p.key)}
+                                <option value={p.key}>{p.short}</option>
+                            {/each}
+                        </select>
+                        <span class="text-brand-text/50">{samples.length}</span>
+                        <button
+                            type="button"
+                            aria-label="Minimize orbital graph"
+                            class="flex h-5 w-5 items-center justify-center rounded border border-brand-secondary p-0 text-brand-text-highlight hover:bg-white/10"
+                            onclick={() => (collapsed = true)}
+                        >
+                            <svg viewBox="0 0 12 12" class="h-3 w-3" aria-hidden="true">
+                                <path
+                                    d="M1 6h10"
+                                    stroke="currentColor"
+                                    stroke-width="1.6"
+                                    fill="none"
+                                />
+                            </svg>
+                        </button>
+                    </div>
+                {/snippet}
 
-            <div bind:this={host} class="relative min-h-0 flex-1">
-                <canvas
-                    bind:this={canvas}
-                    class="block h-full w-full cursor-crosshair"
-                    onpointermove={onPointerMove}
-                    onpointerleave={onPointerLeave}
-                    onpointerup={onPointerUp}
-                ></canvas>
+                <div bind:this={host} class="relative min-h-0 flex-1">
+                    <canvas
+                        bind:this={canvas}
+                        class="block h-full w-full cursor-crosshair"
+                        onpointermove={onPointerMove}
+                        onpointerleave={onPointerLeave}
+                        onpointerup={onPointerUp}
+                    ></canvas>
 
-                {#if plot.w > 0}
-                    <div class="pointer-events-none absolute inset-0 text-[9px] text-brand-text/60">
-                        {#each tickValues(xRange, xLog) as v, i (i)}
+                    {#if plot.w > 0}
+                        <div
+                            class="pointer-events-none absolute inset-0 text-[9px] text-brand-text/60"
+                        >
+                            {#each tickValues(xRange, xLog) as v, i (i)}
+                                <div
+                                    class="absolute w-px bg-white/10"
+                                    style:left="{plot.l + norm(v, xRange, xLog) * plot.w}px"
+                                    style:top="{plot.t}px"
+                                    style:height="{plot.h}px"
+                                ></div>
+                            {/each}
+                            {#each tickValues(yRange, yLog) as v, i (i)}
+                                <div
+                                    class="absolute h-px bg-white/10"
+                                    style:left="{plot.l}px"
+                                    style:top="{plot.t + (1 - norm(v, yRange, yLog)) * plot.h}px"
+                                    style:width="{plot.w}px"
+                                ></div>
+                            {/each}
                             <div
-                                class="absolute w-px bg-white/10"
-                                style:left="{plot.l + norm(v, xRange, xLog) * plot.w}px"
+                                class="absolute w-px bg-brand-text/30"
+                                style:left="{plot.l}px"
                                 style:top="{plot.t}px"
                                 style:height="{plot.h}px"
                             ></div>
-                        {/each}
-                        {#each tickValues(yRange, yLog) as v, i (i)}
                             <div
-                                class="absolute h-px bg-white/10"
+                                class="absolute h-px bg-brand-text/30"
                                 style:left="{plot.l}px"
-                                style:top="{plot.t + (1 - norm(v, yRange, yLog)) * plot.h}px"
+                                style:top="{plot.t + plot.h}px"
                                 style:width="{plot.w}px"
                             ></div>
-                        {/each}
-                        <div
-                            class="absolute w-px bg-brand-text/30"
-                            style:left="{plot.l}px"
-                            style:top="{plot.t}px"
-                            style:height="{plot.h}px"
-                        ></div>
-                        <div
-                            class="absolute h-px bg-brand-text/30"
-                            style:left="{plot.l}px"
-                            style:top="{plot.t + plot.h}px"
-                            style:width="{plot.w}px"
-                        ></div>
 
-                        {#each tickValues(xRange, xLog) as v, i (i)}
+                            {#each tickValues(xRange, xLog) as v, i (i)}
+                                <span
+                                    class="absolute -translate-x-1/2"
+                                    style:left="{plot.l + norm(v, xRange, xLog) * plot.w}px"
+                                    style:top="{plot.t + plot.h + 3}px">{format(xKey, v)}</span
+                                >
+                            {/each}
+                            {#each tickValues(yRange, yLog) as v, i (i)}
+                                <span
+                                    class="absolute -translate-y-1/2 text-right"
+                                    style:left="0px"
+                                    style:width="{plot.l - 6}px"
+                                    style:top="{plot.t + (1 - norm(v, yRange, yLog)) * plot.h}px"
+                                    >{format(yKey, v)}</span
+                                >
+                            {/each}
                             <span
-                                class="absolute -translate-x-1/2"
-                                style:left="{plot.l + norm(v, xRange, xLog) * plot.w}px"
-                                style:top="{plot.t + plot.h + 3}px">{format(xKey, v)}</span
+                                class="absolute left-1/2 -translate-x-1/2 whitespace-nowrap"
+                                style:top="{plot.t + plot.h + 12}px">{xLabel}</span
                             >
-                        {/each}
-                        {#each tickValues(yRange, yLog) as v, i (i)}
-                            <span
-                                class="absolute -translate-y-1/2 text-right"
-                                style:left="0px"
-                                style:width="{plot.l - 6}px"
-                                style:top="{plot.t + (1 - norm(v, yRange, yLog)) * plot.h}px"
-                                >{format(yKey, v)}</span
+                            <span class="absolute left-1 whitespace-nowrap" style:top="0px"
+                                >{yLabel}</span
                             >
-                        {/each}
-                        <span
-                            class="absolute left-1/2 -translate-x-1/2 whitespace-nowrap"
-                            style:top="{plot.t + plot.h + 12}px">{xLabel}</span
+                        </div>
+                    {/if}
+
+                    {#if highlightPos}
+                        <div
+                            class="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white"
+                            style:left="{highlightPos.x}px"
+                            style:top="{highlightPos.y}px"
+                            style:width="10px"
+                            style:height="10px"
+                        ></div>
+                    {/if}
+
+                    {#if samples.length === 0}
+                        <div
+                            class="pointer-events-none absolute inset-0 flex items-center justify-center text-xs text-brand-text/60"
                         >
-                        <span class="absolute left-1 whitespace-nowrap" style:top="0px"
-                            >{yLabel}</span
+                            No active satellites
+                        </div>
+                    {/if}
+
+                    {#if hover}
+                        <div
+                            class="pointer-events-none absolute z-20 rounded border border-brand-secondary bg-brand-bg/95 px-2 py-0.5 text-[10px] whitespace-nowrap text-brand-text"
+                            style:left="{hover.x + 10}px"
+                            style:top="{hover.y + 10}px"
                         >
-                    </div>
-                {/if}
+                            {hover.name}
+                        </div>
+                    {/if}
+                </div>
+            </Panel>
 
-                {#if highlightPos}
-                    <div
-                        class="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white"
-                        style:left="{highlightPos.x}px"
-                        style:top="{highlightPos.y}px"
-                        style:width="10px"
-                        style:height="10px"
-                    ></div>
-                {/if}
-
-                {#if samples.length === 0}
-                    <div
-                        class="pointer-events-none absolute inset-0 flex items-center justify-center text-xs text-brand-text/60"
-                    >
-                        No active satellites
-                    </div>
-                {/if}
-
-                {#if hover}
-                    <div
-                        class="pointer-events-none absolute z-20 rounded border border-brand-secondary bg-brand-bg/95 px-2 py-0.5 text-[10px] whitespace-nowrap text-brand-text"
-                        style:left="{hover.x + 10}px"
-                        style:top="{hover.y + 10}px"
-                    >
-                        {hover.name}
-                    </div>
-                {/if}
-            </div>
-        </Panel>
-
-        <button
-            type="button"
-            aria-label="Resize graph"
-            class="absolute top-0 right-0 z-30 flex h-4 w-4 cursor-nesw-resize items-center justify-center text-brand-text/40 hover:text-brand-text"
-            onpointerdown={onHandleDown}
-            onpointermove={onHandleMove}
-            onpointerup={onHandleUp}
-        >
-            <svg viewBox="0 0 10 10" class="h-3 w-3" fill="currentColor" aria-hidden="true">
-                <path d="M9 1 1 9M9 5 5 9" stroke="currentColor" stroke-width="1.4" fill="none" />
-            </svg>
-        </button>
+            <button
+                type="button"
+                aria-label="Resize graph"
+                class="absolute top-0 right-0 z-30 flex h-4 w-4 cursor-nesw-resize items-center justify-center p-0 text-brand-text/40 hover:text-brand-text"
+                onpointerdown={onHandleDown}
+                onpointermove={onHandleMove}
+                onpointerup={onHandleUp}
+            >
+                <svg viewBox="0 0 10 10" class="h-3 w-3" fill="currentColor" aria-hidden="true">
+                    <path
+                        d="M9 1 1 9M9 5 5 9"
+                        stroke="currentColor"
+                        stroke-width="1.4"
+                        fill="none"
+                    />
+                </svg>
+            </button>
+        </div>
     </div>
-</div>
+{/if}
