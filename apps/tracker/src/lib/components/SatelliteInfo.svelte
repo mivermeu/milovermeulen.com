@@ -9,7 +9,6 @@
     } from 'satellite.js';
     import { trackerState } from '$lib/state.svelte';
     import { epochAgeDays } from '$lib/satellites/tle';
-    import { eciSpeedKms } from '$lib/utils';
     import Panel from './Panel.svelte';
 
     const DEG = 180 / Math.PI;
@@ -51,7 +50,7 @@
                 alt: geo.height,
                 speed:
                     pv.velocity && typeof pv.velocity !== 'boolean'
-                        ? eciSpeedKms(pv.velocity)
+                        ? Math.hypot(pv.velocity.x, pv.velocity.y, pv.velocity.z)
                         : null,
                 epochAgeDays: epochAgeDays(sat.line1, _t),
                 eccentricity: satrec.ecco,

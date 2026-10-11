@@ -30,8 +30,8 @@ export function parseNoradId(line1: string): number | null {
         // plus the remaining four digits — E8493 = 148493.
         return (first.charCodeAt(0) - 55) * 10000 + parseInt(rest, 10);
     }
-    const id = parseInt(field, 10);
-    return Number.isFinite(id) ? id : null;
+    if (!/^\d{5}$/.test(field)) return null;
+    return parseInt(field, 10);
 }
 
 // Epoch field (cols 19-32: YYDDD.DDDDDDDD) as unix ms, or null if unparsable.

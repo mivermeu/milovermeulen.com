@@ -186,9 +186,17 @@
     let yRange = $state<[number, number]>([0, 1]);
     let xLog = $state(false);
     let yLog = $state(false);
-    let hover = $state<{ x: number; y: number; name: string; xVal: number; yVal: number } | null>(
-        null
-    );
+    // Tooltip tracking the highlighted point: `uIndex` is the sample's position
+    // in the filtered samples list so frame() can re-derive x/y values as the
+    // blend glides — otherwise the tooltip drifts from the ring during playback.
+    let hover = $state<{
+        x: number;
+        y: number;
+        uIndex: number;
+        name: string;
+        xVal: number;
+        yVal: number;
+    } | null>(null);
 
     let renderer: THREE.WebGLRenderer | undefined;
     let scene: THREE.Scene | undefined;
@@ -297,6 +305,19 @@
 
     // White ring around the focused satellite's point, refreshed per frame.
     let highlightPoint = $state<{ x: number; y: number } | null>(null);
+
+    function highlightValues(s: Sample): { xVal: number; yVal: number } {
+        return { xVal: paramValue(s, xKey), yVal: paramValue(s, yKey) };
+    }
+
+    // Per-frame tooltip refresh, paired with updateHighlight() so the text and
+    // the white ring always show the same instantaneous blend values.
+    function updateHoverValues(): void {
+        if (!hover) return;
+        const sample = samples[hover.uIndex];
+        if (!sample || elCurrent.length === 0) return;
+        ({ xVal: hover.xVal, yVal: hover.yVal } = highlightValues(sample));
+    }
 
     function updateHighlight(): void {
         if (focusIndex < 0 || plot.w === 0) {
@@ -414,6 +435,7 @@
         const n = Math.min(samples.length, MAX_POINTS);
         if (n === 0 || elCurrent.length === 0) {
             geometry.setDrawRange(0, 0);
+            updateHoverValues();
             updateHighlight();
             renderer.render(scene, camera);
             return;
@@ -441,6 +463,7 @@
         // Keep pick raycasts honest: invalidate the cached bounding sphere (it
         // is recomputed lazily from the live buffer on the next pick).
         geometry.boundingSphere = null;
+        updateHoverValues();
         updateHighlight();
         renderer.render(scene, camera);
     }
@@ -485,9 +508,9 @@
         hover = {
             x: event.clientX - rect.left,
             y: event.clientY - rect.top,
+            uIndex: index,
             name: trackerState.satellites[sample.index]?.name ?? '',
-            xVal: paramValue(sample, xKey),
-            yVal: paramValue(sample, yKey)
+            ...highlightValues(sample)
         };
     }
 

@@ -278,10 +278,6 @@ export function toggleNodeInTree(root: TreeNode, id: string): number[] {
 
 // An all-digit query is treated as a NORAD catalog ID (prefix match, so typing
 // "2554" narrows toward ISS's 25544); anything else matches labels as before.
-export function isNoradQuery(query: string): boolean {
-    return /^\d+$/.test(query);
-}
-
 export function findMatchingNodeIds(
     root: TreeNode,
     query: string,
@@ -292,7 +288,7 @@ export function findMatchingNodeIds(
     if (!query) return { matching, expand };
     const lower = query.toLowerCase();
     const norad =
-        isNoradQuery(query) && satellites
+        /^\d+$/.test(query) && satellites
             ? (node: TreeNode) => {
                   if (node.satelliteIndex === undefined) return false;
                   const id = satellites[node.satelliteIndex]?.noradId;

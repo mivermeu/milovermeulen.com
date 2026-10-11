@@ -106,22 +106,28 @@ describe('parseNoradId', () => {
         ).toBe(359999);
     });
 
-    it('returns null for garbage or short lines', () => {
+    it('returns null for garbage, short lines, or malformed numbers', () => {
         expect(parseNoradId('')).toBeNull();
         expect(parseNoradId('not a tle line')).toBeNull();
         expect(parseNoradId('1 no-ID')).toBeNull();
+        // A letter inside the 5-digit field must not truncate to the prefix.
+        expect(
+            parseNoradId('1 12A45U 98067A   24275.50000000  .00016717  00000-0  10270-3 0  9990')
+        ).toBeNull();
     });
 
-    it('is parsed into every entry of the bundled sample catalog', async () => {
-        const { readFile } = await import('node:fs/promises');
-        const { join } = await import('node:path');
-        const text = await readFile(join(import.meta.dir, 'data/sample-tles.txt'), 'utf-8');
-        const sats = parseTleText(text);
-        expect(sats.length).toBeGreaterThan(0);
-        for (const s of sats) {
-            expect(s.noradId).not.toBeNull();
-            expect(s.noradId).toBeGreaterThan(0);
-        }
+    // Trimmed fixture (no fs round-trip): one alpha-5 entry and one plain.
+    const CATALOG_FIXTURE = `RISING-2 (L-5)
+1 A2345U 98067A   24275.50000000  .00016717  00000-0  10270-3 0  9990
+2 A2345  51.6400 210.1000 0005000 130.2000 240.5000  15.4949000    10
+STARLINK-1000
+1 45000U 20001A   24275.50000000  .00001000  00000-0  50000-4 0  9999
+2 45000  53.0000 100.0000 0001000  90.0000 270.0000  15.0600000    20`;
+
+    it('carries the NORAD ID from a small TLE fixture through parseTleText', () => {
+        const sats = parseTleText(CATALOG_FIXTURE);
+        expect(sats.map((s) => s.noradId)).toEqual([102345, 45000]);
+        expect(sats.map((s) => s.name)).toEqual(['RISING-2 (L-5)', 'STARLINK-1000']);
     });
 });
 
@@ -140,9 +146,11 @@ function line1At(whenMs: number): string {
 }
 
 function satAt(name: string, whenMs: number): ParsedSatellite {
+    const line1 = line1At(whenMs);
     return {
         name,
-        line1: line1At(whenMs),
+        line1,
+        noradId: parseNoradId(line1),
         line2: '2 99999  51.6400 100.0000 0005000  90.0000 270.0000 15.5000000    12'
     };
 }
@@ -186,7 +194,7 @@ describe('partitionFresh', () => {
             satAt('fresh', NOW - 10 * DAY),
             satAt('old', NOW - 40 * DAY),
             satAt('ancient', NOW - 365 * DAY),
-            { name: 'garbage', line1: 'nope', line2: 'nope' }
+            { name: 'garbage', line1: 'nope', line2: 'nope', noradId: null }
         ];
         const { fresh, stale } = partitionFresh(sats, NOW);
         expect(fresh.map((s) => s.name)).toEqual(['fresh']);
