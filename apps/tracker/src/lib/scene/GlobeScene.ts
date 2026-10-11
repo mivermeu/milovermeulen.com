@@ -8,6 +8,7 @@ import { base } from '$app/paths';
 import { trackerState } from '$lib/state.svelte';
 import type { ParsedSatellite } from '$lib/satellites/types';
 import { propagation, blendInto, type WorkerResponse } from '$lib/propagation';
+import { eciDirectionToEcf, sunEciDirection, type Vec3 } from '$lib/sun';
 
 const EARTH_RADIUS_KM = 6371;
 export const GLOBE_RADIUS = 6.4;
@@ -16,6 +17,11 @@ export const SCALE = GLOBE_RADIUS / EARTH_RADIUS_KM;
 const DEG2RAD = Math.PI / 180;
 const ORBIT_REBUILD_INTERVAL_MS = 5000;
 const POINTER_THROTTLE_MS = 66;
+// The sun's apparent motion is ~15°/hour; an ephemeris refresh every minute
+// keeps the terminator well under a degree of drift at a per-frame cost of
+// one ECI→ECF rotation of a cached vector.
+const SUN_RECOMPUTE_INTERVAL_MS = 60_000;
+const TERMINATOR_POINTS = 128;
 
 export interface GlobeSceneCallbacks {
     onError?: (message: string) => void;
@@ -44,6 +50,10 @@ export class GlobeScene {
     private readonly resizeObserver: ResizeObserver;
     private readonly highlightMesh: THREE.LineSegments;
     private readonly highlightGeometry: THREE.BufferGeometry;
+    private readonly nightOverlay: THREE.Mesh;
+    private readonly terminatorRing: THREE.LineLoop;
+    private sunEci: Vec3 | null = null;
+    private lastSunComputeMs = 0;
 
     private readonly onPointerMove: (event: PointerEvent) => void;
     private readonly onPointerDown: (event: PointerEvent) => void;
@@ -234,6 +244,42 @@ export class GlobeScene {
         this.highlightMesh.visible = false;
         this.scene.add(this.highlightMesh);
 
+        // Night-side dimming: a slightly oversized sphere whose alpha follows
+        // the angular distance from the anti-sun limb. renderOrder -1 keeps it
+        // ahead of every other transparent object, so dots/orbit lines/highlight
+        // (all default order) stay on top and keep their own frequencies.
+        // The globe never rotates (worker emits ECF), so object-space normal ==
+        // ECF direction; the sun uniform lives in the same frame.
+        this.nightOverlay = new THREE.Mesh(
+            new THREE.SphereGeometry(GLOBE_RADIUS + 0.02, 48, 32),
+            new THREE.ShaderMaterial({
+                uniforms: { uSunDirEcf: { value: new THREE.Vector3(1, 0, 0) } },
+                vertexShader: `
+                    varying vec3 vEcfNormal;
+                    void main() {
+                        vEcfNormal = normal;
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    }
+                `,
+                fragmentShader: `
+                    varying vec3 vEcfNormal;
+                    uniform vec3 uSunDirEcf;
+                    void main() {
+                        float d = dot(normalize(vEcfNormal), uSunDirEcf);
+                        float day = smoothstep(-0.12, 0.22, d);
+                        gl_FragColor = vec4(0.0, 0.0, 0.05, 0.5 * (1.0 - day));
+                    }
+                `,
+                transparent: true,
+                depthWrite: false
+            })
+        );
+        this.nightOverlay.renderOrder = -1;
+        this.scene.add(this.nightOverlay);
+
+        this.terminatorRing = this.buildTerminatorRing();
+        this.scene.add(this.terminatorRing);
+
         this.canvas = canvas;
         this.onPointerMove = (event: PointerEvent) => this.handlePointerMove(event);
         this.onPointerDown = (event: PointerEvent) => this.handlePointerDown(event);
@@ -267,8 +313,71 @@ export class GlobeScene {
         return Math.min(42, Math.max(25, halfSpan / (Math.tan((45 * Math.PI) / 360) * aspect)));
     }
 
-    private buildEquatorRing(): THREE.LineLoop {
-        const vertices: number[] = [];
+    /**
+     * Terminator great circle: every point 90° from the sun direction —
+     * built in ECF (earth never moves in-scene) with enough vertical samples
+     * to look smooth. Animates only via the shared slow-cadence recompute.
+     */
+    private buildTerminatorRing(): THREE.LineLoop {
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute(
+            'position',
+            new THREE.Float32BufferAttribute(new Float32Array(TERMINATOR_POINTS * 3), 3)
+        );
+        return new THREE.LineLoop(
+            geometry,
+            new THREE.LineBasicMaterial({
+                color: 0xf59e0b,
+                transparent: true,
+                opacity: 0.28,
+                depthWrite: false
+            })
+        );
+    }
+
+    /** Refill the terminator ring's vertex buffer from the sun direction. */
+    private updateTerminatorGeometry(sun: Vec3): void {
+        // Orthonormal basis ⊥ sun for the circle in that plane.
+        const axis = Math.abs(sun.z) > 0.99 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1);
+        const sunVec = new THREE.Vector3(sun.x, sun.y, sun.z).normalize();
+        const u = new THREE.Vector3().crossVectors(axis, sunVec).normalize();
+        const v = new THREE.Vector3().crossVectors(sunVec, u);
+        const radius = GLOBE_RADIUS + 0.02;
+        const attr = this.terminatorRing.geometry.getAttribute('position') as THREE.BufferAttribute;
+        const out = attr.array as Float32Array;
+        for (let k = 0; k < TERMINATOR_POINTS; k++) {
+            const t = ((k + 0.5) / TERMINATOR_POINTS) * Math.PI * 2;
+            const cu = Math.cos(t);
+            const cv = Math.sin(t);
+            out[k * 3] = radius * (cu * u.x + cv * v.x);
+            out[k * 3 + 1] = radius * (cu * u.y + cv * v.y);
+            out[k * 3 + 2] = radius * (cu * u.z + cv * v.z);
+        }
+        attr.needsUpdate = true;
+    }
+
+    /**
+     * Sun bookkeeping: the ECI direction is recomputed on a slow wall cadence
+     * (the sun barely moves), but the ECF rotation is refreshed every frame
+     * from the GMST we already computed — cheap and keeps the terminator
+     * synchronized with the shared-propagation scene.
+     */
+    private updateSun(gmst: number): void {
+        const nowMs = Date.now();
+        if (
+            !this.sunEci ||
+            nowMs - this.lastSunComputeMs >= SUN_RECOMPUTE_INTERVAL_MS
+        ) {
+            this.sunEci = sunEciDirection(nowMs);
+            this.updateTerminatorGeometry(this.sunEci);
+            this.lastSunComputeMs = nowMs;
+        }
+        const sunEcf = eciDirectionToEcf(this.sunEci, gmst);
+        const mat = this.nightOverlay.material as THREE.ShaderMaterial;
+        (mat.uniforms.uSunDirEcf.value as THREE.Vector3).set(sunEcf.x, sunEcf.y, sunEcf.z);
+    }
+
+    private buildEquatorRing(): THREE.LineLoop {        const vertices: number[] = [];
         for (let lon = -180; lon <= 180; lon += 2) {
             const point = latLonToVector(0, lon, GLOBE_RADIUS);
             vertices.push(point.x, point.y, point.z);
@@ -698,6 +807,7 @@ export class GlobeScene {
         }
 
         const gmst = gstime(new Date());
+        this.updateSun(gmst);
         const eci = trackerState.referenceFrame === 'eci';
         const orbitDelta = eci ? this.orbitBuildGmst - gmst : 0;
         this.orbitMesh.rotation.z = orbitDelta;
@@ -741,6 +851,9 @@ export class GlobeScene {
         (this.orbitMesh.material as THREE.Material).dispose();
         this.equatorRing.geometry.dispose();
         (this.equatorRing.material as THREE.Material).dispose();
+        this.terminatorRing.geometry.dispose();
+        (this.terminatorRing.material as THREE.Material).dispose();
+        this.nightOverlay.geometry.dispose();
         this.equatorialPlane.geometry.dispose();
         (this.equatorialPlane.material as THREE.Material).dispose();
         this.ascendingNode.geometry.dispose();
