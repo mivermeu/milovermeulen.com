@@ -3,113 +3,21 @@
     import { untrack } from 'svelte';
     import { trackerState } from '$lib/state.svelte';
     import { categorize } from '$lib/tree';
-    import { orbitalPeriodSeconds, trueAnomalyFromMean, type OrbitalElements } from '$lib/orbit';
+    import { orbitalPeriodSeconds, trueAnomalyFromMean } from '$lib/orbit';
     import { blendInto, propagation } from '$lib/propagation';
     import Panel from './Panel.svelte';
     import OrbitModelModal from './OrbitModelModal.svelte';
-
-    type BaseParam = keyof OrbitalElements | 'u';
-    type DerivedParam = 'perigee' | 'apogee' | 'period' | 'nu';
-    type Param = BaseParam | DerivedParam;
-
-    const EARTH_RADIUS_KM = 6371;
-    // Log axes clamp to this floor so altitude ~0 (or negative, for decaying
-    // orbits) doesn't blow up log10; it never affects `a` or period.
-    const LOG_FLOOR = 1;
-    const LOG_PARAMS = new Set<Param>(['a', 'period', 'perigee', 'apogee']);
-
-    // The six fundamental Keplerian elements. `short` is the symbol, `label` the
-    // precise axis name, and `desc` a plain-language explanation for the tooltip.
-    const FUNDAMENTAL: { key: Param; label: string; short: string; desc: string }[] = [
-        {
-            key: 'a',
-            label: 'Semi-major axis (km)',
-            short: 'a',
-            desc: "The orbit's size — roughly its average distance from Earth's centre."
-        },
-        {
-            key: 'e',
-            label: 'Eccentricity',
-            short: 'e',
-            desc: "The orbit's shape: 0 is a perfect circle, higher values are more stretched."
-        },
-        {
-            key: 'i',
-            label: 'Inclination (°)',
-            short: 'i',
-            desc: 'How far the orbit is tilted from the equator (0° means it never leaves it).'
-        },
-        {
-            key: 'raan',
-            label: 'RAAN (°)',
-            short: 'Ω',
-            desc: 'Where the orbit crosses the equator heading north.'
-        },
-        {
-            key: 'argp',
-            label: 'Arg. of periapsis (°)',
-            short: 'ω',
-            desc: "Where the orbit's closest point to Earth sits within the orbit."
-        },
-        {
-            key: 'm',
-            label: 'Mean anomaly (°)',
-            short: 'M',
-            desc: 'Where the satellite is along its orbit, measured from that closest point.'
-        }
-    ];
-
-    // Derived quantities, shown after a separator in the pickers. All are pure
-    // functions of the live element set, so they work in every mode.
-    const DERIVED: { key: Param; label: string; short: string; desc: string }[] = [
-        {
-            key: 'u',
-            label: 'Anomaly past asc. node (°)',
-            short: 'u',
-            desc: 'The angle from the equator crossing to the satellite; it advances as the satellite moves.'
-        },
-        {
-            key: 'perigee',
-            label: 'Perigee altitude (km)',
-            short: 'peri',
-            desc: 'How low the orbit gets — its closest approach to the surface.'
-        },
-        {
-            key: 'apogee',
-            label: 'Apogee altitude (km)',
-            short: 'apo',
-            desc: 'How high the orbit gets — its farthest point from the surface.'
-        },
-        {
-            key: 'period',
-            label: 'Orbital period (min)',
-            short: 'T',
-            desc: 'How long one full orbit takes.'
-        },
-        {
-            key: 'nu',
-            label: 'True anomaly (°)',
-            short: 'ν',
-            desc: "The satellite's actual angle from perigee — its real position along the orbit."
-        }
-    ];
-    const ALL_PARAMS = [...FUNDAMENTAL, ...DERIVED];
-
-    function meta(key: Param) {
-        return ALL_PARAMS.find((p) => p.key === key) ?? ALL_PARAMS[0];
-    }
-
-    // Natural bounds for parameters that have them; axes are clamped to these so
-    // e.g. Ω / ω / M / u never show a tick past 360°.
-    const LIMITS: Partial<Record<Param, [number, number]>> = {
-        e: [0, 1],
-        i: [0, 180],
-        raan: [0, 360],
-        argp: [0, 360],
-        m: [0, 360],
-        u: [0, 360],
-        nu: [0, 360]
-    };
+    import {
+        EARTH_RADIUS_KM,
+        FUNDAMENTAL,
+        DERIVED,
+        paramMeta,
+        LIMITS,
+        LOG_FLOOR,
+        isLogParam,
+        type ParamKey,
+        type BaseParamKey
+    } from '$lib/graph-params';
 
     const CATEGORY_COLORS: Record<string, number> = {
         communications: 0x818cf8,
@@ -143,8 +51,10 @@
         color: THREE.Color;
     }
 
-    let xKey = $state<Param>('perigee');
-    let yKey = $state<Param>('apogee');
+    // The graph axis keys live in trackerState (not component-local state) so
+    // URL deep links (`gx`/`gy`) can seed and mirror them.
+    let xKey = $derived(trackerState.graphXKey);
+    let yKey = $derived(trackerState.graphYKey);
 
     // Starts minimized; the + button in the corner expands it.
     let collapsed = $state(true);
@@ -216,11 +126,19 @@
     let elNextEpoch = 0;
     let catalogGen = 0;
 
-    const xLabel = $derived(meta(xKey).label);
-    const yLabel = $derived(meta(yKey).label);
+    const xLabel = $derived(paramMeta(xKey).label);
+    const yLabel = $derived(paramMeta(yKey).label);
 
     // Where each parameter sits inside the worker's 7-element-per-satellite block.
-    const EL_INDEX: Record<BaseParam, number> = { a: 0, e: 1, i: 2, raan: 3, argp: 4, m: 5, u: 6 };
+    const EL_INDEX: Record<BaseParamKey, number> = {
+        a: 0,
+        e: 1,
+        i: 2,
+        raan: 3,
+        argp: 4,
+        m: 5,
+        u: 6
+    };
 
     // Static per-satellite data; recomputed only when the catalog/filter changes.
     const samples = $derived.by(() => {
@@ -250,11 +168,11 @@
     // frame (from the RAF blend) rather than per snapshot.
     const samplesByIndex = $derived.by(() => new Map(samples.map((s) => [s.index, s])));
 
-    function baseValue(els: Float32Array, s: Sample, key: BaseParam): number {
+    function baseValue(els: Float32Array, s: Sample, key: BaseParamKey): number {
         return els[s.uIndex * 7 + EL_INDEX[key]] ?? 0;
     }
 
-    function paramValueAt(els: Float32Array, s: Sample, key: Param): number {
+    function paramValueAt(els: Float32Array, s: Sample, key: ParamKey): number {
         switch (key) {
             case 'perigee':
                 return baseValue(els, s, 'a') * (1 - baseValue(els, s, 'e')) - EARTH_RADIUS_KM;
@@ -269,7 +187,7 @@
         }
     }
 
-    function paramValue(s: Sample, key: Param): number {
+    function paramValue(s: Sample, key: ParamKey): number {
         return paramValueAt(elCurrent, s, key);
     }
 
@@ -341,7 +259,7 @@
         };
     }
 
-    function format(key: Param, value: number): string {
+    function format(key: ParamKey, value: number): string {
         if (key === 'e') return value.toFixed(3);
         if (key === 'a' || key === 'perigee' || key === 'apogee')
             return Math.round(value).toLocaleString();
@@ -389,7 +307,7 @@
     // Scan both endpoints of the current blend so points stay inside the axis
     // while they glide between snapshots.
     function scanRange(
-        key: Param,
+        key: ParamKey,
         isLog: boolean,
         limit: [number, number] | undefined
     ): [number, number] {
@@ -410,8 +328,8 @@
     }
 
     function computeRanges(): void {
-        const xIsLog = LOG_PARAMS.has(xKey);
-        const yIsLog = LOG_PARAMS.has(yKey);
+        const xIsLog = isLogParam(xKey);
+        const yIsLog = isLogParam(yKey);
         xLog = xIsLog;
         yLog = yIsLog;
         xRange = scanRange(xKey, xIsLog, LIMITS[xKey]);
@@ -692,18 +610,18 @@
     });
 </script>
 
-{#snippet infoTip(key: Param)}
+{#snippet infoTip(key: ParamKey)}
     <span class="group relative inline-flex">
         <button
             type="button"
-            aria-label={`About ${meta(key).label}`}
+            aria-label={`About ${paramMeta(key).label}`}
             class="flex h-5 w-5 items-center justify-center rounded-full border border-brand-text/30 p-0 text-[9px] font-semibold text-brand-text/60 hover:border-brand-text/60 hover:bg-transparent hover:text-brand-text"
             >i</button
         >
         <span
             role="tooltip"
             class="pointer-events-none absolute top-5 right-0 z-40 hidden w-52 rounded border border-brand-secondary bg-brand-bg/95 p-2 text-[10px] leading-snug text-brand-text shadow-lg group-focus-within:block group-hover:block"
-            >{meta(key).desc}</span
+            >{paramMeta(key).desc}</span
         >
     </span>
 {/snippet}
@@ -754,7 +672,7 @@
                     class="flex shrink-0 flex-wrap items-center gap-1 pb-2 text-[10px] text-brand-text"
                 >
                     <select
-                        bind:value={xKey}
+                        bind:value={trackerState.graphXKey}
                         aria-label="X axis parameter"
                         class="rounded border border-brand-secondary bg-brand-bg px-1 py-0.5"
                     >
@@ -769,7 +687,7 @@
                     {@render infoTip(xKey)}
                     <span class="text-brand-text/50">×</span>
                     <select
-                        bind:value={yKey}
+                        bind:value={trackerState.graphYKey}
                         aria-label="Y axis parameter"
                         class="rounded border border-brand-secondary bg-brand-bg px-1 py-0.5"
                     >

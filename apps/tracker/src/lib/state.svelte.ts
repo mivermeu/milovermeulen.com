@@ -1,7 +1,17 @@
 import { browser } from '$app/environment';
 import { loadCatalog } from '$lib/satellites/tle';
 import type { DataSource, ParsedSatellite } from '$lib/satellites/types';
-import { type TreeNode, buildRoot, toggleNodeInTree, findNode, collectLeaves } from '$lib/tree';
+import {
+    type TreeNode,
+    buildRoot,
+    toggleNodeInTree,
+    findNode,
+    collectLeaves,
+    findLeafByIndex,
+    revealLeafNode,
+    activateLeafNode
+} from '$lib/tree';
+import type { ParamKey } from '$lib/graph-params';
 
 export type { TreeNode, TriState } from '$lib/tree';
 
@@ -28,6 +38,12 @@ export const trackerState = $state({
     // Satellite under the pointer in either view (globe or graph), or -1.
     hoveredIndex: -1,
     pinnedIndex: -1,
+    // Graph axis keys — component-local before, but shared state so URL deep
+    // links (`gx`/`gy`) can seed and mirror them.
+    graphXKey: 'perigee' as ParamKey,
+    graphYKey: 'apogee' as ParamKey,
+    // Favorited satellites by NORAD catalog number (persisted to localStorage).
+    favorites: [] as number[],
     // Right-hand panels drawer; open by default on desktop-sized viewports.
     panelsOpen: typeof matchMedia !== 'undefined' && matchMedia('(min-width: 768px)').matches,
     tree: null as TreeNode | null,
@@ -57,6 +73,26 @@ export function initTree(satellites: ParsedSatellite[]): void {
     const active: number[] = [];
     collectLeaves(trackerState.tree, active);
     trackerState.activeIndices = active;
+}
+
+/**
+ * Pin a satellite by catalog index and, through the filter tree (still the
+ * source of truth for visibility — no rows are injected), activate it if the
+ * filter had it hidden, then reveal its row. Used by favorites and URL `sat`
+ * deep links. Returns true if the satellite exists.
+ */
+export function pinSatellite(index: number): boolean {
+    if (!trackerState.satellites[index]) return false;
+    trackerState.pinnedIndex = index;
+    const tree = trackerState.tree;
+    const leaf = tree ? findLeafByIndex(tree, index) : null;
+    if (tree && leaf) {
+        if (!trackerState.activeIndices.includes(index)) {
+            trackerState.activeIndices = activateLeafNode(tree, leaf);
+        }
+        revealLeafNode(tree, leaf);
+    }
+    return true;
 }
 
 if (browser) {

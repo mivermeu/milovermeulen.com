@@ -7,6 +7,12 @@
     import favicon from '$lib/assets/favicon.svg';
     import { sourceLabel } from '$lib/utils';
     import { trackerState } from '$lib/state.svelte';
+    import { initTrackerUrlSync } from '$lib/url-sync.svelte';
+
+    // Shareable URL state + favorites: applying the deep-link params needs the
+    // catalog AND the filter tree, so the sync waits for both. The returned
+    // effect-root dispose tears the whole feature down with the page.
+    $effect(() => initTrackerUrlSync());
 
     // Phones treat the drawer as a modal (backdrop, ✕ close, Escape, inert toggle).
     let isMobile = $state(false);

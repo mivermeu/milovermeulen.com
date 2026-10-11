@@ -10,12 +10,22 @@
     import { trackerState } from '$lib/state.svelte';
     import { epochAgeDays } from '$lib/satellites/tle';
     import Panel from './Panel.svelte';
+    import { isFavorite, satelliteNorad, toggleFavorite } from '$lib/favorites';
 
     const DEG = 180 / Math.PI;
 
     let pinnedIndex = $derived(trackerState.pinnedIndex);
     let hovered = $derived(trackerState.hovered);
     let sat = $derived(pinnedIndex >= 0 ? trackerState.satellites[pinnedIndex] : null);
+
+    // Favorites are stored by NORAD id; collapsible list lives in ControlPanel.
+    let norad = $derived(satelliteNorad(sat));
+    let satFavorited = $derived(isFavorite(trackerState.favorites, norad));
+
+    function toggleStar(): void {
+        if (norad === null) return;
+        trackerState.favorites = toggleFavorite(trackerState.favorites, norad);
+    }
     let now = $state(Date.now());
 
     $effect(() => {
@@ -103,6 +113,21 @@
     <div class="pointer-events-auto absolute top-1.5 left-1.5 z-30 w-64 md:top-4 md:left-4 md:w-72">
         <Panel title={sat.name}>
             {#snippet actions()}
+                {#if norad !== null}
+                    <button
+                        type="button"
+                        class="-mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded p-0 text-sm transition-opacity hover:opacity-80"
+                        class:text-amber-400={satFavorited}
+                        class:text-brand-text={!satFavorited}
+                        class:opacity-40={!satFavorited}
+                        onclick={toggleStar}
+                        aria-pressed={satFavorited}
+                        aria-label={satFavorited ? 'Remove from favorites' : 'Add to favorites'}
+                        title={satFavorited ? 'Remove from favorites' : 'Add to favorites'}
+                    >
+                        {satFavorited ? '★' : '☆'}
+                    </button>
+                {/if}
                 <button
                     type="button"
                     class="-mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded p-0 text-xs text-brand-text opacity-60 transition-opacity hover:opacity-100"

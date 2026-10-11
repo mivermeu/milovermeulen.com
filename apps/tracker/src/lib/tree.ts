@@ -316,6 +316,46 @@ export function findMatchingNodeIds(
     return { matching, expand };
 }
 
+/**
+ * Locate the tree leaf that belongs to a satellite (by catalog index) — used to
+ * reveal/pin favorites and URL `sat` deep links without inventing duplicate
+ * tree rows (leaf ids must stay unique: `sat-<index>`).
+ */
+export function findLeafByIndex(root: TreeNode, index: number): TreeNode | null {
+    if (root.satelliteIndex === index) return root;
+    for (const child of root.children) {
+        const found = findLeafByIndex(child, index);
+        if (found) return found;
+    }
+    return null;
+}
+
+/** Ensure `leaf` is selected and recompute tri-states. Returns the active indices. */
+export function activateLeafNode(root: TreeNode, leaf: TreeNode): number[] {
+    if (!leaf.selected) {
+        setDescendants(leaf, true);
+        computeTriStates(root);
+    }
+    const active: number[] = [];
+    collectLeaves(root, active);
+    return active;
+}
+
+/** Expand all ancestors of `leaf` so it is visible in the tree. */
+export function revealLeafNode(root: TreeNode, leaf: TreeNode): void {
+    function walk(node: TreeNode): boolean {
+        if (node === leaf) return true;
+        for (const child of node.children) {
+            if (walk(child)) {
+                node.expanded = true;
+                return true;
+            }
+        }
+        return false;
+    }
+    walk(root);
+}
+
 export function saveExpanded(root: TreeNode, target: Map<string, boolean>): void {
     target.set(root.id, root.expanded);
     for (const child of root.children) saveExpanded(child, target);

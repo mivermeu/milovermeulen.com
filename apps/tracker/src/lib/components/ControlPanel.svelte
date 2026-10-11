@@ -1,8 +1,25 @@
 <script lang="ts">
-    import { trackerState } from '$lib/state.svelte';
+    import { untrack } from 'svelte';
+    import { trackerState, pinSatellite } from '$lib/state.svelte';
+    import { catalogByNorad } from '$lib/url-state';
     import Panel from './Panel.svelte';
 
     let now = $state(new Date());
+
+    const favoriteEntries = $derived.by(() => {
+        // Track the ids and the catalog reference; scan the TLE lines untracked
+        // (deep proxy reads must not become dependencies — a tracked deep read
+        // re-fires on any catalog object mutation).
+        const ids = trackerState.favorites;
+        const sats = trackerState.satellites;
+        if (ids.length === 0 || sats.length === 0) return [];
+        return untrack(() => {
+            const byNorad = catalogByNorad(sats);
+            return ids
+                .map((norad) => ({ norad, index: byNorad.get(norad) ?? -1 }))
+                .filter((entry) => entry.index >= 0);
+        });
+    });
 
     $effect(() => {
         const id = setInterval(() => (now = new Date()), 1000);
@@ -113,6 +130,37 @@
                 )}
             </div>
         </div>
+
+        {#if favoriteEntries.length > 0}
+            <div>
+                <p class="mb-1 text-[10px] text-brand-text">
+                    Favorites ({favoriteEntries.length})
+                </p>
+                <div
+                    class="max-h-24 space-y-0.5 overflow-y-auto pr-1"
+                    aria-label="Favorited satellites"
+                >
+                    {#each favoriteEntries as entry (entry.norad)}
+                        <button
+                            type="button"
+                            class="flex w-full items-center justify-between gap-2 rounded px-1 py-0.5 text-left text-[11px] text-brand-text transition-colors hover:bg-white/10 {trackerState.pinnedIndex ===
+                            entry.index
+                                ? 'bg-white/15 text-brand-text-highlight'
+                                : ''}"
+                            onclick={() => pinSatellite(entry.index)}
+                        >
+                            <span class="truncate">
+                                {trackerState.satellites[entry.index]?.name ??
+                                    `NORAD ${entry.norad}`}
+                            </span>
+                            <span class="shrink-0 font-mono text-[9px] text-brand-text/50"
+                                >{entry.norad}</span
+                            >
+                        </button>
+                    {/each}
+                </div>
+            </div>
+        {/if}
 
         <div>
             <p class="mb-1 text-[10px] text-brand-text">Time</p>
