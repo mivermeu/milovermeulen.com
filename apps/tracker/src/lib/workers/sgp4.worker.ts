@@ -1,12 +1,7 @@
 import { twoline2satrec, propagate, eciToEcf, gstime } from 'satellite.js';
 import type { EciVec3, SatRec } from 'satellite.js';
 import type { ParsedSatellite } from '$lib/satellites/types';
-import {
-    argumentOfLatitudeFromElements,
-    elementsFromState,
-    propagateMeanElements,
-    type OrbitalElements
-} from '$lib/orbit';
+import { elementsFor, type ElementMode, type OrbitalElements } from '$lib/orbit';
 
 const EARTH_RADIUS_KM = 6371;
 const MU_KM3_S2 = 398600.4418;
@@ -14,7 +9,6 @@ const RAD2DEG = 180 / Math.PI;
 const JULIAN_UNIX_EPOCH = 2440587.5;
 
 type Frame = 'ecf' | 'eci';
-type ElementMode = 'epoch' | 'smoothed' | 'instantaneous';
 type InitMessage = {
     type: 'init';
     satellites: ParsedSatellite[];
@@ -82,6 +76,8 @@ let satellites: PreparedSatellite[] = [];
 let scale = 1;
 let initialized = false;
 let orbitBuildId = 0;
+// Bumped on every init; stamped onto responses so views can drop stale snapshots.
+let catalogVersion = 0;
 let elementMode: ElementMode = 'smoothed';
 
 function altitudeKm(rec: SatRec): number {
@@ -98,29 +94,9 @@ function colorFor(rec: SatRec): number[] {
     return GEO_COLOR;
 }
 
-// The 7 plotted quantities for one satellite, per the selected element mode.
-function elementsFor(
-    sat: PreparedSatellite,
-    r: EciVec3<number>,
-    velocity: unknown,
-    epochMs: number
-): { a: number; e: number; i: number; raan: number; argp: number; m: number; u: number } | null {
-    if (elementMode === 'instantaneous' && velocity && typeof velocity !== 'boolean') {
-        const el = elementsFromState(r, velocity as EciVec3<number>);
-        if (el) return el;
-    }
-    const base =
-        elementMode === 'epoch'
-            ? sat.epochEl
-            : propagateMeanElements(sat.epochEl, sat.nRadPerSec, (epochMs - sat.epochMs) / 1000);
-    const out = { ...base, u: argumentOfLatitudeFromElements(base) };
-    // Equatorial / e >= 1 edge cases yield NaN, which would flow into the graph's
-    // position buffer and poison three.js' bounding sphere.
-    for (const v of [out.a, out.e, out.i, out.raan, out.argp, out.m, out.u]) {
-        if (!Number.isFinite(v)) return null;
-    }
-    return out;
-}
+// The 7 plotted quantities now come from `$lib/orbit`'s `elementsFor` — the
+// finiteness screen there covers every element mode, so NaN rows never leave
+// the worker.
 
 async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
     const buildId = ++orbitBuildId;
@@ -345,7 +321,11 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
             });
             initialized = true;
             orbitBuildId++;
-            postMessage({ type: 'ready', count: satellites.length, colors }, [colors.buffer]);
+            catalogVersion++;
+            postMessage(
+                { type: 'ready', count: satellites.length, colors, generation: catalogVersion },
+                [colors.buffer]
+            );
             break;
         }
         case 'propagate': {
@@ -355,7 +335,9 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
             const gmst = gstime(date);
             const count = satellites.length;
             const positions = new Float32Array(count * 3);
-            const elements = new Float32Array(count * 7);
+            // NaN = "unknown" for a satellite whose propagation failed — views
+            // skip NaN rows instead of plotting fake zeros at the origin.
+            const elements = new Float32Array(count * 7).fill(NaN);
             for (let i = 0; i < count; i++) {
                 const sat = satellites[i];
                 const state = propagate(sat.rec, date);
@@ -365,7 +347,15 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
                 positions[i * 3] = ecf.x * scale;
                 positions[i * 3 + 1] = ecf.y * scale;
                 positions[i * 3 + 2] = ecf.z * scale;
-                const el = elementsFor(sat, eci, state.velocity, epoch);
+                // Elements screen their own finiteness, so `null` rows stay NaN.
+                const el = elementsFor(
+                    elementMode,
+                    sat.epochEl,
+                    sat.nRadPerSec,
+                    (epoch - sat.epochMs) / 1000,
+                    eci,
+                    state.velocity
+                );
                 if (!el) continue;
                 elements[i * 7] = el.a;
                 elements[i * 7 + 1] = el.e;
@@ -375,10 +365,18 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
                 elements[i * 7 + 5] = el.m;
                 elements[i * 7 + 6] = el.u;
             }
-            postMessage({ type: 'positions', requestId, epoch, count, positions, elements }, [
-                positions.buffer,
-                elements.buffer
-            ]);
+            postMessage(
+                {
+                    type: 'positions',
+                    requestId,
+                    epoch,
+                    count,
+                    generation: catalogVersion,
+                    positions,
+                    elements
+                },
+                [positions.buffer, elements.buffer]
+            );
             break;
         }
         case 'mode': {

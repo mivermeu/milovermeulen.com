@@ -4,7 +4,7 @@
     import { trackerState } from '$lib/state.svelte';
     import { categorize } from '$lib/tree';
     import { orbitalPeriodSeconds, trueAnomalyFromMean, type OrbitalElements } from '$lib/orbit';
-    import { propagation } from '$lib/propagation';
+    import { blendInto, propagation } from '$lib/propagation';
     import Panel from './Panel.svelte';
     import OrbitModelModal from './OrbitModelModal.svelte';
 
@@ -179,6 +179,7 @@
     let elCurrent: Float32Array<ArrayBufferLike> = new Float32Array(0);
     let elPrevEpoch = 0;
     let elNextEpoch = 0;
+    let catalogGen = 0;
 
     const xLabel = $derived(meta(xKey).label);
     const yLabel = $derived(meta(yKey).label);
@@ -209,6 +210,10 @@
     const focusIndex = $derived(
         trackerState.hoveredIndex >= 0 ? trackerState.hoveredIndex : trackerState.pinnedIndex
     );
+
+    // Index the samples by satellite index so the highlight can be updated per
+    // frame (from the RAF blend) rather than per snapshot.
+    const samplesByIndex = $derived.by(() => new Map(samples.map((s) => [s.index, s])));
 
     function baseValue(els: Float32Array, s: Sample, key: BaseParam): number {
         return els[s.uIndex * 7 + EL_INDEX[key]] ?? 0;
@@ -263,15 +268,30 @@
         return (value - range[0]) / (range[1] - range[0] || 1);
     }
 
-    const highlightPos = $derived.by(() => {
-        if (focusIndex < 0 || plot.w === 0) return null;
-        const s = samples.find((x) => x.index === focusIndex);
-        if (!s) return null;
-        return {
-            x: plot.l + norm(paramValue(s, xKey), xRange, xLog) * plot.w,
-            y: plot.t + (1 - norm(paramValue(s, yKey), yRange, yLog)) * plot.h
+    // White ring around the focused satellite's point, refreshed per frame.
+    let highlightPoint = $state<{ x: number; y: number } | null>(null);
+
+    function updateHighlight(): void {
+        if (focusIndex < 0 || plot.w === 0) {
+            highlightPoint = null;
+            return;
+        }
+        const s = samplesByIndex.get(focusIndex);
+        if (!s) {
+            highlightPoint = null;
+            return;
+        }
+        const xv = paramValue(s, xKey);
+        const yv = paramValue(s, yKey);
+        if (!Number.isFinite(xv) || !Number.isFinite(yv)) {
+            highlightPoint = null;
+            return;
+        }
+        highlightPoint = {
+            x: plot.l + norm(xv, xRange, xLog) * plot.w,
+            y: plot.t + (1 - norm(yv, yRange, yLog)) * plot.h
         };
-    });
+    }
 
     function format(key: Param, value: number): string {
         if (key === 'e') return value.toFixed(3);
@@ -367,6 +387,7 @@
         const n = Math.min(samples.length, MAX_POINTS);
         if (n === 0 || elCurrent.length === 0) {
             geometry.setDrawRange(0, 0);
+            updateHighlight();
             renderer.render(scene, camera);
             return;
         }
@@ -378,15 +399,19 @@
         const h = plot.h;
         for (let k = 0; k < n; k++) {
             const s = samples[k];
-            position.setXYZ(
-                k,
-                l + norm(paramValue(s, xKey), xRange, xLog) * w,
-                t + (1 - norm(paramValue(s, yKey), yRange, yLog)) * h,
-                0
-            );
+            const xn = norm(paramValue(s, xKey), xRange, xLog);
+            const yn = norm(paramValue(s, yKey), yRange, yLog);
+            if (!Number.isFinite(xn) || !Number.isFinite(yn)) {
+                // NaN row (failed propagation off the worker) — park the dot far
+                // offscreen so it can't poison the geometry's bounding sphere.
+                position.setXYZ(k, -10000, -10000, 0);
+                continue;
+            }
+            position.setXYZ(k, l + xn * w, t + (1 - yn) * h, 0);
         }
         position.needsUpdate = true;
         geometry.setDrawRange(0, n);
+        updateHighlight();
         renderer.render(scene, camera);
     }
 
@@ -440,6 +465,8 @@
     function onPointerUp(event: PointerEvent): void {
         const index = pick(event);
         if (index !== null) trackerState.pinnedIndex = samples[index].index;
+        // Clicking empty space unpins, matching the globe's click behavior.
+        else trackerState.pinnedIndex = -1;
     }
 
     function onHandleDown(event: PointerEvent): void {
@@ -476,6 +503,8 @@
     let rafId = 0;
 
     // Per-frame: blend the last two snapshots into the current element values.
+    // Angular channels (raan, argp, m, u) blend along the shortest arc so the
+    // 359°→0° wrap of one orbit period doesn't drag points across the chart.
     function frame(): void {
         rafId = requestAnimationFrame(frame);
         if (elCurrent.length === 0) return;
@@ -483,11 +512,7 @@
         let blend = span > 0 ? (Date.now() - elPrevEpoch) / span : 1;
         if (blend < 0) blend = 0;
         else if (blend > 1) blend = 1;
-        for (let k = 0; k < elCurrent.length; k++) {
-            const a = k < elPrev.length ? elPrev[k] : (elNext[k] ?? 0);
-            const b = k < elNext.length ? elNext[k] : a;
-            elCurrent[k] = a + (b - a) * blend;
-        }
+        blendInto(elPrev, elNext, elCurrent, blend, 7, [3, 4, 5, 6]);
         updatePoints();
     }
 
@@ -542,13 +567,20 @@
         const unsubscribe = propagation.subscribe((message) => {
             if (message.type !== 'positions' || !message.elements || message.epoch === undefined)
                 return;
-            if (elNext.length !== message.elements.length) {
+            // A new catalog (same or different size) must not blend into the
+            // previous one — snap straight to the new snapshot.
+            if (message.generation !== catalogGen) {
+                catalogGen = message.generation ?? 0;
                 elPrev = message.elements;
                 elPrevEpoch = message.epoch;
-            } else {
-                elPrev = elNext;
-                elPrevEpoch = elNextEpoch;
+                elNext = message.elements;
+                elNextEpoch = message.epoch;
+                elCurrent = new Float32Array(message.elements);
+                layout();
+                return;
             }
+            elPrev = elNext;
+            elPrevEpoch = elNextEpoch;
             elNext = message.elements;
             elNextEpoch = message.epoch;
             if (elCurrent.length !== message.elements.length) {
@@ -753,11 +785,11 @@
                         </div>
                     {/if}
 
-                    {#if highlightPos}
+                    {#if highlightPoint}
                         <div
                             class="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white"
-                            style:left="{highlightPos.x}px"
-                            style:top="{highlightPos.y}px"
+                            style:left="{highlightPoint.x}px"
+                            style:top="{highlightPoint.y}px"
                             style:width="10px"
                             style:height="10px"
                         ></div>

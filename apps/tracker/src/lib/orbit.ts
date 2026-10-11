@@ -1,4 +1,3 @@
-import { twoline2satrec, propagate } from 'satellite.js';
 import type { EciVec3 } from 'satellite.js';
 
 export interface OrbitalElements {
@@ -16,22 +15,39 @@ const J2 = 1.08262668e-3;
 const RAD2DEG = 180 / Math.PI;
 const DEG2RAD = Math.PI / 180;
 
+/** Which element set to plot: the frozen TLE epoch, the J2-advanced mean orbit, or the live osculating state. */
+export type ElementMode = 'epoch' | 'smoothed' | 'instantaneous';
+
+/** The 7 quantities the graph plots per satellite: the six elements plus `u`. */
+export type PlottedElements = OrbitalElements & { u: number };
+
 /**
- * Classical (Keplerian) orbital elements from a TLE line 2.
- * Two-body only — no perturbations. Returns null if the line is unparsable.
+ * The plotted element set for the given mode. Instantaneous mode prefers the
+ * true osculating state, but falls back to the mean elements when the state
+ * angles are undefined (equatorial orbits, hyperbolic states) — NaN must never
+ * reach the graph's position buffer, where it would corrupt the bounding
+ * sphere. Returns null if no finite element set exists.
  */
-export function orbitalElements(line2: string): OrbitalElements | null {
-    if (typeof line2 !== 'string' || line2.length < 63) return null;
-    const i = parseFloat(line2.slice(8, 16));
-    const raan = parseFloat(line2.slice(17, 25));
-    const e = parseFloat(`0.${line2.slice(26, 33).trim()}`);
-    const argp = parseFloat(line2.slice(34, 42));
-    const m = parseFloat(line2.slice(43, 51));
-    const n = parseFloat(line2.slice(52, 63)); // mean motion, revs/day
-    if (![i, raan, e, argp, m, n].every(Number.isFinite) || n <= 0) return null;
-    const nRadPerSec = (n * 2 * Math.PI) / 86400;
-    const a = Math.cbrt(EARTH_MU / (nRadPerSec * nRadPerSec));
-    return { a, e, i, raan, argp, m };
+export function elementsFor(
+    mode: ElementMode,
+    epochEl: OrbitalElements,
+    nRadPerSec: number,
+    dtSeconds: number,
+    r: EciVec3<number>,
+    velocity: unknown
+): PlottedElements | null {
+    if (mode === 'instantaneous' && velocity && typeof velocity !== 'boolean') {
+        const st = elementsFromState(r, velocity as EciVec3<number>);
+        if (st && [st.a, st.e, st.i, st.raan, st.argp, st.m, st.u].every(Number.isFinite)) {
+            return st;
+        }
+    }
+    const base = mode === 'epoch' ? epochEl : propagateMeanElements(epochEl, nRadPerSec, dtSeconds);
+    const out: PlottedElements = { ...base, u: argumentOfLatitudeFromElements(base) };
+    if (![out.a, out.e, out.i, out.raan, out.argp, out.m, out.u].every(Number.isFinite)) {
+        return null;
+    }
+    return out;
 }
 
 /**
@@ -61,24 +77,6 @@ export function argumentOfLatitudeFromState(r: EciVec3<number>, v: EciVec3<numbe
     const u = Math.atan2(r.x * mx + r.y * my + r.z * mz, r.x * nx + r.y * ny);
     if (!Number.isFinite(u)) return NaN;
     return (((u * RAD2DEG) % 360) + 360) % 360;
-}
-
-/**
- * Argument of latitude at a given time, from the SGP4-propagated position.
- * Returns degrees in [0, 360), or null if the TLE is unparsable / propagation fails.
- */
-export function argumentOfLatitudeAt(line1: string, line2: string, dateMs: number): number | null {
-    let satrec;
-    try {
-        satrec = twoline2satrec(line1, line2);
-    } catch {
-        return null;
-    }
-    if (satrec.error !== 0) return null;
-    const { position: r, velocity: v } = propagate(satrec, new Date(dateMs));
-    if (typeof r === 'boolean' || typeof v === 'boolean' || !r || !v) return null;
-    const u = argumentOfLatitudeFromState(r as EciVec3<number>, v as EciVec3<number>);
-    return Number.isFinite(u) ? u : null;
 }
 
 /**

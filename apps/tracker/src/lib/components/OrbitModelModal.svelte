@@ -162,7 +162,26 @@
 
     $effect(() => {
         const onKey = (event: KeyboardEvent): void => {
-            if (event.key === 'Escape') onclose();
+            if (event.key === 'Escape') {
+                onclose();
+                return;
+            }
+            // Tab trap: with aria-modal set, focus must stay inside the dialog.
+            if (event.key === 'Tab' && dialog) {
+                const focusables = dialog.querySelectorAll<HTMLElement>(
+                    'button, input, [tabindex="0"]'
+                );
+                if (focusables.length === 0) return;
+                const first = focusables[0];
+                const last = focusables[focusables.length - 1];
+                if (event.shiftKey && document.activeElement === first) {
+                    event.preventDefault();
+                    last.focus();
+                } else if (!event.shiftKey && document.activeElement === last) {
+                    event.preventDefault();
+                    first.focus();
+                }
+            }
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);

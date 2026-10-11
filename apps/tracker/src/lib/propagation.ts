@@ -1,17 +1,50 @@
 import type { ParsedSatellite } from '$lib/satellites/types';
+import type { ElementMode } from './orbit';
 
-export type ElementMode = 'epoch' | 'smoothed' | 'instantaneous';
+export type { ElementMode };
 
 export interface WorkerResponse {
     type: string;
     requestId?: number;
     count?: number;
     epoch?: number;
+    /** Worker-side catalog version; bumped on every init so views can drop stale snapshots. */
+    generation?: number;
     colors?: Float32Array;
     positions?: Float32Array;
     elements?: Float32Array;
     message?: string;
     ranges?: number[];
+}
+
+/**
+ * Blend the `prev -> next` snapshots into `current` (`stride` floats per item).
+ * Channels named in `angleOffsets` are degrees wrapped to [0, 360), so they
+ * blend along the shortest arc — a 359°→0° wrap never drags a point halfway
+ * across the chart. A NaN endpoint means "unknown" (a failed propagation) and
+ * is replaced by the other endpoint rather than poisoning the blend.
+ */
+export function blendInto(
+    prev: Float32Array,
+    next: Float32Array,
+    current: Float32Array,
+    blend: number,
+    stride: number,
+    angleOffsets: readonly number[]
+): void {
+    const angles = new Set(angleOffsets);
+    for (let i = 0; i < current.length; i++) {
+        const a = i < prev.length ? prev[i] : next[i];
+        const b = i < next.length ? next[i] : a;
+        if (!Number.isFinite(a)) current[i] = b;
+        else if (!Number.isFinite(b)) current[i] = a;
+        else if (angles.has(i % stride)) {
+            const d = ((((b - a) % 360) + 540) % 360) - 180;
+            current[i] = (((a + d * blend) % 360) + 360) % 360;
+        } else {
+            current[i] = a + (b - a) * blend;
+        }
+    }
 }
 
 type Listener = (message: WorkerResponse) => void;
@@ -66,7 +99,7 @@ class PropagationService {
             );
             this.pending = false;
             this.lastRequestWall = 0;
-            if (this.count > 0) this.startLoop();
+            if (this.count > 0 && this.listeners.size > 0) this.startLoop();
             else this.stopLoop();
         } else if (message.type === 'positions' && message.positions && message.elements) {
             this.pending = false;
@@ -108,7 +141,16 @@ class PropagationService {
 
     subscribe(listener: Listener): () => void {
         this.listeners.add(listener);
-        return () => this.listeners.delete(listener);
+        // Wake the propagation loop back up for the first (re)subscriber.
+        if (this.listeners.size === 1 && this.count > 0) this.startLoop();
+        return () => {
+            this.listeners.delete(listener);
+            // No viewers — let the worker idle until someone listens again.
+            if (this.listeners.size === 0) {
+                this.pending = false;
+                this.stopLoop();
+            }
+        };
     }
 
     init(satellites: ParsedSatellite[], scale: number, mode: ElementMode): void {

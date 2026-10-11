@@ -7,7 +7,7 @@ import { gstime } from 'satellite.js';
 import { base } from '$app/paths';
 import { trackerState } from '$lib/state.svelte';
 import type { ParsedSatellite } from '$lib/satellites/types';
-import { propagation, type WorkerResponse } from '$lib/propagation';
+import { propagation, blendInto, type WorkerResponse } from '$lib/propagation';
 
 const EARTH_RADIUS_KM = 6371;
 export const GLOBE_RADIUS = 6.4;
@@ -79,6 +79,7 @@ export class GlobeScene {
     private nextPositions: Float32Array | null = null;
     private prevEpoch = 0;
     private nextEpoch = 0;
+    private catalogGeneration = 0;
     private raf = 0;
     private disposed = false;
 
@@ -314,6 +315,7 @@ export class GlobeScene {
     private onReady(message: WorkerResponse): void {
         const count = message.count ?? 0;
         this.ready = true;
+        this.catalogGeneration = message.generation ?? 0;
         this.positionArray = new Float32Array(count * 3);
         this.pointsGeometry.setAttribute(
             'position',
@@ -333,6 +335,8 @@ export class GlobeScene {
 
     private onPositions(message: WorkerResponse): void {
         if (!this.ready) return;
+        // Drop snapshots from before the current catalog's init (stale race).
+        if (message.generation !== this.catalogGeneration) return;
         const positions = message.positions;
         const epoch = message.epoch ?? Date.now();
         if (!positions) return;
@@ -584,6 +588,9 @@ export class GlobeScene {
             new THREE.BufferAttribute(new Float32Array(0), 3)
         );
         this.ready = false;
+        // Positions from the old catalog arrive before the new 'ready' — with
+        // the generation already nulled here they are dropped.
+        this.catalogGeneration = -1;
         // Hide dots until onReady installs the new catalog's buffers.
         this.points.visible = false;
         this.prevPositions = null;
@@ -685,11 +692,7 @@ export class GlobeScene {
         let blend = span > 0 ? (Date.now() - this.prevEpoch) / span : 1;
         if (blend < 0) blend = 0;
         if (blend > 1) blend = 1;
-        const target = this.nextPositions;
-        const start = this.prevPositions;
-        for (let i = 0; i < this.positionArray.length; i++) {
-            this.positionArray[i] = start[i] + (target[i] - start[i]) * blend;
-        }
+        blendInto(this.prevPositions, this.nextPositions, this.positionArray, blend, 3, []);
         this.pointsGeometry.attributes.position.needsUpdate = true;
     }
 

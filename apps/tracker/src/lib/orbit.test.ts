@@ -1,7 +1,5 @@
 import { describe, it, expect } from 'bun:test';
 import {
-    orbitalElements,
-    argumentOfLatitudeAt,
     eccentricAnomaly,
     trueAnomalyFromMean,
     meanAnomalyFromTrue,
@@ -10,58 +8,9 @@ import {
     elementsToPosition,
     orbitalPeriodSeconds,
     secularRates,
-    propagateMeanElements
+    propagateMeanElements,
+    elementsFor
 } from './orbit';
-
-// ISS, real TLE line 2.
-const ISS_LINE2 = '2 25544  51.6400 200.0000 0005000 100.0000 260.0000 15.49000000400000';
-
-// A real Starlink TLE (epoch 2026 day 283.557).
-const SL_L1 = '1 44714U 19074B   26283.55700749  .00047721  00000-0  45157-3 0  9995';
-const SL_L2 = '2 44714  53.1452 228.6792 0002957 108.6784 251.4553 15.66512426382214';
-const SL_EPOCH = Date.UTC(2026, 0, 1) + (283.55700749 - 1) * 86400000;
-
-describe('orbitalElements', () => {
-    it('parses the classical elements', () => {
-        const el = orbitalElements(ISS_LINE2)!;
-        expect(el.i).toBeCloseTo(51.64, 4);
-        expect(el.raan).toBeCloseTo(200.0, 4);
-        expect(el.e).toBeCloseTo(0.0005, 6);
-        expect(el.argp).toBeCloseTo(100.0, 4);
-        expect(el.m).toBeCloseTo(260.0, 4);
-    });
-
-    it('derives semi-major axis from mean motion (ISS is ~6796 km)', () => {
-        const el = orbitalElements(ISS_LINE2)!;
-        expect(el.a).toBeGreaterThan(6700);
-        expect(el.a).toBeLessThan(6900);
-    });
-
-    it('returns null for unparsable input', () => {
-        expect(orbitalElements('')).toBeNull();
-        expect(orbitalElements('garbage')).toBeNull();
-    });
-});
-
-describe('argumentOfLatitudeAt', () => {
-    it('is ~0 at the TLE epoch (near-circular elements are given at the node)', () => {
-        const u = argumentOfLatitudeAt(SL_L1, SL_L2, SL_EPOCH)!;
-        expect(Math.min(u, 360 - u)).toBeLessThan(1);
-    });
-
-    it('advances ~90° in a quarter of a period', () => {
-        const u0 = argumentOfLatitudeAt(SL_L1, SL_L2, SL_EPOCH)!;
-        // period ≈ 1440/15.665 min ≈ 91.9 min; a quarter is ~23 min.
-        const u1 = argumentOfLatitudeAt(SL_L1, SL_L2, SL_EPOCH + 23 * 60000)!;
-        const du = (((u1 - u0) % 360) + 360) % 360;
-        expect(du).toBeGreaterThan(80);
-        expect(du).toBeLessThan(100);
-    });
-
-    it('returns null for unparsable input', () => {
-        expect(argumentOfLatitudeAt('garbage', 'garbage', SL_EPOCH)).toBeNull();
-    });
-});
 
 describe('two-body elements model', () => {
     it('solves Kepler for a circular orbit (E = M)', () => {
@@ -140,5 +89,54 @@ describe('mean-element propagation', () => {
         expect(out.e).toBe(el.e);
         expect(out.i).toBe(el.i);
         expect(out.m).toBeCloseTo(90, 3);
+    });
+});
+
+describe('plotted elements', () => {
+    const N = (15.49 * 2 * Math.PI) / 86400;
+    const EL = { a: 6796, e: 0.3, i: 51.64, raan: 100, argp: 50, m: 30 };
+    // An exact equatorial state: r along +x, v along +y — the node is undefined.
+    const EQ_R = { x: 7000, y: 0, z: 0 };
+    const EQ_V = { x: 0, y: Math.sqrt(398600.4418 / 7000), z: 0 };
+    // A valid inclined circular state: r at latitude 51.64° on the node plane,
+    // v purely along +y (prograde, equator-ward through the descending node).
+    const INCL_DEG = 51.64;
+    const INCL_R = {
+        x: 7000 * Math.cos((INCL_DEG * Math.PI) / 180),
+        y: 0,
+        z: 7000 * Math.sin((INCL_DEG * Math.PI) / 180)
+    };
+    const INCL_V = { x: 0, y: Math.sqrt(398600.4418 / 7000), z: 0 };
+
+    it('freezes at the TLE epoch elements for epoch mode', () => {
+        const el = elementsFor('epoch', EL, N, 1e6, INCL_R, INCL_V)!;
+        expect(el.raan).toBe(EL.raan);
+        expect(el.m).toBe(EL.m);
+        expect(el.u).toBeCloseTo(argumentOfLatitudeFromElements(EL), 6);
+    });
+
+    it('advances the mean elements for smoothed mode', () => {
+        const dt = (2 * Math.PI) / N / 4;
+        const advanced = propagateMeanElements(EL, N, dt);
+        const expected = { ...advanced, u: argumentOfLatitudeFromElements(advanced) };
+        expect(elementsFor('smoothed', EL, N, dt, INCL_R, INCL_V)).toEqual(expected);
+    });
+
+    it('uses the live state elements in instantaneous mode', () => {
+        const el = elementsFor('instantaneous', EL, N, 0, INCL_R, INCL_V)!;
+        expect(el.a).toBeCloseTo(7000, 3);
+        expect(el.i).toBeCloseTo(51.64, 3);
+        // u is measured from the node; with r on the node plane it is ~90.
+        expect(el.u).toBeCloseTo(90, 3);
+        // Distinct from the mean-elements fallback (u = argp + ν there).
+        expect(el.u).not.toBeCloseTo(argumentOfLatitudeFromElements(EL), 0);
+    });
+
+    it('falls back to mean elements when the instantaneous state has no node (equatorial)', () => {
+        const el = elementsFor('instantaneous', EL, N, 0, EQ_R, EQ_V)!;
+        expect(el).toEqual(elementsFor('smoothed', EL, N, 0, EQ_R, EQ_V)!);
+        for (const v of [el.a, el.e, el.i, el.raan, el.argp, el.m, el.u]) {
+            expect(Number.isFinite(v)).toBe(true);
+        }
     });
 });
