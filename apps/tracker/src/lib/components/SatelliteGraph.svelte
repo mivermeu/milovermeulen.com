@@ -12,6 +12,10 @@
     type Param = BaseParam | DerivedParam;
 
     const EARTH_RADIUS_KM = 6371;
+    // Log axes clamp to this floor so altitude ~0 (or negative, for decaying
+    // orbits) doesn't blow up log10; it never affects `a` or period.
+    const LOG_FLOOR = 1;
+    const LOG_PARAMS = new Set<Param>(['a', 'period', 'perigee', 'apogee']);
 
     // The six fundamental Keplerian elements. `short` is the symbol, `label` the
     // precise axis name, and `desc` a plain-language explanation for the tooltip.
@@ -225,7 +229,11 @@
         log: boolean,
         limit: [number, number] | undefined
     ): [number, number] {
-        if (log) return [min / 10 ** 0.02, max * 10 ** 0.02];
+        if (log) {
+            const lo = Math.max(LOG_FLOOR, min);
+            const hi = Math.max(LOG_FLOOR, max);
+            return [lo / 10 ** 0.02, hi * 10 ** 0.02];
+        }
         const pad = (max - min || 1) * 0.04;
         let lo = Math.max(0, min - pad);
         let hi = max + pad;
@@ -240,7 +248,7 @@
         if (log) {
             const l0 = Math.log10(range[0]);
             const l1 = Math.log10(range[1]);
-            return (Math.log10(value) - l0) / (l1 - l0 || 1);
+            return (Math.log10(Math.max(LOG_FLOOR, value)) - l0) / (l1 - l0 || 1);
         }
         return (value - range[0]) / (range[1] - range[0] || 1);
     }
@@ -318,8 +326,8 @@
 
         // The semi-major axis spans LEO (~6,800 km) to deep-space probes
         // (>500,000 km), so it gets a log scale; the others stay linear.
-        const xIsLog = xKey === 'a' || xKey === 'period';
-        const yIsLog = yKey === 'a' || yKey === 'period';
+        const xIsLog = LOG_PARAMS.has(xKey);
+        const yIsLog = LOG_PARAMS.has(yKey);
         const xr = axisRange(xmin, xmax, xIsLog, LIMITS[xKey]);
         const yr = axisRange(ymin, ymax, yIsLog, LIMITS[yKey]);
         xRange = xr;
