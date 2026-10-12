@@ -217,8 +217,13 @@ class PropagationService {
         this.ensure()?.postMessage({ type: 'mode', mode });
     }
 
-    buildOrbits(epoch: number, requestId: number, frame: 'ecf' | 'eci', twoPeriods: boolean): void {
-        this.ensure()?.postMessage({ type: 'buildOrbits', epoch, requestId, frame, twoPeriods });
+    buildOrbits(
+        epoch: number,
+        requestId: number,
+        frame: 'ecf' | 'eci',
+        onlyIndex: number | null
+    ): void {
+        this.ensure()?.postMessage({ type: 'buildOrbits', epoch, requestId, frame, onlyIndex });
     }
 
     /** Nadir subpoint polyline for one satellite (worker index), one period into the future. */
