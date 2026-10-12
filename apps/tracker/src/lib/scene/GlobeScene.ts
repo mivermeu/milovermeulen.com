@@ -787,13 +787,27 @@ export class GlobeScene {
             const endIdx = firstVertexAtOrAfter(times, vOff, vCount, target + period);
             if (endIdx === head) continue;
             const outLimit = endIdx < 0 ? vCount : endIdx; // exclusive vertex
-            const dotX = this.positionArray[s * 3];
-            const dotY = this.positionArray[s * 3 + 1];
-            const dotZ = this.positionArray[s * 3 + 2];
-            // No anchor splice before the bake's head (backward scrub — the
-            // bake has no material behind its start); the anchor edges in
-            // directly otherwise.
-            const anchorOk = target >= 0 && Number.isFinite(dotX + dotY + dotZ);
+            const dotX0 = this.positionArray[s * 3];
+            const dotY0 = this.positionArray[s * 3 + 1];
+            const dotZ0 = this.positionArray[s * 3 + 2];
+            const anchorOk = Number.isFinite(dotX0 + dotY0 + dotZ0) && target >= 0;
+            // In ECI mode the merged/highlight meshes rotate by the build-vs-
+            // render GMST delta each frame, but the anchor would splice in as
+            // the raw ECF dot position — un-rotated, the mesh's frame rotation
+            // sweeps it away from the actual dot and each rebuild snaps it
+            // back (the observed bursts). Rotate the anchor into the chain's
+            // baked frame so the mesh rotation lands it exactly on the dot.
+            let dotX = dotX0;
+            let dotY = dotY0;
+            if (anchorOk && trackerState.referenceFrame === 'eci') {
+                const delta = this.orbitBuildGmst - gstime(new Date(renderEpochMs()));
+                if (delta !== 0) {
+                    const c = Math.cos(delta);
+                    const s = Math.sin(delta);
+                    dotX = c * dotX0 + s * dotY0;
+                    dotY = -s * dotX0 + c * dotY0;
+                }
+            }
             const out = isFocus ? this.highlightScratch! : scratch;
             const outBase = isFocus ? 0 : slotOff * 6;
             let n = 0; // edges written
@@ -822,7 +836,7 @@ export class GlobeScene {
             const vy = (k: number) => positions[(vOff + k) * 3 + 1];
             const vz = (k: number) => positions[(vOff + k) * 3 + 2];
             if (anchorOk) {
-                put(dotX, dotY, dotZ, vx(head), vy(head), vz(head));
+                put(dotX, dotY, dotZ0, vx(head), vy(head), vz(head));
             }
             for (let k = head; k + 1 < outLimit; k++) {
                 put(vx(k), vy(k), vz(k), vx(k + 1), vy(k + 1), vz(k + 1));

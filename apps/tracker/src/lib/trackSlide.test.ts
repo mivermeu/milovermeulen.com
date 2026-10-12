@@ -73,6 +73,20 @@ describe('slideUniformWindow', () => {
         expect(out[out.length - 3]).toBeCloseTo(6, 6);
     });
 
+    it('interpolates the tail inside the last grid step', () => {
+        const out = new Float32Array(4 * 6);
+        // head 2.5 of a 4-step window: the end sits halfway between v6 and v7.
+        const n = slideUniformWindow(master, 0.625, 4, [2.5, 0, 0], out);
+        expect(n).toBe(4);
+        expect(out[out.length - 6]).toBeCloseTo(5, 6); // pair a = v5
+        expect(out[out.length - 3]).toBeCloseTo(6.5, 6); // pair b.x = lerped tail
+        expect(out[out.length - 1]).toBeCloseTo(0, 6); // pair b.z unchanged
+        // Integer-head windows are unchanged (alpha 0 → the plain vertex).
+        const whole = new Float32Array(4 * 6);
+        slideUniformWindow(master, 0.25, 4, [1, 0, 0], whole);
+        expect(whole[whole.length - 3]).toBeCloseTo(5, 6);
+    });
+
     it('refuses a window running past the baked span', () => {
         const out = new Float32Array(4 * 6);
         // headFrac 1.3 would need vertices 6..9 past the 9-vertex master.

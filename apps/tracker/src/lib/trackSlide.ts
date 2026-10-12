@@ -32,8 +32,12 @@ export function isContiguousPairs(sub: Float32Array, eps = 1e-3): boolean {
  * master's second half — `windowSteps` samples after the anchor, so the worker
  * must have baked span ≥ 2 × window. The first vertex is the exact `anchor`
  * (the satellite's live subpoint); later vertices come straight from the
- * master's uniform time grid. Ground tracks use this (128 uniform steps per
- * period); orbit chains are ν-sampled and search their window by time instead.
+ * master's uniform time grid — and the window END is a lerp of the
+ * bracketing vertices at exactly head + windowSteps (the fractional part
+ * of `headFrac`), so the drawn tail glides continuously between grid steps
+ * instead of hopping one whole step at a time. Ground tracks use this (128
+ * uniform steps per period); orbit chains are ν-sampled and search their
+ * window by time instead.
  *
  * Returns the number of pairs written, or −1 when the window would run past
  * the baked span (a badly overdue rebuild — the caller keeps the last frame).
@@ -52,26 +56,37 @@ export function slideUniformWindow(
     const first = Math.floor(head);
     if (!Number.isFinite(headFrac) || headFrac < 0) return -1;
     if (windowSteps < 1 || out.length !== windowSteps * 6) return -1;
-    if (first + windowSteps > masterVertices - 1) return -1;
+    // The interpolated tail reads one vertex past the window end.
+    if (first + windowSteps + 1 > masterVertices - 1) return -1;
+    const alpha = head - first; // fractional position inside the grid step
 
     let w = 0;
     for (let j = 0; j < windowSteps; j++) {
-        const srcA = (first + (j === 0 ? 0 : j)) * 6;
-        const srcB = (first + j + 1) * 6;
         if (j === 0) {
-            // Anchor edges in directly (ground tracks are closed loops; the
-            // anchor sits on the window's first startTime slot).
             out[w++] = anchor[0];
             out[w++] = anchor[1];
             out[w++] = anchor[2];
         } else {
+            const srcA = (first + j) * 6;
             out[w++] = master[srcA];
             out[w++] = master[srcA + 1];
             out[w++] = master[srcA + 2];
         }
-        out[w++] = master[srcB];
-        out[w++] = master[srcB + 1];
-        out[w++] = master[srcB + 2];
+        let bx = master[(first + j + 1) * 6];
+        let by = master[(first + j + 1) * 6 + 1];
+        let bz = master[(first + j + 1) * 6 + 2];
+        if (j === windowSteps - 1 && alpha > 0) {
+            // Tail at head + windowSteps + alpha: lerp toward the next vertex.
+            const nx = master[(first + windowSteps + 1) * 6];
+            const ny = master[(first + windowSteps + 1) * 6 + 1];
+            const nz = master[(first + windowSteps + 1) * 6 + 2];
+            bx += (nx - bx) * alpha;
+            by += (ny - by) * alpha;
+            bz += (nz - bz) * alpha;
+        }
+        out[w++] = bx;
+        out[w++] = by;
+        out[w++] = bz;
     }
     return windowSteps;
 }
