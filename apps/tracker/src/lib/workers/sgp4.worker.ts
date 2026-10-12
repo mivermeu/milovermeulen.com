@@ -6,6 +6,7 @@ import { EARTH_MEAN_RADIUS_KM, semiMajorAxisKm, tleEpochMs } from '$lib/astro';
 import {
     capCandidates,
     findPasses,
+    planeScreensOut,
     PASS_SEARCH_MAX_SATS,
     type PassCandidate,
     type PassSearchResult,
@@ -350,12 +351,21 @@ async function runPassSearch(message: PassesMessage): Promise<void> {
     const generation = catalogVersion;
     // Worker-catalog satellites map through their srcIndex to the original
     // catalog indices provided with the request.
-    const candidates: PassCandidate[] = satellites.map((sat) => ({
-        name: sat.name,
-        rec: sat.rec,
-        index: message.originalIndices[sat.srcIndex] ?? sat.srcIndex
-    }));
-    const cap = capCandidates(candidates, message.maxSats ?? PASS_SEARCH_MAX_SATS);
+    const minElDeg = message.minElDeg ?? 10;
+    // The plane-cone screen costs no SGP4 calls — apply it to the FULL pool
+    // before the count cap, so a satellite that can pass but would be capped
+    // out by 2000 cheaper low-orbit neighbors is still searched when it is
+    // such a case. (findPasses re-applies the screen internally; harmless.)
+    const screened: PassCandidate[] = [];
+    for (const sat of satellites) {
+        if (planeScreensOut(sat.rec, message.observer.latDeg, minElDeg)) continue;
+        screened.push({
+            name: sat.name,
+            rec: sat.rec,
+            index: message.originalIndices[sat.srcIndex] ?? sat.srcIndex
+        });
+    }
+    const cap = capCandidates(screened, message.maxSats ?? PASS_SEARCH_MAX_SATS);
     const iter = findPasses({
         candidates: cap.capped,
         observer: message.observer,

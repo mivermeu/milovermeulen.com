@@ -11,6 +11,7 @@ import {
 import {
     capCandidates,
     findPasses,
+    planeScreensOut,
     type PassCandidate,
     type PassRow,
     type PassVisibilityGate
@@ -533,6 +534,86 @@ describe('findPasses — edge cases', () => {
             const match = byStart.get(p.startMs);
             expect(match).toBeDefined();
             expect(match?.maxElDeg).toBeCloseTo(p.maxElDeg, 1);
+        }
+    });
+});
+
+describe('plane screen — near-boundary sun-sync regression (C1)', () => {
+    // Regression for the plane-screen aliasing bug: sun-sync (i ≈ 98.2°)
+    // orbits sweep their plane through mid-latitude observers twice daily,
+    // and a coarse fixed-interval sample of the plane distance used to miss
+    // every daily trough — screening out real passes. The analytic envelope
+    // must keep them, and the search's counts must still match brute force.
+    const LAT = 47.38;
+    const LON = 8.54;
+    const rec = (raanDeg: number) =>
+        makeCandidate({
+            name: `SUNSYNC-${raanDeg}`,
+            index: 31,
+            satnum: 300 + raanDeg,
+            epochYear: 26,
+            epochDay: 1,
+            inclinationDeg: 98.2,
+            raanDeg,
+            ecc7: 10,
+            argpDeg: 0,
+            meanAnomalyDeg: 0,
+            meanMotionRevPerDay: 14.9
+        }).rec;
+
+    it('screens no sun-sync satellite regardless of RAAN phase', () => {
+        for (let raan = 0; raan < 360; raan += 45) {
+            expect(planeScreensOut(rec(raan), LAT, 10)).toBe(false);
+        }
+    });
+
+    it('finds the brute-force passes over 7 days for a near-boundary RAAN', () => {
+        // RAAN 20° — reviewer's failing trial (search returned 0 of 28 passes).
+        const rec20 = rec(20);
+        const start = EPOCH_MS;
+        const end = EPOCH_MS + 7 * 86_400_000;
+        const iteration = findPasses({
+            candidates: [{ name: 'SUNSYNC-20', rec: rec20, index: 31 }],
+            observer: { latDeg: LAT, lonDeg: LON },
+            startMs: start,
+            endMs: end,
+            minElDeg: 10,
+            maxPasses: 50
+        });
+        let result = iteration.next();
+        while (!result.done) result = iteration.next();
+        expect(result.value.partial).toBe(false);
+
+        const reference = brutePasses(rec20, LAT, LON, start, end);
+        expect(reference.length).toBeGreaterThan(10);
+        expect(result.value.passes.length).toBe(reference.length);
+        result.value.passes.forEach((found, i) => {
+            const expected = reference[i];
+            expect(Math.abs(found.startMs - expected.startMs)).toBeLessThanOrEqual(3000);
+            expect(Math.abs(found.endMs - expected.endMs)).toBeLessThanOrEqual(3000);
+            expect(Math.abs(found.maxElDeg - expected.maxElDeg)).toBeLessThanOrEqual(0.5);
+        });
+    });
+
+    it('keeps the search correct across a RAAN sweep (passes always found, matching brute force)', () => {
+        // A 3-day window keeps the brute force affordable across 8 RAANs.
+        const start = EPOCH_MS;
+        const end = EPOCH_MS + 3 * 86_400_000;
+        for (let raan = 0; raan < 360; raan += 45) {
+            const r = rec(raan);
+            const iteration = findPasses({
+                candidates: [{ name: `SUNSYNC-${raan}`, rec: r, index: 31 }],
+                observer: { latDeg: LAT, lonDeg: LON },
+                startMs: start,
+                endMs: end,
+                minElDeg: 10,
+                maxPasses: 50
+            });
+            let result = iteration.next();
+            while (!result.done) result = iteration.next();
+            const reference = brutePasses(r, LAT, LON, start, end);
+            expect(reference.length).toBeGreaterThan(5);
+            expect(result.value.passes.length, `raan ${raan}`).toBe(reference.length);
         }
     });
 });

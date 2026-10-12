@@ -40,6 +40,12 @@
             hasCatalog = (message.count ?? 0) > 0;
             return;
         }
+        // A worker-level error means no 'passes' response is coming; clear the
+        // spinner so the panel doesn't promise a search forever.
+        if (message.type === 'error') {
+            searching = false;
+            return;
+        }
         if (message.type !== 'passes') return;
         if (message.requestId !== seq) return;
         if ((message.generation ?? -1) !== generation) return;
@@ -283,33 +289,32 @@
             </button>
         </div>
 
-        <div class="min-h-0 flex-1 overflow-y-auto" aria-live="polite">
+        <div class="min-h-0 flex-1 overflow-y-auto">
             {#if searching}
-                <p class="py-3 text-center text-[10px] text-brand-text">
+                <p aria-live="polite" class="py-3 text-center text-[10px] text-brand-text">
                     Searching next {WINDOW_DAYS} days…
                 </p>
             {:else if !hasCatalog || trackerState.satellites.length === 0}
-                <p class="py-3 text-center text-[10px] text-brand-text">
+                <p aria-live="polite" class="py-3 text-center text-[10px] text-brand-text">
                     Catalog is still loading…
                 </p>
             {:else if trackerState.activeIndices.length === 0}
-                <p class="py-3 text-center text-[10px] text-brand-text">
+                <p aria-live="polite" class="py-3 text-center text-[10px] text-brand-text">
                     Nothing is selected in Filters — enable some satellites to search passes.
                 </p>
             {:else if visiblePasses.length === 0}
-                <p class="py-3 text-center text-[10px] text-brand-text">
+                <p aria-live="polite" class="py-3 text-center text-[10px] text-brand-text">
                     No passes above {MIN_EL_DEG}° here in the next {WINDOW_DAYS} days{partial
                         ? ' (search incomplete — try again)'
                         : ''}
                     .
                 </p>
             {:else}
-                <div class="flex flex-col gap-1">
+                <div class="flex flex-col gap-1" aria-live="off">
                     {#each visiblePasses as pass (pass.index + '-' + pass.startMs)}
                         <button
                             type="button"
                             aria-pressed={trackerState.pinnedIndex === pass.index}
-                            aria-label="Pin {pass.name}"
                             onclick={() => togglePin(pass)}
                             class="flex w-full flex-col gap-0.5 rounded border px-2 py-1 text-left transition-colors {trackerState.pinnedIndex ===
                             pass.index

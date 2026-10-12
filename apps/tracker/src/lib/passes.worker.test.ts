@@ -79,17 +79,16 @@ describe('sgp4.worker passes integration', () => {
         expect(response.type).toBe('passes');
         expect(response.requestId).toBe(7);
         expect(response.generation).toBe(generation);
-        // The malformed first entry was dropped at init — worker catalog = 2.
-        expect(response.capInfo).toEqual({ active: 2, searched: 2, capped: false });
+        // The malformed first entry was dropped at init — worker catalog = 2 —
+        // and the full-pool pre-screen (before the cap) drops the 20°-inclined
+        // LOWI, whose plane never comes within 10°+1° of 47.4°N.
+        expect(response.capInfo).toEqual({ active: 1, searched: 1, capped: false });
         // Every row maps to the original index of the satellite that produced it.
         for (const pass of response.passes ?? []) {
-            expect([101, 102]).toContain(pass.index);
+            expect(pass.index).toBe(101);
+            expect(pass.name).toBe('ISS (ZARYA)');
         }
-        // Both satellites can have passes; assert at least the ISS row exists
-        // somewhere with its display name.
-        const names = new Set((response.passes ?? []).map((p) => p.name));
-        expect(names.size).toBeGreaterThanOrEqual(1);
-        expect([...names].every((n) => n === 'ISS (ZARYA)' || n === 'LOWI')).toBe(true);
+        expect((response.passes ?? []).length).toBeGreaterThan(0);
     });
 
     it('rejects a request before any catalog is initialized', () => {

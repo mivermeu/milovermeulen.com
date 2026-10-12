@@ -4,17 +4,11 @@ import {
     gstime,
     propagate,
     type EcfVec3,
+    type EciVec3,
     type LookAngles,
     type SatRec
 } from 'satellite.js';
-import { secularRates } from './orbit';
-import {
-    EARTH_EQUATORIAL_RADIUS_KM,
-    meanMotionRadPerSec,
-    semiMajorAxisKm,
-    tleEpochMs
-} from './astro';
-import type { EciVec3 } from 'satellite.js';
+import { EARTH_EQUATORIAL_RADIUS_KM, meanMotionRadPerSec, semiMajorAxisKm } from './astro';
 
 /**
  * Location-centric pass finding: "which of these satellites will pass above
@@ -40,10 +34,12 @@ import type { EciVec3 } from 'satellite.js';
  * Large sets therefore cost a handful of coarse samples per satellite instead
  * of a full 7-day sweep; tiny sets cost one inexpensive sweep per satellite.
  *
- * Known tolerance: ultra-short grazes (a satellite popping above the
- * threshold for less than one coarse step) can slip between samples. With
- * step = maxDuration/3 that means grazes below ~2.5 minutes for LEO — all of
- * them low-elevation, low-value passes near the 10° ring.
+ * Known tolerance: a tangential graze whose flanking coarse samples sit more
+ * than GRAZE_MARGIN_DEG below the threshold would still slip between samples
+ * — by continuity that requires an impossibly fast excursion for the orbital
+ * classes with real passes, so graze scans close the practical hole (the
+ * below→below gaps with elevated flanks plus each satellite's final tail gap
+ * are re-scanned at ≤ 30 s cadence).
  */
 
 const RAD2DEG = 180 / Math.PI;
@@ -64,6 +60,13 @@ const BISECT_MAX_ITERS = 30;
 const MAX_EL_MAX_ITERS = 60;
 /** Heartbeat cadence: coarse samples evaluated per generator yield (macrotask slicing). */
 const YIELD_EVERY = 400;
+/**
+ * Graze-scan margin (degrees below the threshold): gaps between two
+ * below-threshold coarse samples are re-scanned finely only when both
+ * flanking elevations are within this margin — the by-continuity signature of
+ * a tangential graze that fits inside the step.
+ */
+const GRAZE_MARGIN_DEG = 5;
 
 export interface ObserverLocation {
     /** Geodetic latitude, degrees north. */
@@ -240,8 +243,6 @@ function maxAboveThresholdSec(rec: SatRec, minElDeg: number): number {
     return (2 * psiDeg * DEG2RAD) / (n + OMEGA_EARTH);
 }
 
-const epochMsOf = tleEpochMs;
-
 interface ResolvedParams {
     minElDeg: number;
     maxPasses: number;
@@ -263,47 +264,38 @@ function resolveParams(params: PassSearchParams): ResolvedParams {
 }
 
 /**
- * Stage-1 static screen: is this satellite's orbit plane ever close enough
- * for a pass? The satellite always lies on its orbit's great circle, whose
- * minimum angular distance to the observer equals the observer's angular
- * distance to the (J2-precessing) plane. If that distance exceeds the largest
- * horizon-cone angle over the whole window (with a safety pad), the satellite
- * can never pass and is skipped without a single SGP4 call.
+ * Stage-1 static screen (exported): can this satellite's orbit plane ever
+ * come close enough for a pass at the given observer latitude? The satellite
+ * always lies on the orbit's great circle, so the best a satellite can ever
+ * do equals the observer's angular distance to the orbit plane.
+ *
+ * That distance is `d(t) = |sinI·cosφ·sin(Ω−θ) + cosI·sinφ|` (φ = geodetic
+ * latitude, θ = local sidereal longitude, Ω = ascending node right
+ * ascension). The phase (Ω−θ) advances one full cycle per sidereal day, so
+ * for any window of a day or more the minimum is exactly
+ * `asin(max(0, |cosI·sinφ| − sinI·cosφ))`. Slow J2 RAAN drift can only
+ * tighten the daily envelope and is absorbed by the 1° pad. (An exact
+ * window-minimum would need phase sampling; sampling that phase at fixed
+ * intervals aliases at ~1 sample per day and used to wrongly screen out
+ * whole orbital classes — hence this analytic envelope.)
+ *
+ * Returning true excludes the satellite from a pass search without a single
+ * SGP4 call.
  */
-function planeScreensOut(rec: SatRec, resolved: ResolvedParams): boolean {
+export function planeScreensOut(rec: SatRec, observerLatDeg: number, minElDeg = 10): boolean {
     const n = meanMotionRadPerSec(rec);
     if (!(n > 0)) return true;
     const psiDeg = maxCentralAngleDeg(
         semiMajorAxisKm(rec) * (1 + Math.min(rec.ecco, 0.99)),
-        resolved.minElDeg
+        minElDeg
     );
     if (!(psiDeg > 0)) return true;
-    const a = semiMajorAxisKm(rec);
-    const { raanDot } = secularRates(a, rec.ecco, rec.inclo * RAD2DEG, n);
-    const e0 = epochMsOf(rec);
-    const cosLat = Math.cos(resolved.latRad);
-    const sinLat = Math.sin(resolved.latRad);
+    const lat = Math.min(90, Math.max(-90, observerLatDeg)) * DEG2RAD;
     const sinI = Math.sin(rec.inclo);
     const cosI = Math.cos(rec.inclo);
-    const span = Math.max(0, resolved.endMs - resolved.startMs);
-    // Sample the precessing plane through the window; 0.5-day spacing covers
-    // the fastest RAAN drift (~10°/day) far inside the 1° pad.
-    const samples = 15;
-    for (let k = 0; k < samples; k++) {
-        const tMs = resolved.startMs + (k / (samples - 1)) * span;
-        const raan = rec.nodeo + raanDot * ((tMs - e0) / 1000);
-        // Orbit-plane normal in ECI.
-        const nx = sinI * Math.sin(raan);
-        const ny = -sinI * Math.cos(raan);
-        const nz = cosI;
-        const lon = resolved.lonRad + gstime(new Date(tMs));
-        const ox = cosLat * Math.cos(lon);
-        const oy = cosLat * Math.sin(lon);
-        const oz = sinLat;
-        const distDeg = Math.asin(Math.min(1, Math.abs(nx * ox + ny * oy + nz * oz))) * RAD2DEG;
-        if (distDeg - 1 < psiDeg) return false; // reachable — keep the satellite
-    }
-    return true;
+    const reach = Math.abs(cosI * Math.sin(lat)) - sinI * Math.cos(lat);
+    const distDeg = Math.asin(Math.min(1, Math.max(0, reach))) * RAD2DEG;
+    return distDeg - 1 >= psiDeg;
 }
 
 /**
@@ -339,8 +331,8 @@ function bisectCrossing(
     return loAbove ? [hi, lo] : [lo, hi];
 }
 
-/** Golden-section maximum of the true elevation on [riseT, setT]: [tMax, deg]. */
-function maxElevation(
+/** Golden-section maximum of the true elevation on [a, b]: [tMax, deg]. */
+function goldenMaxElevation(
     rec: SatRec,
     riseT: number,
     setT: number,
@@ -373,11 +365,54 @@ function maxElevation(
 }
 
 /**
+ * Global-ish maximum of the true elevation on [riseT, setT]: golden-section
+ * assumes a unimodal elevation curve, which holds over one pass but not over
+ * a multi-day clipped run (e.g. a GEO belt satellite). Densify the span first
+ * at ~maxDuration/8 spacing, take the best bracket, and golden-section that —
+ * the dense grid bounds what a local max can miss.
+ */
+function maxElevation(
+    rec: SatRec,
+    riseT: number,
+    setT: number,
+    observerGd: ObserverGd,
+    minElDeg: number
+): [number, number] {
+    const span = setT - riseT;
+    const maxDurMs = maxAboveThresholdSec(rec, minElDeg) * 1000;
+    if (!(span > 0)) return [riseT, -90];
+    if (span > 6 * maxDurMs && maxDurMs > 0) {
+        const step = Math.max(1000, maxDurMs / 8);
+        let bestT = riseT;
+        let bestDeg = -90;
+        for (let t = riseT; t <= setT; t += step) {
+            const deg = effectiveElevationDeg(rec, t, observerGd, undefined);
+            if (deg > bestDeg) {
+                bestDeg = deg;
+                bestT = t;
+            }
+        }
+        // The true max is trusted to lie within one max-duration bracket of
+        // the dense-scan best (a pass above threshold lasts ≤ maxDur).
+        return goldenMaxElevation(
+            rec,
+            Math.max(riseT, bestT - maxDurMs),
+            Math.min(setT, bestT + maxDurMs),
+            observerGd
+        );
+    }
+    return goldenMaxElevation(rec, riseT, setT, observerGd);
+}
+
+/**
  * Refine one coarse window [lo, hi] (both ends sampled below-threshold, or
  * window edges for clipped runs): re-sample the interior, split it into
  * contiguous above-threshold stretches and bisect each stretch's rise/set to
- * exact times. A window shorter than one full pass cycle can only contain a
- * single stretch — the first qualifying stretch is returned.
+ * exact times. Every qualifying stretch is returned — a budget-cut or
+ * window-tail window can span many passes, and returning only the first one
+ * would drop the rest. `innerStepMs` overrides the default re-sample cadence
+ * (maxDuration/8) — used by the graze scans, which must resolve gaps between
+ * coarse samples far finer than one pass duration.
  */
 function refineRun(
     rec: SatRec,
@@ -387,12 +422,14 @@ function refineRun(
     hi: number,
     resolved: ResolvedParams,
     observerGd: ObserverGd,
-    gate: PassVisibilityGate | undefined
-): PassRow | null {
+    gate: PassVisibilityGate | undefined,
+    innerStepMs?: number
+): PassRow[] {
     const maxDurMs = maxAboveThresholdSec(rec, resolved.minElDeg) * 1000;
-    const stepRun = Math.min(MAX_STEP_MS, Math.max(1000, maxDurMs / 8));
+    const stepRun = Math.min(MAX_STEP_MS, Math.max(1000, innerStepMs ?? maxDurMs / 8));
     const times: number[] = [];
     const aboves: boolean[] = [];
+    const rows: PassRow[] = [];
     for (let t = lo; t < hi - stepRun / 2; t += stepRun) {
         times.push(t);
         aboves.push(effectiveElevationDeg(rec, t, observerGd, gate) >= resolved.minElDeg);
@@ -438,24 +475,30 @@ function refineRun(
         }
         i = j + 1;
 
-        if (!(endMs > startMs + 5)) continue; // threshold graze between samples — drop
-        const [maxElAtMs, maxElDeg] = maxElevation(rec, startMs, endMs, observerGd);
-        if (!(maxElDeg >= resolved.minElDeg)) continue;
-        const startLook = lookDegAt(rec, startMs, observerGd);
-        const endLook = lookDegAt(rec, endMs, observerGd);
-        const row: PassRow = {
-            index,
-            name,
-            startMs: Math.round(startMs),
-            endMs: Math.round(endMs),
-            maxElAtMs: Math.round(maxElAtMs),
-            maxElDeg,
-            startAzDeg: startLook.az,
-            startElDeg: startLook.el,
-            endAzDeg: endLook.az
-        };
-        if (
-            [
+        // Threshold graze that ends between samples — drop.
+        if (!(endMs > startMs + 5)) continue;
+        const [maxElAtMs, maxElDeg] = maxElevation(
+            rec,
+            startMs,
+            endMs,
+            observerGd,
+            resolved.minElDeg
+        );
+        if (maxElDeg >= resolved.minElDeg) {
+            const startLook = lookDegAt(rec, startMs, observerGd);
+            const endLook = lookDegAt(rec, endMs, observerGd);
+            const row: PassRow = {
+                index,
+                name,
+                startMs: Math.round(startMs),
+                endMs: Math.round(endMs),
+                maxElAtMs: Math.round(maxElAtMs),
+                maxElDeg,
+                startAzDeg: startLook.az,
+                startElDeg: startLook.el,
+                endAzDeg: endLook.az
+            };
+            const finite = [
                 row.startMs,
                 row.endMs,
                 row.maxElAtMs,
@@ -463,13 +506,11 @@ function refineRun(
                 row.startElDeg,
                 row.startAzDeg,
                 row.endAzDeg
-            ].some((v) => !Number.isFinite(v))
-        ) {
-            continue;
+            ].every((v) => Number.isFinite(v));
+            if (finite) rows.push(row);
         }
-        return row;
     }
-    return null;
+    return rows;
 }
 
 /** Minimal binary min-heap over (key, value) pairs with numeric keys. */
@@ -529,6 +570,8 @@ interface CandidateSearchState {
     nextT: number;
     /** Time of the most recent coarse sample (ms). */
     prevT: number;
+    /** Effective elevation at `prevT` (degrees, −90 when gated/failed). */
+    prevEffEl: number;
     /** Coarse cadence, bounded by the max above-threshold pass duration. */
     stepMs: number;
     /** Window start of the open above-threshold run, or null when closed. */
@@ -579,13 +622,14 @@ export function* findPasses(
     // Stage 1: static screen + per-satellite search state.
     const states: CandidateSearchState[] = [];
     for (const candidate of params.candidates) {
-        if (planeScreensOut(candidate.rec, resolved)) continue;
+        if (planeScreensOut(candidate.rec, params.observer.latDeg, minEl)) continue;
         const maxDurSec = maxAboveThresholdSec(candidate.rec, minEl);
         if (!(maxDurSec > 0)) continue;
         states.push({
             candidate,
             nextT: resolved.startMs,
             prevT: resolved.startMs,
+            prevEffEl: -90,
             stepMs: Math.min(MAX_STEP_MS, Math.max(1, Math.ceil((maxDurSec / 3) * 1000))),
             openRunLo: null
         });
@@ -598,6 +642,36 @@ export function* findPasses(
     // mayStopEarly is an O(states) scan — only worth running right after a new
     // pass makes the top list full (or a later pass reshuffles it).
     let exitCheckDue = false;
+
+    /**
+     * Tangential grazes shorter than one coarse step can fit entirely inside
+     * a below→below sample pair. Such a graze is by definition near-tangent,
+     * so the elevation leaves the threshold ring slowly and the flanking
+     * samples sit within a few degrees of it. Re-scanning only those gaps
+     * (bounded extra evaluations, 2 per real pass worst case at LEO cadence)
+     * closes the graze hole without a fixed ultra-fine sweep.
+     */
+    const grazeScan = (s: CandidateSearchState, hiMs: number): void => {
+        const gap = hiMs - s.prevT;
+        if (gap <= 0 || s.prevEffEl < minEl - GRAZE_MARGIN_DEG) return;
+        const innerStep = Math.min(30000, Math.max(2000, gap / 16));
+        samplesSinceYield += Math.ceil(gap / innerStep);
+        const rows = refineRun(
+            s.candidate.rec,
+            s.candidate.name,
+            s.candidate.index,
+            s.prevT,
+            hiMs,
+            resolved,
+            observerGd,
+            gate,
+            innerStep
+        );
+        for (const row of rows) {
+            insert(row);
+            if (top.length >= resolved.maxPasses) exitCheckDue = true;
+        }
+    };
 
     // All future discoveries start after the earliest pending sample time or
     // open-run start, so once the top list is full and those are past the
@@ -627,12 +701,17 @@ export function* findPasses(
         const s = states[si];
         const la = lookAnglesAt(s.candidate.rec, t, observerGd, gate);
         samplesSinceYield++;
-        const above = !!la && la.visible && la.look.elevation * RAD2DEG >= minEl;
+        const elDeg = la && la.visible ? la.look.elevation * RAD2DEG : -90;
+        const above = elDeg >= minEl;
+
+        // Closed-gap graze check comes first: a below→below step pair is the
+        // only place a pass shorter than one step can hide.
+        if (!above && s.openRunLo === null) grazeScan(s, t);
 
         if (above) {
             if (s.openRunLo === null) s.openRunLo = s.prevT;
         } else if (s.openRunLo !== null) {
-            const row = refineRun(
+            const rows = refineRun(
                 s.candidate.rec,
                 s.candidate.name,
                 s.candidate.index,
@@ -643,12 +722,13 @@ export function* findPasses(
                 gate
             );
             s.openRunLo = null;
-            if (row) {
+            for (const row of rows) {
                 insert(row);
                 if (top.length >= resolved.maxPasses) exitCheckDue = true;
             }
         }
         s.prevT = t;
+        s.prevEffEl = elDeg;
         s.nextT = t + s.stepMs;
         if (s.nextT < resolved.endMs) heap.push(s.nextT, si);
         // Re-arm the (rare) exit scan once the popped frontier is past the
@@ -665,8 +745,15 @@ export function* findPasses(
 
     // Runs still open at the window end: keep the clipped tail of the pass.
     for (const s of states) {
-        if (s.openRunLo === null) continue;
-        const row = refineRun(
+        if (s.openRunLo === null) {
+            // Closed sat: the tail gap after its last sample never got a
+            // coarse sample — graze-scan it too.
+            grazeScan(s, resolved.endMs);
+            continue;
+        }
+        // Budget-cut or window-tail runs span an arbitrary number of passes;
+        // refineRun returns them all (the window's earlier passes too).
+        const rows = refineRun(
             s.candidate.rec,
             s.candidate.name,
             s.candidate.index,
@@ -677,7 +764,7 @@ export function* findPasses(
             gate
         );
         s.openRunLo = null;
-        if (row) insert(row);
+        for (const row of rows) insert(row);
     }
 
     return { passes: top, partial };
