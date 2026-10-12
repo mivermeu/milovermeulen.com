@@ -1,22 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { firstVertexAtOrAfter, isContiguousPairs, slideUniformWindow } from './trackSlide';
-
-describe('isContiguousPairs', () => {
-    const master = new Float32Array(8 * 6);
-    for (let k = 0; k < 8; k++) {
-        master.set([k, 0, 0, k + 1, 0, 0], k * 6);
-    }
-
-    it('accepts a chain whose pairs share endpoints', () => {
-        expect(isContiguousPairs(master)).toBe(true);
-    });
-
-    it('rejects a chain with an SGP4-failure gap', () => {
-        const broken = new Float32Array(master);
-        broken[3 * 6] += 5; // displace pair 3's start
-        expect(isContiguousPairs(broken)).toBe(false);
-    });
-});
+import { firstVertexAtOrAfter, writeWindowEdges } from './trackSlide';
 
 describe('firstVertexAtOrAfter', () => {
     // Two-period chain: offsets double the [0, 60) grid over [0, 120).
@@ -43,55 +26,117 @@ describe('firstVertexAtOrAfter', () => {
     });
 });
 
-describe('slideUniformWindow', () => {
-    // Master with 9 vertices (8 pairs) at unit increments along the x axis.
-    const master = new Float32Array(8 * 6);
-    for (let k = 0; k < 8; k++) {
-        master.set([k, 0, 0, k + 1, 0, 0], k * 6);
-    }
+describe('writeWindowEdges', () => {
+    // Chain: 9 vertices at unit x over [0, 8) ms; period 4 ms window.
+    const positions = new Float32Array(9 * 3);
+    for (let k = 0; k < 9; k++) positions.set([k, 0, 0], k * 3);
+    const times = new Float32Array([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+    const chain = { positions, times, vertexCount: 9, periodMs: 4 };
 
-    it('starts the window at the anchor and reads forward un-shifted', () => {
-        const out = new Float32Array(4 * 6);
-        const n = slideUniformWindow(master, 0, 4, [0.5, 0.5, 0], out);
-        expect(n).toBe(4);
-        // Pair 0 connects the anchor directly to master vertex 1.
-        expect(out[0]).toBeCloseTo(0.5, 6);
-        expect(out[1]).toBeCloseTo(0.5, 6);
+    it('splices the anchor as the head and reads forward (interpolated tail)', () => {
+        const out = new Float32Array(5 * 6);
+        const n = writeWindowEdges(
+            chain.positions,
+            chain.times,
+            0,
+            chain.vertexCount,
+            chain.periodMs,
+            [0.75, 0, 0], // live dot at t=0.75 (between v0 and v1)
+            0.75, // target offset
+            out,
+            0,
+            5
+        );
+        expect(n).toBe(5);
+        // Edge 0: anchor → v1.
+        expect(out[0]).toBeCloseTo(0.75, 6);
         expect(out[3]).toBeCloseTo(1, 6);
-        // Pair 2 runs (v₂, v₃): the anchor replaces master vertex 0.
-        expect(out[9]).toBeCloseTo(2, 6);
+        // Edge 4: v4 → tail at exactly 4.75 (halfway v4→v5).
+        expect(out[out.length - 6]).toBeCloseTo(4, 6);
+        expect(out[out.length - 3]).toBeCloseTo(4.75, 6);
     });
 
-    it('slides the window for a mid-master head', () => {
+    it('draws purely from the chain when there is no anchor', () => {
         const out = new Float32Array(4 * 6);
-        // headFrac 0.5 of a 4-step window → master vertex 2 first (x = 2).
-        const n = slideUniformWindow(master, 0.5, 4, [2, 0, 0], out);
+        const n = writeWindowEdges(
+            chain.positions,
+            chain.times,
+            0,
+            chain.vertexCount,
+            chain.periodMs,
+            null,
+            2,
+            out,
+            0,
+            4
+        );
         expect(n).toBe(4);
+        // Edge 0 = (v2, v3) — the plain chain window start.
         expect(out[0]).toBeCloseTo(2, 6);
         expect(out[3]).toBeCloseTo(3, 6);
-        expect(out[out.length - 6]).toBeCloseTo(5, 6);
+        // Tail at exactly 6.
         expect(out[out.length - 3]).toBeCloseTo(6, 6);
     });
 
-    it('interpolates the tail inside the last grid step', () => {
+    it('handles a target past the bake end by holding the chain tail', () => {
         const out = new Float32Array(4 * 6);
-        // head 2.5 of a 4-step window: the end sits halfway between v6 and v7.
-        const n = slideUniformWindow(master, 0.625, 4, [2.5, 0, 0], out);
-        expect(n).toBe(4);
-        expect(out[out.length - 6]).toBeCloseTo(5, 6); // pair a = v5
-        expect(out[out.length - 3]).toBeCloseTo(6.5, 6); // pair b.x = lerped tail
-        expect(out[out.length - 1]).toBeCloseTo(0, 6); // pair b.z unchanged
-        // Integer-head windows are unchanged (alpha 0 → the plain vertex).
-        const whole = new Float32Array(4 * 6);
-        slideUniformWindow(master, 0.25, 4, [1, 0, 0], whole);
-        expect(whole[whole.length - 3]).toBeCloseTo(5, 6);
+        // target 6, period 4 → window [6, 10] beyond the 8 ms bake: draws to
+        // the chain end (5 edges worth) but maxEdges caps it at the read rate.
+        const n = writeWindowEdges(
+            chain.positions,
+            chain.times,
+            0,
+            chain.vertexCount,
+            chain.periodMs,
+            null,
+            6,
+            out,
+            0,
+            4
+        );
+        expect(n).toBe(2); // edges (v6,v7), (v7,v8) — then the tail is skipped
+        expect(out[6]).toBeCloseTo(7, 6);
+        expect(out[9]).toBeCloseTo(8, 6);
     });
 
-    it('refuses a window running past the baked span', () => {
+    it('zero-pads unused tail slots (degenerate pairs render as nothing)', () => {
+        const cap = 8;
+        const out = new Float32Array(4 * 6 > cap ? cap * 6 : cap * 6);
+        void out;
+        const padded = new Float32Array(cap * 6);
+        writeWindowEdges(
+            chain.positions,
+            chain.times,
+            0,
+            chain.vertexCount,
+            chain.periodMs,
+            null,
+            0,
+            padded,
+            0,
+            cap
+        );
+        // Only (v0→v1),(v1→v2),(v2→v3),(v3→v4) — 4 edges of an 8-edge slot:
+        // everything past them is zero-padded.
+        for (let i = 4 * 6; i < cap * 6; i++) expect(padded[i]).toBe(0);
+    });
+
+    it('refuses (pads) when the window degenerates at the chain end', () => {
         const out = new Float32Array(4 * 6);
-        // headFrac 1.3 would need vertices 6..9 past the 9-vertex master.
-        expect(slideUniformWindow(master, 1.3, 4, [4, 0, 0], out)).toBe(-1);
-        expect(slideUniformWindow(master, -0.1, 4, [0, 0, 0], out)).toBe(-1);
-        expect(slideUniformWindow(master, 0.4, 4, [2, 0, 0], new Float32Array(4 * 6 + 6))).toBe(-1);
+        out.fill(9);
+        const n = writeWindowEdges(
+            chain.positions,
+            chain.times,
+            0,
+            chain.vertexCount,
+            chain.periodMs,
+            null,
+            8, // target at the chain end — head = last vertex, degenerate
+            out,
+            0,
+            4
+        );
+        expect(n).toBe(0);
+        expect(out[0]).toBe(0); // zero-padded, not the stale fill(9)
     });
 });

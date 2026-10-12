@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { twoline2satrec } from 'satellite.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
@@ -11,7 +12,8 @@ import { propagation, blendInto, type WorkerResponse } from '$lib/propagation';
 import { eciDirectionToEcf, sunEciDirection, type Vec3 } from '$lib/sun';
 import { renderEpochMs } from '$lib/state.svelte';
 import { epochAction, renderBlend } from '$lib/simclock';
-import { slideUniformWindow, firstVertexAtOrAfter, isContiguousPairs } from '$lib/trackSlide';
+import { writeWindowEdges } from '$lib/trackSlide';
+import { buildOrbitChain, type OrbitChain } from '$lib/orbitTrack';
 
 const EARTH_RADIUS_KM = 6371;
 export const GLOBE_RADIUS = 6.4;
@@ -79,7 +81,11 @@ export class GlobeScene {
     private lastGroundTrackWall = 0;
     // Sliding-window bookkeeping for the ground track (decoupled cadence/draw —
     // see lib/trackSlide).
-    private groundMaster: Float32Array | null = null;
+    private groundMaster: {
+        positions: Float32Array;
+        times: Float32Array;
+        vertexCount: number;
+    } | null = null;
     private groundTrackEpoch = 0;
     private groundPeriodMs = 0;
     private groundContiguous = false;
@@ -130,9 +136,14 @@ export class GlobeScene {
     private orbitSlotCaps: number[] = []; // edge-slot capacity per sat
     private orbitSlotOffsets: number[] = []; // edge offset per sat
     private orbitSlotScratch: Float32Array | null = null;
-    // The focused satellite's window paints into its own fixed slot buffer.
+    // The focused satellite's orbit: built SYNCHRONOUSLY on the main thread
+    // when the focus changes and re-anchored as the clock consumes it — the
+    // highlight path contains no worker round-trip, so hover is instant and
+    // can never wedge behind bake scheduling.
+    private highlightChain: OrbitChain | null = null;
     private highlightScratch: Float32Array | null = null;
-    private highlightSlotCap = 0;
+    private highlightCapEdges = 0;
+    private highlightDelta = 0; // this frame's highlight-mesh GMST delta (ECI)
 
     private prevPositions: Float32Array | null = null;
     private nextPositions: Float32Array | null = null;
@@ -616,10 +627,7 @@ export class GlobeScene {
      * anchors before the bake we already hold (time regression).
      */
     private onOrbits(message: WorkerResponse): void {
-        if (
-            message.generation !== undefined &&
-            message.generation !== this.catalogGeneration
-        ) {
+        if (message.generation !== undefined && message.generation !== this.catalogGeneration) {
             return;
         }
         const incomingEpoch = message.epoch ?? Number.NEGATIVE_INFINITY;
@@ -745,7 +753,8 @@ export class GlobeScene {
                 vCursor += len;
             }
             // Degenerate pad from the last written edge to the slot end.
-            this.orbitSlotScratch.fill(0, Math.min(w, slotEnd), slotEnd);        }
+            this.orbitSlotScratch.fill(0, Math.min(w, slotEnd), slotEnd);
+        }
         (this.orbitGeometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
         this.rebuildOrbitWindows();
     }
@@ -798,97 +807,38 @@ export class GlobeScene {
                 // clear its merged slot so it never double-draws.
                 scratch.fill(0, slotOff * 6, (slotOff + cap) * 6);
             }
-            const period = this.orbitPeriods[s];
-            const head = firstVertexAtOrAfter(times, vOff, vCount, target);
-            if (head < 0) continue; // stale beyond fallback — keep last frame
-            const endIdx = firstVertexAtOrAfter(times, vOff, vCount, target + period);
-            if (endIdx === head) continue;
-            const outLimit = endIdx < 0 ? vCount : endIdx; // exclusive vertex
+            // Anchor passed in the chain's baked frame: in ECI mode the mesh
+            // rotates by the build-vs-render GMST delta, so the raw ECF dot
+            // position is rotated by the inverse delta before splicing.
             const dotX0 = this.positionArray[s * 3];
-            const dotY0 = this.positionArray[s * 3 + 1];
-            const dotZ0 = this.positionArray[s * 3 + 2];
-            const anchorOk = Number.isFinite(dotX0 + dotY0 + dotZ0) && target >= 0;
-            // In ECI mode the merged/highlight meshes rotate by the build-vs-
-            // render GMST delta each frame, but the anchor would splice in as
-            // the raw ECF dot position — un-rotated, the mesh's frame rotation
-            // sweeps it away from the actual dot and each rebuild snaps it
-            // back (the observed bursts). Rotate the anchor into the chain's
-            // baked frame so the mesh rotation lands it exactly on the dot.
+            let dotY = this.positionArray[s * 3 + 1];
+            const dotZ = this.positionArray[s * 3 + 2];
             let dotX = dotX0;
-            let dotY = dotY0;
+            const anchorOk = Number.isFinite(dotX0 + dotY + dotZ) && target >= 0;
             if (anchorOk && trackerState.referenceFrame === 'eci') {
-                const delta = this.orbitBuildGmst - gstime(new Date(renderEpochMs()));
+                const gm = gstime(new Date(renderEpochMs()));
+                const delta = this.orbitBuildGmst - gm;
                 if (delta !== 0) {
                     const c = Math.cos(delta);
-                    const s = Math.sin(delta);
-                    dotX = c * dotX0 + s * dotY0;
-                    dotY = -s * dotX0 + c * dotY0;
+                    const s2 = Math.sin(delta);
+                    const rx = c * dotX0 + s2 * dotY;
+                    dotX = -s2 * dotX0 + c * dotY;
+                    dotY = rx;
                 }
             }
-            const out = isFocus ? this.highlightScratch! : scratch;
-            const outBase = isFocus ? 0 : slotOff * 6;
-            let n = 0; // edges written
-            const put = (
-                ax: number,
-                ay: number,
-                az: number,
-                bx: number,
-                by: number,
-                bz: number
-            ): void => {
-                if (n >= cap) return;
-                const w = outBase + n * 6;
-                out[w] = ax;
-                out[w + 1] = ay;
-                out[w + 2] = az;
-                out[w + 3] = bx;
-                out[w + 4] = by;
-                out[w + 5] = bz;
-                n++;
-            };
-
-            // Consecutive chain edges: the anchor edge (dot → v_head) when the
-            // dot is spliceable, then (v_k, v_k+1) for k = head … outLimit−2.
-            const vx = (k: number) => positions[(vOff + k) * 3];
-            const vy = (k: number) => positions[(vOff + k) * 3 + 1];
-            const vz = (k: number) => positions[(vOff + k) * 3 + 2];
-            if (anchorOk) {
-                put(dotX, dotY, dotZ0, vx(head), vy(head), vz(head));
-            }
-            for (let k = head; k + 1 < outLimit; k++) {
-                put(vx(k), vy(k), vz(k), vx(k + 1), vy(k + 1), vz(k + 1));
-            }
-            // Interpolated tail at exactly T+period between the bracketing
-            // vertices — skipped when the window reaches the bake end.
-            if (outLimit < vCount) {
-                const tA = times[vOff + outLimit - 1];
-                const tB = times[vOff + outLimit];
-                const span = tB - tA;
-                const alpha =
-                    span > 0 ? Math.min(1, Math.max(0, (target + period - tA) / span)) : 0;
-                if (alpha > 0) {
-                    put(
-                        vx(outLimit - 1),
-                        vy(outLimit - 1),
-                        vz(outLimit - 1),
-                        vx(outLimit - 1) + (vx(outLimit) - vx(outLimit - 1)) * alpha,
-                        vy(outLimit - 1) + (vy(outLimit) - vy(outLimit - 1)) * alpha,
-                        vz(outLimit - 1) + (vz(outLimit) - vz(outLimit - 1)) * alpha
-                    );
-                }
-            }
-            // Degenerate pad from the last written edge to the slot end —
-            // zero pairs (segments at the origin) render as nothing.
-            out.fill(0, outBase + n * 6, outBase + cap * 6);
-            if (isFocus) {
-                // The highlight buffer's capacity can outlive a smaller focus
-                // chain (it only grows) — pin its draw range to the focus
-                // slot's capacity so stale tails never draw.
-                this.highlightGeometry.setDrawRange(0, cap * 2);
-                (
-                    this.highlightGeometry.getAttribute('position') as THREE.BufferAttribute
-                ).needsUpdate = true;
-            }
+            const anchor: [number, number, number] | null = anchorOk ? [dotX, dotY, dotZ] : null;
+            writeWindowEdges(
+                positions,
+                times,
+                vOff,
+                vCount,
+                this.orbitPeriods[s],
+                anchor,
+                target,
+                scratch,
+                slotOff * 6,
+                cap
+            );
         }
         (this.orbitGeometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
     }
@@ -899,11 +849,20 @@ export class GlobeScene {
             return;
         }
         const positions = message.positions;
-        if (positions && positions.length >= 2) {
-            this.groundMaster = positions;
+        const gTimes = message.vertexTimes;
+        if (
+            positions &&
+            gTimes &&
+            positions.length >= 6 &&
+            gTimes.length === positions.length / 3
+        ) {
+            this.groundMaster = {
+                positions,
+                times: gTimes,
+                vertexCount: positions.length / 3
+            };
             this.groundTrackEpoch = message.epoch ?? 0;
             this.groundPeriodMs = message.periodMs ?? 0;
-            this.groundContiguous = isContiguousPairs(positions);
             this.groundTrackReady = true;
         } else {
             this.groundTrackReady = false;
@@ -921,34 +880,11 @@ export class GlobeScene {
      * the track no longer trails the dot by half an orbit. See lib/trackSlide.
      */
     private slideGroundTrack(): void {
-        const master = this.groundMaster;
-        if (!master || !this.groundTrackReady || this.groundTrackIndex < 0) return;
+        const chain = this.groundMaster;
+        if (!chain || !this.groundTrackReady || this.groundTrackIndex < 0) return;
 
         const attr = this.groundTrackGeometry.getAttribute('position') as
             THREE.BufferAttribute | undefined;
-        if (!this.groundContiguous || !(this.groundPeriodMs > 0)) {
-            // Fragmented bake (honest SGP4 gaps): no reliable anchor order —
-            // draw the first period of the bake, degenerate-padded to the
-            // window length (zero-length segments render nothing).
-            const w = this.groundScratch;
-            const pairs = Math.min(w.length / 6, master.length / 6);
-            let lastX = 0;
-            let lastY = 0;
-            let lastZ = 0;
-            for (let j = 0; j < pairs; j++) {
-                w.set(master.subarray(j * 6, j * 6 + 6), j * 6);
-                lastX = master[j * 6 + 3];
-                lastY = master[j * 6 + 4];
-                lastZ = master[j * 6 + 5];
-            }
-            for (let j = pairs; j < w.length / 6; j++) {
-                w.set([lastX, lastY, lastZ, lastX, lastY, lastZ], j * 6);
-            }
-            if (attr && attr.array === w) attr.needsUpdate = true;
-            else this.groundTrackGeometry.setAttribute('position', new THREE.BufferAttribute(w, 3));
-            return;
-        }
-
         const i = this.groundTrackIndex * 3;
         const px = this.positionArray[i];
         const py = this.positionArray[i + 1];
@@ -957,23 +893,30 @@ export class GlobeScene {
         const r = Math.hypot(px, py, pz);
         if (!(r > 0)) return;
         // The satellite's subpoint: its live ECF position projected to the
-        // globe surface.
+        // globe surface — the ground chain is ECF-baked, so the anchor needs
+        // no frame rotation.
         const anchor: [number, number, number] = [
             (px / r) * GLOBE_RADIUS,
             (py / r) * GLOBE_RADIUS,
             (pz / r) * GLOBE_RADIUS
         ];
-        // One period has GROUND_WINDOW_STEPS steps; the bake holds two, so a
-        // window starting up to one rebuild late still fits.
-        const fraction = (renderEpochMs() - this.groundTrackEpoch) / this.groundPeriodMs;
-        if (
-            slideUniformWindow(master, fraction, GROUND_WINDOW_STEPS, anchor, this.groundScratch) <
-            0
-        ) {
-            // Window past the bake (a badly overdue rebuild) — hold the last
-            // frame rather than draw garbage.
-            return;
-        }
+        // The shared window writer: one period of the bake starting at the
+        // live subpoint, lerped tail at exactly T+period, degenerate pad —
+        // identical mechanism to the orbit chains.
+        const cap = GROUND_WINDOW_STEPS + 2;
+        const target = renderEpochMs() - this.groundTrackEpoch;
+        writeWindowEdges(
+            chain.positions,
+            chain.times,
+            0,
+            chain.vertexCount,
+            this.groundPeriodMs,
+            anchor,
+            target,
+            this.groundScratch,
+            0,
+            cap
+        );
         if (attr && attr.array === this.groundScratch) attr.needsUpdate = true;
         else
             this.groundTrackGeometry.setAttribute(
@@ -1086,26 +1029,118 @@ export class GlobeScene {
     }
 
     showHighlight(index: number): void {
-        if (index < 0 || index >= this.orbitVertexCounts.length) {
-            // No orbit data yet — set the focus first (a focus-only bake can
-            // then target it), and request a bake when one hasn't landed.
+        if (index < 0 || index >= this.satellites.length || !this.ready) {
+            // No catalog satellites yet — the next chain change re-arms.
             this.highlightIndex = index;
-            if (index >= 0 && this.ready && !this.orbitsReady) this.requestOrbits();
-            return;
-        }
-        const positions = this.orbitPositions;
-        if (!positions || this.orbitVertexCounts[index] < 2) {
-            this.hideHighlight();
             return;
         }
         this.highlightIndex = index;
-        this.updateNodeMarkers(this.chainSlice(index));
-        // The focused window is painted per frame by rebuildOrbitWindows
-        // (slid to the live dot position); this only owns markers/visibility —
-        // plus a focus-only bake when orbits are hidden by the size cap
-        // (requestOrbits coalesces hover waves to one bake per 250 ms).
-        if (!this.orbitWindowMode && !this.showOrbits && this.ready) this.requestOrbits();
+        this.reanchorHighlight();
         this.updateOrbitVisibility();
+    }
+
+    /**
+     * Re-anchor the highlight: parse the focus satellite's TLE and build its
+     * full orbit chain synchronously on the main thread. Cost is one
+     * satellite's ν grid + refine (≈130 SGP4 nodes, ≈1 ms) — hovering is
+     * instant and independent of the worker's bake cadence, so highlight waves
+     * can never wedge behind bake scheduling.
+     */
+    private reanchorHighlight(): void {
+        const idx = this.highlightIndex;
+        if (idx < 0 || idx >= this.satellites.length) {
+            this.highlightChain = null;
+            return;
+        }
+        const sat = this.satellites[idx];
+        try {
+            const parsed = twoline2satrec(sat.line1, sat.line2);
+            if (parsed.error !== 0) {
+                this.highlightChain = null;
+                this.highlightMesh.visible = false;
+                return;
+            }
+            const chain = buildOrbitChain({
+                rec: parsed,
+                anchorEpochMs: Math.round(renderEpochMs()),
+                referenceFrame: trackerState.referenceFrame,
+                worldPerKm: SCALE
+            });
+            if (chain) {
+                this.highlightChain = chain;
+                // Window edges never exceed the chain's vertex count plus the two
+                // interpolated ends; the fixed capacity means no per-frame
+                // reallocation (re-anchors only change the chain's size rarely).
+                const capEdges = chain.vertexCount + 2;
+                if (!this.highlightScratch || this.highlightScratch.length < capEdges * 6) {
+                    this.highlightScratch = new Float32Array(capEdges * 6);
+                    this.highlightGeometry.setAttribute(
+                        'position',
+                        new THREE.BufferAttribute(this.highlightScratch, 3)
+                    );
+                }
+                this.highlightCapEdges = capEdges;
+                this.updateNodeMarkers(chain.positions);
+            } else {
+                this.highlightChain = null;
+                this.highlightMesh.visible = false;
+            }
+        } catch {
+            this.highlightChain = null;
+            this.highlightMesh.visible = false;
+        }
+    }
+
+    /**
+     * Per-frame highlight paint: slide the [T, T+period] window over the
+     * main-thread chain — head interpolated to the exact live dot, tail a
+     * lerp at exactly T+period. Re-anchors synchronously when the clock
+     * would slide past or behind the baked chain (backward scrubs, long
+     * playback) or the reference frame changed.
+     */
+    private paintHighlight(): void {
+        const chain = this.highlightChain;
+        if (!chain || this.highlightIndex < 0) return;
+        if (chain.referenceFrame !== trackerState.referenceFrame) {
+            this.reanchorHighlight();
+            return; // the caller paints again from the recomputed chain
+        }
+        const target = renderEpochMs() - chain.anchorEpoch;
+        if (target < 0 || target + chain.periodMs > chain.times[chain.vertexCount - 1]) {
+            this.reanchorHighlight();
+            return; // the caller paints again from the recomputed chain
+        }
+        if (this.highlightCapEdges === 0) return;
+        // The highlight meshes rotate with the chain's own GMST basis; the
+        // anchor's ECF world position is rotated by the inverse delta into
+        // the chain's baked frame before splicing (ECI mode).
+        let ax = this.positionArray[this.highlightIndex * 3];
+        let ay = this.positionArray[this.highlightIndex * 3 + 1];
+        const az = this.positionArray[this.highlightIndex * 3 + 2];
+        if (!Number.isFinite(ax + ay + az)) return;
+        const gmstNow = gstime(new Date(renderEpochMs()));
+        const delta = chain.bakeGmst - gmstNow;
+        if (delta !== 0) {
+            const c = Math.cos(delta);
+            const s = Math.sin(delta);
+            const rx = c * ax + s * ay;
+            ay = -s * ax + c * ay;
+            ax = rx;
+        }
+        writeWindowEdges(
+            chain.positions,
+            chain.times,
+            0,
+            chain.vertexCount,
+            chain.periodMs,
+            [ax, ay, az],
+            target,
+            this.highlightScratch!,
+            0,
+            this.highlightCapEdges
+        );
+        (this.highlightGeometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate =
+            true;
     }
 
     /** The focus satellite's full vertex chain (flat 3-float vertices). */
@@ -1352,8 +1387,14 @@ export class GlobeScene {
         this.updateSun(gmst);
         const eci = trackerState.referenceFrame === 'eci';
         const orbitDelta = eci ? this.orbitBuildGmst - gmst : 0;
+        this.highlightDelta = orbitDelta;
+        this.paintHighlight(); // sets its own delta when armed (per-mesh below)
         this.orbitMesh.rotation.z = orbitDelta;
-        this.highlightMesh.rotation.z = orbitDelta;
+        this.highlightMesh.rotation.z = this.highlightChain
+            ? eci
+                ? this.highlightChain.bakeGmst - gmst
+                : 0
+            : orbitDelta;
         if (this.points.visible) {
             const material = this.points.material as THREE.PointsMaterial;
             material.size = 0.25 * (this.camera.position.length() / 25);
