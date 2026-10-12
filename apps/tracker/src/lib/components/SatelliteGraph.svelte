@@ -806,10 +806,10 @@
                             <div class="font-medium text-brand-text-highlight">{hover.name}</div>
                             <div class="text-brand-text/80">
                                 {#if Number.isFinite(hover.xVal)}
-                                    {meta(xKey).short} {format(xKey, hover.xVal)}{:else}—{/if}
+                                    {paramMeta(xKey).short} {format(xKey, hover.xVal)}{:else}—{/if}
                                 <span class="text-brand-text/50">×</span>
                                 {#if Number.isFinite(hover.yVal)}
-                                    {meta(yKey).short} {format(yKey, hover.yVal)}{:else}—{/if}
+                                    {paramMeta(yKey).short} {format(yKey, hover.yVal)}{:else}—{/if}
                             </div>
                         </div>
                     {/if}
