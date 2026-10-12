@@ -173,17 +173,25 @@ src/
 - **Dead reckoning** (`renderBlend`): past the newest snapshot the blend keeps gliding along the
   pair's own velocity (capped at half an interval), so worker-arrival jitter at high speeds holds no
   stuttering pauses.
+- **Tracks slide between rebuilds** (`lib/trackSlide.ts`): orbit chains bake **two** ν-continuous
+  periods per satellite with per-vertex time offsets and periods, and every drawn orbit's visible
+  window (one period, starting at that satellite's live dot position) is re-derived per frame by a
+  time-window slide — catalogs up to the slide cap; larger ones keep the cadence-rebuilt static draw
+  of the bake's first period. Identical treatment for pinned, hovered, and unpinned orbits. Ground
+  tracks slide the same way on their own two-period time-uniform bake. The ECF space track is open
+  by construction (the earth rotates ~22° under a LEO period, so the one-period arc's endpoints
+  don't coincide in ECF) — windows never wrap or close on themselves, because the old index-rotation
+  approach bridged start to end with that giant chord.
 - **Single draw call** for all satellite dots (radial gradient texture, vertex colors).
 - **Zoom-adaptive point size** — dots scale relative to the globe as you zoom in.
-- **Orbit ellipses** sampled over one full period in ECI (closed loops), rotated by delta GMST for
-  ECF display.
-- **Ground track** is always ECF (each sample rotated by its own GMST, one period into the future at
-  128 samples, matching the future-only orbit-line window) and is never affected by the
-  reference-frame toggle; rebuilt on the same 5 s cadence as orbits, only while a satellite is
-  pinned ("Ground track" toggle in the controls).
-- **Single draw call** for all satellite dots (radial gradient texture, vertex colors).
-- **Zoom-adaptive point size** — dots scale relative to the globe as you zoom in.
-- **Hover highlight** extracts one satellite's orbit from the shared buffer; pin persists it.
+- **Orbit ellipses** sampled over two full ν-continuous periods in ECI, rotated by delta GMST for
+  ECF display; only one period is drawn per orbit, slid to the live dot position.
+- **Ground track** is always ECF (each sample rotated by its own GMST, drawn one period into the
+  future at 128 samples from a two-period bake) and is never affected by the reference-frame toggle;
+  rebuilt on the same 5 s cadence as orbits, only while a satellite is pinned ("Ground track" toggle
+  in the controls).
+- **Hover highlight** mirrors the focus satellite's slid window from the shared per-frame rebuild;
+  pin persists it.
 - **Graph axis keys live in `trackerState`** (not component-local state) so URL deep links can seed
   and mirror them; the graph parameter metadata is shared with the URL encoder in `graph-params.ts`.
 - **URL writes use `history.replaceState`**, debounced and skipped when nothing changed; the

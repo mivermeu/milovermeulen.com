@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { isContiguousPairs, rotateTrackToAnchor, slideUniformWindow } from './trackSlide';
+import { firstVertexAtOrAfter, isContiguousPairs, slideUniformWindow } from './trackSlide';
 
 /** Build a flat pair-chain of a closed ring with `v` vertices on the unit circle. */
 function circleRing(vertices: number): Float32Array {
@@ -17,6 +17,31 @@ function circleRing(vertices: number): Float32Array {
     return sub;
 }
 
+describe('firstVertexAtOrAfter', () => {
+    // Two-period chain: offsets double the [0, 60) grid over [0, 120).
+    const times = new Float32Array([0, 10, 20, 25, 35, 45, 50, 60, 70, 80, 85, 95, 105, 110]);
+
+    it('finds the first vertex at or after the target', () => {
+        expect(firstVertexAtOrAfter(times, 0, times.length, 25)).toBe(3);
+        expect(firstVertexAtOrAfter(times, 0, times.length, 26)).toBe(4);
+        expect(firstVertexAtOrAfter(times, 0, times.length, 0)).toBe(0);
+        // A snap-forward target just past a step boundary.
+        expect(firstVertexAtOrAfter(times, 0, times.length, 60)).toBe(7);
+    });
+
+    it('searches within a per-sat slice', () => {
+        // Second chain: offset 7, count 7 (values 50..110).
+        expect(firstVertexAtOrAfter(times, 7, 7, 85)).toBe(3);
+        expect(firstVertexAtOrAfter(times, 7, 7, 10)).toBe(0);
+    });
+
+    it('returns −1 when the target lies beyond the chain (overdue rebuild)', () => {
+        expect(firstVertexAtOrAfter(times, 0, times.length, 120)).toBe(-1);
+        expect(firstVertexAtOrAfter(times, 0, 0, 0)).toBe(-1);
+        expect(firstVertexAtOrAfter(times, 11, 4, 0)).toBe(-1); // slice out of bounds
+    });
+});
+
 describe('isContiguousPairs', () => {
     it('accepts a chain whose pairs share endpoints', () => {
         expect(isContiguousPairs(circleRing(8))).toBe(true);
@@ -27,49 +52,6 @@ describe('isContiguousPairs', () => {
         // Displace pair 3's start so it no longer continues pair 2.
         broken[3 * 6] += 5;
         expect(isContiguousPairs(broken)).toBe(false);
-    });
-});
-
-describe('rotateTrackToAnchor', () => {
-    it('starts the window at the anchor, future-only', () => {
-        const vertices = 12;
-        const sub = circleRing(vertices);
-        const out = new Float32Array(sub.length);
-        // Anchor exactly at vertex 3 (90°): near (0, 1, 0).
-        const anchor: [number, number, number] = [0, 1, 0];
-        const head = rotateTrackToAnchor(sub, anchor, out);
-        expect(head).toBe(3);
-        expect(out.length).toBe(sub.length);
-        // Vertex 0 of the rebuilt window is the anchor itself.
-        expect(out[0]).toBeCloseTo(anchor[0], 6);
-        expect(out[1]).toBeCloseTo(anchor[1], 6);
-        // First non-anchor vertex is master vertex 4 (the next along the ring).
-        expect(out[3]).toBeCloseTo(Math.cos((4 / vertices) * Math.PI * 2), 5);
-        // Future-only: the final pair runs (v₁, v₂) — head−1 is never bridged
-        // back to the anchor.
-        expect(out[out.length - 6]).toBeCloseTo(Math.cos((1 / vertices) * Math.PI * 2), 5);
-        expect(out[out.length - 3]).toBeCloseTo(Math.cos((2 / vertices) * Math.PI * 2), 5);
-        expect(out[out.length - 2]).toBeCloseTo(Math.sin((2 / vertices) * Math.PI * 2), 5);
-    });
-
-    it('keeps the pair count and wraps coherently mid-ring', () => {
-        const vertices = 8;
-        const sub = circleRing(vertices);
-        const out = new Float32Array(sub.length);
-        const anchor: [number, number, number] = [0, -1, 0]; // vertex 6
-        rotateTrackToAnchor(sub, anchor, out);
-        // Pair 0 ends at vertex 7.
-        expect(out[3]).toBeCloseTo(Math.cos((7 / vertices) * Math.PI * 2), 5);
-        // Last pair runs (v₄, v₅) — one revolution ends a vertex before the head.
-        const tail = out.length - 6;
-        expect(out[tail]).toBeCloseTo(Math.cos((4 / vertices) * Math.PI * 2), 5);
-        expect(out[tail + 3]).toBeCloseTo(Math.cos((5 / vertices) * Math.PI * 2), 5);
-    });
-
-    it('refuses degenerate slices or a mis-sized out buffer', () => {
-        const sub = circleRing(3);
-        expect(rotateTrackToAnchor(sub, [1, 0, 0], new Float32Array(sub.length + 6))).toBe(-1);
-        expect(rotateTrackToAnchor(new Float32Array(6), [1, 0, 0], new Float32Array(6))).toBe(-1);
     });
 });
 

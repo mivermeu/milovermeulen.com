@@ -25,6 +25,12 @@ export interface WorkerResponse {
     ranges?: number[];
     /** Per-track orbital period (ms) — ground tracks carry it for window sliding. */
     periodMs?: number;
+    /** Orbit bakes: flat per-sat vertex time offsets (ms from the bake epoch). */
+    vertexTimes?: Float32Array;
+    /** Orbit bakes: per-satellite orbital period (ms), 0 for skipped satellites. */
+    periods?: number[];
+    /** Orbit bakes: per-satellite chain vertex counts (aligned with vertexTimes). */
+    vertexCounts?: number[];
 }
 
 /**

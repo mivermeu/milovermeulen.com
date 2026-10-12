@@ -11,7 +11,7 @@ import { propagation, blendInto, type WorkerResponse } from '$lib/propagation';
 import { eciDirectionToEcf, sunEciDirection, type Vec3 } from '$lib/sun';
 import { renderEpochMs } from '$lib/state.svelte';
 import { epochAction, renderBlend } from '$lib/simclock';
-import { isContiguousPairs, rotateTrackToAnchor, slideUniformWindow } from '$lib/trackSlide';
+import { isContiguousPairs, firstVertexAtOrAfter, slideUniformWindow } from '$lib/trackSlide';
 
 const EARTH_RADIUS_KM = 6371;
 export const GLOBE_RADIUS = 6.4;
@@ -23,6 +23,10 @@ const ORBIT_REBUILD_INTERVAL_MS = 5000;
 // match the worker's ground-track sampling (`POINTS`) so a slid window's
 // vertex indices line up with the bake.
 const GROUND_WINDOW_STEPS = 128;
+// Catalog size ceiling for per-frame slid orbit windows: rebuilding every
+// satellite's window each frame costs ~half the bake as a memcpy, so beyond
+// this the mesh keeps the old cadence-rebuilt static draw instead.
+const ORBIT_SLIDE_MAX_SATS = 1500;
 // While paused, scene geometry is static unless the clock is scrubbed; only
 // re-ask the worker when the simulated epoch drifted well away from the last
 // orbit build — throttled so dragging the slider doesn't queue a storm.
@@ -113,6 +117,14 @@ export class GlobeScene {
 
     // Sliding-window bookkeeping for the highlighted orbit polyline.
     private highlightScratch: Float32Array | null = null;
+    // Slid-window bookkeeping for orbit chains (see setupOrbitWindows).
+    private orbitWindowMode = false;
+    private orbitVertexTimes: Float32Array | null = null;
+    private orbitPeriods: number[] = [];
+    private orbitVertexCounts: number[] = [];
+    private orbitVertexOffsets: number[] = [];
+    private orbitSlideEligible = new Uint8Array(0);
+    private orbitWindowScratch: Float32Array | null = null;
 
     private prevPositions: Float32Array | null = null;
     private nextPositions: Float32Array | null = null;
@@ -597,8 +609,247 @@ export class GlobeScene {
         // the simulated clock.
         this.orbitBuildGmst = gstime(new Date(this.orbitRequestEpoch));
         this.orbitsReady = true;
-        this.applyOrbitGeometry();
+        this.setupOrbitWindows(message);
+        this.updateOrbitVisibility();
         if (this.highlightIndex >= 0) this.showHighlight(this.highlightIndex);
+    }
+
+    /**
+     * Digest an orbit bake for slid windows. The bake holds two ν-continuity
+     * chains per satellite plus per-sat chain vertex times and periods; for
+     * catalogs under the slide cap the merged mesh is rebuilt per frame, each
+     * satellite's drawn window sliding to start at its live dot position. For
+     * larger catalogs (or broken chain metadata) the mesh shows the bake's
+     * first period statically, as before sliding.
+     */
+    private setupOrbitWindows(message: WorkerResponse): void {
+        const ranges = this.orbitRanges;
+        const satCount = ranges.length / 2;
+        const times = message.vertexTimes ?? null;
+        const periods = message.periods ?? [];
+        const counts = message.vertexCounts ?? [];
+        const slideCapable =
+            !!times &&
+            periods.length === satCount &&
+            counts.length === satCount &&
+            this.satellites.length <= ORBIT_SLIDE_MAX_SATS &&
+            times.length > 0;
+        if (!slideCapable) {
+            this.orbitWindowMode = false;
+            // Static first period per satellite (the doubled bake's second half
+            // would double-draw every orbit).
+            const staticBuffer = this.buildStaticOrbits();
+            if (staticBuffer.length > 0) {
+                this.orbitGeometry.setAttribute(
+                    'position',
+                    new THREE.BufferAttribute(staticBuffer, 3)
+                );
+                this.orbitGeometry.setDrawRange(0, staticBuffer.length / 3);
+            }
+            return;
+        }
+
+        this.orbitWindowMode = true;
+        this.orbitVertexTimes = times;
+        this.orbitPeriods = periods;
+        this.orbitVertexCounts = counts;
+        const offsets = new Array<number>(satCount + 1).fill(0);
+        const eligible = new Uint8Array(satCount);
+        let totalWindowPairs = 0;
+        for (let s = 0; s < satCount; s++) {
+            const pairs2 = this.chainPairCount(s);
+            // Single contiguous run ⇔ vertex count = pair count + 1: fragmented
+            // chains (SGP4-failure gaps between runs) can't slide coherently.
+            const ok = periods[s] > 0 && pairs2 >= 2 && counts[s] === pairs2 + 1;
+            eligible[s] = ok ? 1 : 0;
+            totalWindowPairs += ok ? (counts[s] - 1) / 2 : Math.floor(pairs2 / 2);
+            offsets[s + 1] = offsets[s] + counts[s];
+        }
+        this.orbitVertexOffsets = offsets;
+        this.orbitSlideEligible = eligible;
+        this.orbitWindowScratch = new Float32Array(totalWindowPairs * 6);
+        this.orbitGeometry.setAttribute(
+            'position',
+            new THREE.BufferAttribute(this.orbitWindowScratch, 3)
+        );
+        this.rebuildOrbitWindows();
+    }
+
+    private chainPairCount(satIndex: number): number {
+        const start = this.orbitRanges[satIndex * 2];
+        const end = this.orbitRanges[satIndex * 2 + 1];
+        return Math.max(0, (end - start) / 6);
+    }
+
+    /** Static (non-sliding) mesh: each satellite's bake's first period only. */
+    private buildStaticOrbits(): Float32Array {
+        const master = this.orbitPositions;
+        if (!master) return new Float32Array(0);
+        const satCount = this.orbitRanges.length / 2;
+        let total = 0;
+        for (let s = 0; s < satCount; s++) {
+            total += Math.floor(this.chainPairCount(s) / 2) * 6;
+        }
+        const out = new Float32Array(total);
+        let w = 0;
+        for (let s = 0; s < satCount; s++) {
+            const start = this.orbitRanges[s * 2];
+            const pairs = Math.floor(this.chainPairCount(s) / 2);
+            for (let j = 0; j < pairs; j++) {
+                out.set(master.subarray(start + j * 6, start + j * 6 + 6), w);
+                w += 6;
+            }
+        }
+        return out;
+    }
+
+    /** Visibility only — window geometry is painted per frame while sliding. */
+    private updateOrbitVisibility(): void {
+        this.orbitMesh.visible = this.showOrbits && this.orbitsReady;
+        // Highlight mesh stays visible when focused, regardless of showOrbits.
+        this.highlightMesh.visible = this.highlightIndex >= 0 && this.orbitsReady;
+    }
+
+    /**
+     * Per-frame rebuild of the merged orbit mesh: every satellite's drawn
+     * window slides along its doubled ν-bake so it starts at the satellite's
+     * live dot position and runs one full period ahead — identical treatment
+     * for every drawn orbit, pinned or not.
+     *
+     * Like the ground track, the window is future-only: it never closes back
+     * onto the anchor (in ECF the one-period track's endpoints sit ~22° apart
+     * — the earth rotates under the orbit — so bridging start and end would
+     * draw a giant false chord). When the render epoch runs past the bake
+     * (an overdue rebuild), the freshest full period is drawn instead.
+     */
+    private rebuildOrbitWindows(): void {
+        if (!this.orbitWindowMode || !this.orbitPositions || !this.orbitVertexTimes) return;
+        const master = this.orbitPositions;
+        const times = this.orbitVertexTimes;
+        const scratch = this.orbitWindowScratch;
+        if (!scratch) return;
+        // Per-sat times are offsets (ms) from the shared bake epoch.
+        const target = renderEpochMs() - this.orbitRequestEpoch;
+        const satCount = this.orbitPeriods.length;
+        let w = 0;
+        for (let s = 0; s < satCount; s++) {
+            const start = this.orbitRanges[s * 2];
+            const end = this.orbitRanges[s * 2 + 1];
+            if (end <= start) continue;
+            const chainPairs = this.chainPairCount(s);
+            // The focused satellite's window is painted by the highlight mesh
+            // (brighter, thicker) — skip it in the merged layer.
+            const isFocus = s === this.highlightIndex && this.highlightIndex >= 0;
+            if (this.orbitSlideEligible[s] !== 1) {
+                // Fragmented/metadata-broken chain: static first period.
+                const staticPairs = Math.max(0, Math.floor(chainPairs / 2));
+                if (isFocus) {
+                    this.writeStaticHighlight(master, start, staticPairs);
+                } else {
+                    for (let j = 0; j < staticPairs; j++) {
+                        scratch.set(master.subarray(start + j * 6, start + j * 6 + 6), w);
+                        w += 6;
+                    }
+                }
+                continue;
+            }
+            const vOff = this.orbitVertexOffsets[s];
+            const vCount = this.orbitVertexCounts[s];
+            const v0Pairs = (vCount - 1) / 2;
+            const k0 = firstVertexAtOrAfter(times, vOff, vCount, target);
+            if (k0 < 0 || k0 > v0Pairs) {
+                // Stale bake (the render epoch ran past it): draw the freshest
+                // full period as a static window, no anchor splice.
+                const base = start + v0Pairs * 6;
+                for (let j = 0; j < v0Pairs; j++) {
+                    scratch.set(master.subarray(base + j * 6, base + j * 6 + 6), w);
+                    w += 6;
+                }
+                if (isFocus) this.writeHighlightFrom(w - v0Pairs * 6, v0Pairs);
+                continue;
+            }
+            const i = s * 3;
+            const ax = this.positionArray[i];
+            const ay = this.positionArray[i + 1];
+            const az = this.positionArray[i + 2];
+            const anchorOk = Number.isFinite(ax + ay + az);
+            // Future-only window: the first edge replaces the chain's own lead
+            // edge with one starting at the exact live dot position; the rest
+            // come straight from the bake.
+            for (let j = 0; j < v0Pairs; j++) {
+                if (anchorOk) {
+                    if (j === 0) {
+                        scratch[w++] = ax;
+                        scratch[w++] = ay;
+                        scratch[w++] = az;
+                    } else {
+                        this.copyChainVertex(master, start, chainPairs, k0 + j - 1, scratch, w);
+                        w += 3;
+                    }
+                    this.copyChainVertex(master, start, chainPairs, k0 + j, scratch, w);
+                    w += 3;
+                } else {
+                    this.copyChainVertex(master, start, chainPairs, k0 + j, scratch, w);
+                    w += 3;
+                    this.copyChainVertex(master, start, chainPairs, k0 + j + 1, scratch, w);
+                    w += 3;
+                }
+            }
+            if (isFocus) this.writeHighlightFrom(w - v0Pairs * 6, v0Pairs);
+        }
+        (this.orbitGeometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
+        this.orbitGeometry.setDrawRange(0, w / 3);
+    }
+
+    private writeHighlightFrom(off: number, pairs: number): void {
+        if (pairs < 2) return;
+        const scratch = this.orbitWindowScratch;
+        if (!scratch || off < 0) return;
+        const need = pairs * 6;
+        if (!this.highlightScratch || this.highlightScratch.length !== need) {
+            this.highlightScratch = new Float32Array(need);
+            this.highlightGeometry.setAttribute(
+                'position',
+                new THREE.BufferAttribute(this.highlightScratch, 3)
+            );
+        }
+        this.highlightScratch.set(scratch.subarray(off, off + need));
+        (this.highlightGeometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate =
+            true;
+    }
+
+    /** Highlight fallback: copy `pairs` flat pairs straight from a master slice. */
+    private writeStaticHighlight(master: Float32Array, start: number, pairs: number): void {
+        if (pairs < 2) return;
+        const need = pairs * 6;
+        if (!this.highlightScratch || this.highlightScratch.length !== need) {
+            this.highlightScratch = new Float32Array(need);
+            this.highlightGeometry.setAttribute(
+                'position',
+                new THREE.BufferAttribute(this.highlightScratch, 3)
+            );
+        }
+        this.highlightScratch.set(master.subarray(start, start + need));
+        (this.highlightGeometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate =
+            true;
+    }
+
+    /** Copy chain vertex k of a satellite's pair-chain into `out[offset..]`. */
+    private copyChainVertex(
+        master: Float32Array,
+        start: number,
+        chainPairs: number,
+        k: number,
+        out: Float32Array,
+        offset: number
+    ): void {
+        // The chain stores pairs (v_j, v_j+1): vertex k < chainPairs lives at
+        // k·6; the final vertex exists only as the last pair's b.
+        const src = k < chainPairs ? k * 6 : (k - 1) * 6 + 3;
+        if (offset + 3 > out.length) return;
+        out[offset] = master[start + src];
+        out[offset + 1] = master[start + src + 1];
+        out[offset + 2] = master[start + src + 2];
     }
 
     private onGroundTrack(message: WorkerResponse): void {
@@ -694,27 +945,6 @@ export class GlobeScene {
     private updateGroundTrackVisibility(): void {
         this.groundTrackMesh.visible =
             this.groundTrackReady && this.groundTrackIndex >= 0 && this.showGroundTrack;
-    }
-
-    private applyOrbitGeometry(): void {
-        const full = this.orbitPositions;
-        if (!full) return;
-        let array = full;
-        if (this.highlightIndex >= 0) {
-            const a = this.orbitRanges[this.highlightIndex * 2];
-            const b = this.orbitRanges[this.highlightIndex * 2 + 1];
-            if (b > a) {
-                const out = new Float32Array(full.length - (b - a));
-                out.set(full.subarray(0, a), 0);
-                out.set(full.subarray(b), a);
-                array = out;
-            }
-        }
-        this.orbitGeometry.setAttribute('position', new THREE.BufferAttribute(array, 3));
-        this.orbitGeometry.setDrawRange(0, array.length / 3);
-        this.orbitMesh.visible = this.showOrbits && this.orbitsReady;
-        // Highlight mesh stays visible when focused, regardless of showOrbits.
-        this.highlightMesh.visible = this.highlightIndex >= 0 && this.orbitsReady;
     }
 
     private handlePointerMove(event: PointerEvent): void {
@@ -830,18 +1060,9 @@ export class GlobeScene {
         }
         this.highlightIndex = index;
         this.updateNodeMarkers(master.subarray(start, end));
-        // The polyline itself is painted per frame by slideHighlight — rotated
-        // so it always starts at the live dot position. A fragmented chain
-        // (SGP4-failure gaps) can't be re-anchored coherently, so keep the
-        // static bake draw for that case.
-        if (!isContiguousPairs(master.subarray(start, end))) {
-            this.highlightGeometry.setAttribute(
-                'position',
-                new THREE.BufferAttribute(master.subarray(start, end), 3)
-            );
-        }
-        this.highlightMesh.visible = true;
-        this.applyOrbitGeometry();
+        // The focused window is painted per frame by rebuildOrbitWindows
+        // (slid to the live dot position); this only owns markers/visibility.
+        this.updateOrbitVisibility();
     }
 
     hideHighlight(): void {
@@ -850,7 +1071,7 @@ export class GlobeScene {
         this.highlightMesh.visible = false;
         this.ascendingNode.visible = false;
         this.descendingNode.visible = false;
-        this.applyOrbitGeometry();
+        this.updateOrbitVisibility();
     }
 
     private updateNodeMarkers(positions: Float32Array): void {
@@ -1061,7 +1282,7 @@ export class GlobeScene {
         }
 
         this.updatePositions();
-        this.slideHighlight();
+        this.rebuildOrbitWindows();
         this.slideGroundTrack();
 
         if (this.highlightIndex >= 0 && this.pointerOverCanvas) {
@@ -1115,30 +1336,6 @@ export class GlobeScene {
      * the satellite's live dot position — the decoupled mirror of the ground
      * track's slide. The worker's cadence still refreshes the geometry itself.
      */
-    private slideHighlight(): void {
-        if (this.highlightIndex < 0 || !this.orbitsReady || !this.orbitPositions) return;
-        const start = this.orbitRanges[this.highlightIndex * 2];
-        const end = this.orbitRanges[this.highlightIndex * 2 + 1];
-        if (!(start >= 0) || end <= start + 2) return;
-        const sub = this.orbitPositions.subarray(start, end);
-        if (!isContiguousPairs(sub)) return; // fragmented: static bake draw
-        const i = this.highlightIndex * 3;
-        const ax = this.positionArray[i];
-        const ay = this.positionArray[i + 1];
-        const az = this.positionArray[i + 2];
-        if (!Number.isFinite(ax + ay + az)) return;
-        if (!this.highlightScratch || this.highlightScratch.length !== sub.length) {
-            this.highlightScratch = new Float32Array(sub.length);
-            this.highlightGeometry.setAttribute(
-                'position',
-                new THREE.BufferAttribute(this.highlightScratch, 3)
-            );
-        }
-        if (rotateTrackToAnchor(sub, [ax, ay, az], this.highlightScratch) < 0) return;
-        (this.highlightGeometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate =
-            true;
-    }
-
     dispose(): void {
         this.disposed = true;
         cancelAnimationFrame(this.raf);

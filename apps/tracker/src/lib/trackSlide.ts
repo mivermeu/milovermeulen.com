@@ -31,67 +31,7 @@ export function isContiguousPairs(sub: Float32Array, eps = 1e-3): boolean {
 }
 
 /**
- * Re-anchor a contiguous pair-chain so its drawn window starts and closes at
- * `anchor` (the satellite's current position). The head vertex is the master
- * vertex nearest the anchor; the incoming buffer keeps its pair count, with
- * the exact anchor interpolated in as vertex 0 and reused as the closing
- * vertex — the drawn result remains one full revolution starting from the sat.
- *
- * Returns the head vertex index (−1 when the slice is too short or the anchor
- * isn't near any vertex — the caller should keep the previous frame).
- */
-export function rotateTrackToAnchor(
-    sub: Float32Array,
-    anchor: readonly [number, number, number],
-    out: Float32Array
-): number {
-    const pairs = sub.length / 6;
-    const vertices = pairs + 1;
-    if (pairs < 2 || out.length !== sub.length) return -1;
-
-    // Nearest master vertex to the anchor — the ring travels the same samples
-    // each frame, so the head glides continuously as the dot advances.
-    let head = 0;
-    let best = Infinity;
-    for (let i = 0; i < vertices; i++) {
-        const dx = sub[i * 6] - anchor[0];
-        const dy = sub[i * 6 + 1] - anchor[1];
-        const dz = sub[i * 6 + 2] - anchor[2];
-        const d = dx * dx + dy * dy + dz * dz;
-        if (d < best) {
-            best = d;
-            head = i;
-        }
-    }
-    // Future-only window: pair j connects the cycle vertex j to j+1. Vertex 0
-    // is the exact anchor; vertex j (j ≥ 1) is master vertex head+j (mod V) —
-    // so the first master edge (master[head] → head+1) is replaced by the
-    // anchor edge and the last edge drawn ends at master vertex head−1, one
-    // revolution later, without bridging back to the anchor.
-    let w = 0;
-    for (let j = 0; j < pairs; j++) {
-        const a = j === 0 ? anchor : vertex(sub, head + j, vertices);
-        const b = vertex(sub, head + j + 1, vertices);
-        out[w++] = a[0];
-        out[w++] = a[1];
-        out[w++] = a[2];
-        out[w++] = b[0];
-        out[w++] = b[1];
-        out[w++] = b[2];
-    }
-    return head;
-}
-
-function vertex(sub: Float32Array, i: number, vertices: number) {
-    const k = i % vertices;
-    // The chain stores one fewer `a` than vertex count: the last vertex only
-    // exists as the previous pair's `b`. Same point by adjacency either way.
-    const offset = k === vertices - 1 ? (k - 1) * 6 + 3 : k * 6;
-    return sub.subarray(offset, offset + 3);
-}
-
-/**
- * Slide a time-uniform master window so that it starts at `headFrac` of the
+ * Re-anchor a time-uniform master window so that it starts at `headFrac` of the
  * window period. `headFrac` is (render epoch − master epoch) / master step
  * period, in [0, 1); the drawn window covers [headFrac, headFrac + 1] of the
  * master's second half — `windowSteps` samples after the anchor, so the worker
@@ -134,4 +74,34 @@ export function slideUniformWindow(
 
 function masterVertex(master: Float32Array, i: number) {
     return master.subarray(i * 6, i * 6 + 3);
+}
+
+/**
+ * Index (0-based within the chain) of the FIRST vertex whose time offset is at
+ * or after `target`. Chains hold monotone non-decreasing time offsets (ms) —
+ * the doubled ν-grid bake repeats each period, so a window start found here
+ * always has a full period of material ahead of it without wrapping. The view
+ * draws its window from the anchor to `head − 1 chain vertices` later.
+ *
+ * Returns −1 when no vertex qualifies (the render epoch is beyond the whole
+ * bake — the caller holds its last frame).
+ */
+export function firstVertexAtOrAfter(
+    times: Float32Array,
+    offset: number,
+    count: number,
+    target: number
+): number {
+    if (count <= 0 || offset + count > times.length) return -1;
+    let lo = offset;
+    let hi = offset + count - 1;
+    if (times[hi] < target) return -1;
+    if (times[lo] >= target) return 0;
+    // Half-open search: invariant times[lo−1] < target ≤ times[hi].
+    while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (times[mid] < target) lo = mid + 1;
+        else hi = mid;
+    }
+    return lo - offset;
 }
