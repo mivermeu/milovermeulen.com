@@ -31,7 +31,7 @@ export interface GraphBrush {
 
 /** Drag distance before a pointer sequence counts as a brush instead of a click. */
 export const BRUSH_DRAG_THRESHOLD_PX = 6;
-/** Committed rects thinner than this (per axis, after clamping) clear the brush. */
+/** Committed rects thinner than this on their DOMINANT axis clear the brush. */
 export const BRUSH_MIN_AXIS_PX = 6;
 
 /** Canvas-local screen rectangle, any corner order. */

@@ -70,11 +70,14 @@ describe('brushFromCanvasRect', () => {
     });
 
     test('band brushes commit with only a hairline on the secondary axis', () => {
-        // 5×40 horizontal band: the dominant x axis carries it past both floors.
+        // 5×40 vertical band (5 px wide, 40 px tall): the dominant y axis
+        // carries it past the floor; the 5 px x extent only needs a hairline.
         const band = brushFromCanvasRect(normalizedRect(60, 38, 65, 78), axes);
         expect(band).not.toBeNull();
-        expect(band?.xMin).toBe(100); // canvas 60 → 10% of the 0..1000 x range
-        expect(band?.xMax).toBe(125); // canvas 65
+        expect(band?.yMax).toBe(144); // canvas y 38 (top) → 80% up the 0..180 range
+        expect(band?.yMin).toBe(72); // canvas y 78 (bottom)
+        expect(band?.xMin).toBe(100); // canvas x 60 → 10% of the 0..1000 x range
+        expect(band?.xMax).toBe(125); // canvas x 65
     });
 
     test('a 1px hairline drag still clears', () => {
@@ -188,9 +191,11 @@ describe('computeBrushMask', () => {
     });
 
     test('non-dense uIndex slots: one flag per array position, not per uIndex', () => {
-        // The worker's arrays compact on failed-TLE skips, so samples can own
-        // sparse uIndex slots — flags must still line up by ARRAY POSITION
-        // (the slot order shared with the globe), never by uIndex value.
+        // The flags map by ARRAY POSITION (the slot order shared with the
+        // globe), never by uIndex value. This case is defensive: it pins the
+        // position-based contract regardless of uIndex density — the worker
+        // does not compact rows on skips, but nothing in the contract should
+        // ever depend on it.
         const sparse = [
             { uIndex: 5, x: 55, y: 550 },
             { uIndex: 9, x: 70, y: 550 },

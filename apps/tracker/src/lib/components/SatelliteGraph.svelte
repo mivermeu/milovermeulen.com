@@ -556,7 +556,15 @@
         // drag must not clobber the rect.
         if (pressActive || !event.isPrimary || !canvas) return;
         pressActive = true;
-        brushStart = canvasPoint(event);
+        // Clamp the start corner to the plot: a press in a canvas margin must
+        // not inflate the dominant-axis extent (it would let the painted
+        // margin distance commit a degenerate edge column).
+        const p = canvasPoint(event);
+        const { l, t, w, h } = plot;
+        brushStart = {
+            x: Math.min(Math.max(p.x, l), l + w),
+            y: Math.min(Math.max(p.y, t), t + h)
+        };
         // Capture so a drag ending over the chip/axis row still commits.
         canvas.setPointerCapture(event.pointerId);
     }
