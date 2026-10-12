@@ -330,6 +330,10 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
         {
             type: 'orbits',
             requestId,
+            // Echo the bake epoch: views must slide against the epoch of the
+            // bake they actually hold, not against a newer request's epoch —
+            // between dispatch and arrival that mismatch rewinds every window.
+            epoch,
             positions,
             ranges,
             vertexTimes: new Float32Array(allTimes),

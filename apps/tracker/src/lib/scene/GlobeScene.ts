@@ -107,6 +107,7 @@ export class GlobeScene {
     private orbitsReady = false;
     private orbitRanges: number[] = [];
     private orbitPositions: Float32Array | null = null;
+    private orbitBakeEpoch = 0;
     private orbitBuildGmst = 0;
     private highlightIndex = -1;
     private pointerOverCanvas = false;
@@ -608,6 +609,10 @@ export class GlobeScene {
         // wall-clock now — otherwise the mesh would drift out of alignment with
         // the simulated clock.
         this.orbitBuildGmst = gstime(new Date(this.orbitRequestEpoch));
+        // The epoch of the bake we now hold (echoed by the worker). Slides are
+        // computed against this — not the pending request's epoch, which had
+        // already bumped and rewound every window until the response landed.
+        this.orbitBakeEpoch = message.epoch ?? this.orbitRequestEpoch;
         this.orbitsReady = true;
         this.setupOrbitWindows(message);
         this.updateOrbitVisibility();
@@ -655,23 +660,26 @@ export class GlobeScene {
         this.orbitVertexCounts = counts;
         const offsets = new Array<number>(satCount + 1).fill(0);
         const eligible = new Uint8Array(satCount);
-        let totalWindowPairs = 0;
         for (let s = 0; s < satCount; s++) {
             const pairs2 = this.chainPairCount(s);
             // Single contiguous run ⇔ vertex count = pair count + 1: fragmented
             // chains (SGP4-failure gaps between runs) can't slide coherently.
-            const ok = periods[s] > 0 && pairs2 >= 2 && counts[s] === pairs2 + 1;
-            eligible[s] = ok ? 1 : 0;
-            totalWindowPairs += ok ? (counts[s] - 1) / 2 : Math.floor(pairs2 / 2);
+            eligible[s] = periods[s] > 0 && pairs2 >= 2 && counts[s] === pairs2 + 1 ? 1 : 0;
             offsets[s + 1] = offsets[s] + counts[s];
         }
         this.orbitVertexOffsets = offsets;
         this.orbitSlideEligible = eligible;
-        this.orbitWindowScratch = new Float32Array(totalWindowPairs * 6);
-        this.orbitGeometry.setAttribute(
-            'position',
-            new THREE.BufferAttribute(this.orbitWindowScratch, 3)
-        );
+        // Windows are TIME-ranged (variable vertex count per frame): capacity is
+        // the whole bake, lengths handled by the draw range. Reusing the buffer
+        // when it still fits avoids a per-rebuild GPU re-upload pop.
+        const capacity = (this.orbitPositions ?? new Float32Array(0)).length;
+        if (!this.orbitWindowScratch || this.orbitWindowScratch.length < capacity) {
+            this.orbitWindowScratch = new Float32Array(capacity);
+            this.orbitGeometry.setAttribute(
+                'position',
+                new THREE.BufferAttribute(this.orbitWindowScratch, 3)
+            );
+        }
         this.rebuildOrbitWindows();
     }
 
@@ -713,14 +721,18 @@ export class GlobeScene {
     /**
      * Per-frame rebuild of the merged orbit mesh: every satellite's drawn
      * window slides along its doubled ν-bake so it starts at the satellite's
-     * live dot position and runs one full period ahead — identical treatment
-     * for every drawn orbit, pinned or not.
+     * live dot position and runs exactly one full period ahead — identical
+     * treatment for every drawn orbit, pinned or not.
      *
-     * Like the ground track, the window is future-only: it never closes back
-     * onto the anchor (in ECF the one-period track's endpoints sit ~22° apart
-     * — the earth rotates under the orbit — so bridging start and end would
-     * draw a giant false chord). When the render epoch runs past the bake
-     * (an overdue rebuild), the freshest full period is drawn instead.
+     * Windows are TIME ranges [T, T+period] with variable vertex counts. Both
+     * ends interpolate continuously — the head is the exact live dot, the
+     * tail a lerp of the bracketing bake vertices at T+period — because the
+     * ν-grid leaves vertices far apart in time near apogee, where a
+     * fixed-count window made the drawn end hop between them. Like the
+     * ground track the window is future-only: in ECF the one-period arc's
+     * endpoints sit ~22° apart (the earth rotates under the orbit), so it
+     * never wraps or closes on itself. When the render epoch runs past the
+     * bake (an overdue rebuild), its freshest full period is drawn instead.
      */
     private rebuildOrbitWindows(): void {
         if (!this.orbitWindowMode || !this.orbitPositions || !this.orbitVertexTimes) return;
@@ -728,97 +740,130 @@ export class GlobeScene {
         const times = this.orbitVertexTimes;
         const scratch = this.orbitWindowScratch;
         if (!scratch) return;
-        // Per-sat times are offsets (ms) from the shared bake epoch.
-        const target = renderEpochMs() - this.orbitRequestEpoch;
-        const satCount = this.orbitPeriods.length;
-        let w = 0;
-        for (let s = 0; s < satCount; s++) {
+        // Per-sat times are offsets (ms) from the epoch of the bake we hold.
+        const target = renderEpochMs() - this.orbitBakeEpoch;
+        const cap = scratch.length;
+        let merged = 0; // merged-layer write cursor (draw-ranged)
+        let hiWritten = false; // focus window painted this frame?
+
+        for (let s = 0; s < this.orbitPeriods.length; s++) {
             const start = this.orbitRanges[s * 2];
             const end = this.orbitRanges[s * 2 + 1];
             if (end <= start) continue;
             const chainPairs = this.chainPairCount(s);
-            // The focused satellite's window is painted by the highlight mesh
-            // (brighter, thicker) — skip it in the merged layer.
             const isFocus = s === this.highlightIndex && this.highlightIndex >= 0;
+
             if (this.orbitSlideEligible[s] !== 1) {
-                // Fragmented/metadata-broken chain: static first period.
+                // Fragmented/metadata-broken chain: static first period, no
+                // sliding (a window would bridge the honest failure gaps).
                 const staticPairs = Math.max(0, Math.floor(chainPairs / 2));
                 if (isFocus) {
                     this.writeStaticHighlight(master, start, staticPairs);
+                    hiWritten = true;
                 } else {
-                    for (let j = 0; j < staticPairs; j++) {
-                        scratch.set(master.subarray(start + j * 6, start + j * 6 + 6), w);
-                        w += 6;
+                    for (let j = 0; j < staticPairs && merged + 6 <= cap; j++) {
+                        scratch.set(master.subarray(start + j * 6, start + j * 6 + 6), merged);
+                        merged += 6;
                     }
                 }
                 continue;
             }
+
             const vOff = this.orbitVertexOffsets[s];
             const vCount = this.orbitVertexCounts[s];
-            const v0Pairs = (vCount - 1) / 2;
-            const k0 = firstVertexAtOrAfter(times, vOff, vCount, target);
-            if (k0 < 0 || k0 > v0Pairs) {
-                // Stale bake (the render epoch ran past it): draw the freshest
-                // full period as a static window, no anchor splice.
-                const base = start + v0Pairs * 6;
-                for (let j = 0; j < v0Pairs; j++) {
-                    scratch.set(master.subarray(base + j * 6, base + j * 6 + 6), w);
-                    w += 6;
-                }
-                if (isFocus) this.writeHighlightFrom(w - v0Pairs * 6, v0Pairs);
-                continue;
+            const period = this.orbitPeriods[s];
+            let head = firstVertexAtOrAfter(times, vOff, vCount, target);
+            if (head < 0) {
+                // Stale bake — the render epoch ran past it: draw its freshest
+                // full period (the second half) without an anchor splice.
+                head = firstVertexAtOrAfter(times, vOff, vCount, period);
             }
-            const i = s * 3;
-            const ax = this.positionArray[i];
-            const ay = this.positionArray[i + 1];
-            const az = this.positionArray[i + 2];
-            const anchorOk = Number.isFinite(ax + ay + az);
-            // Future-only window: the first edge replaces the chain's own lead
-            // edge with one starting at the exact live dot position; the rest
-            // come straight from the bake.
-            for (let j = 0; j < v0Pairs; j++) {
-                if (anchorOk) {
-                    if (j === 0) {
-                        scratch[w++] = ax;
-                        scratch[w++] = ay;
-                        scratch[w++] = az;
-                    } else {
-                        this.copyChainVertex(master, start, chainPairs, k0 + j - 1, scratch, w);
-                        w += 3;
-                    }
-                    this.copyChainVertex(master, start, chainPairs, k0 + j, scratch, w);
-                    w += 3;
-                } else {
-                    this.copyChainVertex(master, start, chainPairs, k0 + j, scratch, w);
-                    w += 3;
-                    this.copyChainVertex(master, start, chainPairs, k0 + j + 1, scratch, w);
-                    w += 3;
+            // Exclusive window end: first vertex at/after T+period.
+            const endIdx = firstVertexAtOrAfter(times, vOff, vCount, target + period);
+            if (head < 0 || endIdx === head) continue;
+            const outEnd = endIdx < 0 ? vCount : endIdx;
+
+            // Destination: the focused satellite paints into its own buffer
+            // (the merged layer skips it); everything else writes sequentially.
+            const isFocusSat = isFocus;
+            let out = scratch;
+            let outOff = merged;
+            const t = this.positionArray[s * 3];
+            const ty = this.positionArray[s * 3 + 1];
+            const tz = this.positionArray[s * 3 + 2];
+            const anchorOk = Number.isFinite(t + ty + tz);
+            if (isFocusSat) {
+                if (!this.highlightScratch || this.highlightScratch.length < cap) {
+                    this.highlightScratch = new Float32Array(cap);
+                    this.highlightGeometry.setAttribute(
+                        'position',
+                        new THREE.BufferAttribute(this.highlightScratch, 3)
+                    );
+                }
+                out = this.highlightScratch;
+                outOff = 0;
+            }
+            let w = outOff;
+            if (anchorOk) {
+                // Head splice: the window's first edge starts at the exact
+                // live dot position.
+                out[w++] = t;
+                out[w++] = ty;
+                out[w++] = tz;
+            }
+            const bodyStart = anchorOk ? head : head + 1;
+            for (let k = bodyStart; k < outEnd; k++) {
+                this.copyChainVertex(master, start, chainPairs, k, out, w);
+                w += 3;
+                if (w + 3 > cap) break;
+            }
+            // Tail interpolation at exactly T+period — beyond the bake end it
+            // is simply skipped (the last drawn vertex stands at chain end).
+            if (endIdx > 0 && endIdx < vCount && w + 6 <= cap && !isFocusSat) {
+                const tA = times[vOff + endIdx - 1];
+                const tB = times[vOff + endIdx];
+                const span = tB - tA;
+                const alpha =
+                    span > 0 ? Math.min(1, Math.max(0, (target + period - tA) / span)) : 0;
+                if (alpha >= 0) {
+                    const srcA =
+                        start + (endIdx - 1 < chainPairs ? (endIdx - 1) * 6 : (endIdx - 2) * 6 + 3);
+                    const srcB = start + (endIdx < chainPairs ? endIdx * 6 : (endIdx - 1) * 6 + 3);
+                    const bx = master[srcA];
+                    const by = master[srcA + 1];
+                    const bz = master[srcA + 2];
+                    out[w++] = bx;
+                    out[w++] = by;
+                    out[w++] = bz;
+                    out[w++] = bx + (master[srcB] - bx) * alpha;
+                    out[w++] = by + (master[srcB + 1] - by) * alpha;
+                    out[w++] = bz + (master[srcB + 2] - bz) * alpha;
                 }
             }
-            if (isFocus) this.writeHighlightFrom(w - v0Pairs * 6, v0Pairs);
+            if (isFocusSat) {
+                const attr = this.highlightGeometry.getAttribute('position') as
+                    THREE.BufferAttribute | undefined;
+                if (attr) attr.needsUpdate = true;
+                this.highlightGeometry.setDrawRange(0, (w - outOff) / 3);
+                hiWritten = true;
+            } else {
+                merged = w;
+            }
         }
-        (this.orbitGeometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
-        this.orbitGeometry.setDrawRange(0, w / 3);
+
+        if (!hiWritten && this.highlightIndex >= 0 && this.orbitsReady) {
+            // No window was painted for the focus this frame (fragmented/stale
+            // edge cases): clear the highlight draw so it never trails on.
+            this.highlightGeometry.setDrawRange(0, 0);
+        }
+        const mergedAttr = this.orbitGeometry.getAttribute('position') as
+            THREE.BufferAttribute | undefined;
+        if (mergedAttr && mergedAttr.array === this.orbitWindowScratch) {
+            mergedAttr.needsUpdate = true;
+            this.orbitGeometry.setDrawRange(0, merged / 3);
+        }
     }
 
-    private writeHighlightFrom(off: number, pairs: number): void {
-        if (pairs < 2) return;
-        const scratch = this.orbitWindowScratch;
-        if (!scratch || off < 0) return;
-        const need = pairs * 6;
-        if (!this.highlightScratch || this.highlightScratch.length !== need) {
-            this.highlightScratch = new Float32Array(need);
-            this.highlightGeometry.setAttribute(
-                'position',
-                new THREE.BufferAttribute(this.highlightScratch, 3)
-            );
-        }
-        this.highlightScratch.set(scratch.subarray(off, off + need));
-        (this.highlightGeometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate =
-            true;
-    }
-
-    /** Highlight fallback: copy `pairs` flat pairs straight from a master slice. */
     private writeStaticHighlight(master: Float32Array, start: number, pairs: number): void {
         if (pairs < 2) return;
         const need = pairs * 6;
