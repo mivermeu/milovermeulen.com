@@ -28,6 +28,8 @@ type BuildOrbitsMessage = {
     epoch: number;
     requestId: number;
     frame: Frame;
+    /** Bake span: 2 periods for sliding catalogs, 1 for static-draw catalogs. */
+    twoPeriods: boolean;
 };
 type ModeMessage = { type: 'mode'; mode: ElementMode };
 type BuildGroundTrackMessage = {
@@ -132,7 +134,7 @@ function sgp4Position(rec: SatRec, tMs: number): Vec3 | null {
 
 async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
     const buildId = ++orbitBuildId;
-    const { requestId, epoch, frame } = message;
+    const { requestId, epoch, frame, twoPeriods } = message;
     const total = satellites.length;
     const inertial = frame === 'eci';
     const chordLimit2 = (inertial ? MAX_CHORD_ECI : MAX_CHORD_ECF) ** 2;
@@ -248,13 +250,11 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
         for (let k = 1; k < count; k++) if (dts[k] < dts[kMin]) kMin = k;
         dts[kMin] = 0;
 
-        // Doubled chain: two periods of ν nodes. The drawn window is only one
-        // period ahead of the live dot, but between cadence rebuilds at high
-        // time accelerations the window's start drifts into the second period
-        // — the extra revolution is the sliding headroom, and because the
-        // chain runs ν-continuously across the seam it contains no fabricated
-        // long chords.
-        const chainCount = 2 * count;
+        // Doubled chain: two periods of ν nodes — but only when the catalog is
+        // small enough to slide windows per frame. Oversized catalogs draw
+        // statically and only need the first period, halving the bake cost so
+        // big-catalog rebuilds still complete inside the cadence.
+        const chainCount = count * (twoPeriods ? 2 : 1);
         let tArr: number[] = new Array(chainCount);
         let eArr: Array<Vec3 | null> = new Array(chainCount);
         for (let s = 0; s < chainCount; s++) {

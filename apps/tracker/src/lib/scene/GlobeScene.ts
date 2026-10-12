@@ -1294,12 +1294,15 @@ export class GlobeScene {
         this.lastOrbitBuildWall = performance.now();
         this.orbitRequestSeq++;
         // Orbits anchor at the shared simulated epoch, matching the propagated
-        // dots — globe and graph never sample different times.
-        this.orbitRequestEpoch = Math.round(trackerState.simEpochMs);
+        // dots — globe and graph never sample different times. Big catalogs
+        // bake ONE period (their draw is static; the second revolution would
+        // double the bake cost for nothing and blow the rebuild cadence).
+        this.orbitRequestEpoch = Math.round(renderEpochMs());
         propagation.buildOrbits(
             this.orbitRequestEpoch,
             this.orbitRequestSeq,
-            trackerState.referenceFrame
+            trackerState.referenceFrame,
+            this.satellites.length <= ORBIT_SLIDE_MAX_SATS
         );
     }
 
