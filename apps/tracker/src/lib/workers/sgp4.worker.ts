@@ -1,9 +1,14 @@
 import { twoline2satrec, propagate, eciToEcf, gstime } from 'satellite.js';
 import type { EciVec3, SatRec } from 'satellite.js';
 import type { ParsedSatellite } from '$lib/satellites/types';
-import { elementsFor, type ElementMode, type OrbitalElements } from '$lib/orbit';
+import {
+    elementsFor,
+    type ElementMode,
+    type OrbitalElements,
+    type PlottedElements
+} from '$lib/orbit';
 import { isSunlit, sunEciDirection } from '$lib/sun';
-import { buildOrbitChain } from '$lib/orbitTrack';
+import { buildOrbitChain, type OrbitChain } from '$lib/orbitTrack';
 import { sgp4Position } from '$lib/sgp4pos';
 
 const EARTH_RADIUS_KM = 6371;
@@ -36,6 +41,12 @@ type BuildOrbitsMessage = {
      * zero chain so per-sat metadata stays index-aligned.
      */
     onlyIndex: number | null;
+    /**
+     * Graph-selection cull flags indexed by worker slot (1 = visible). Culled
+     * satellites bake zero chains with no SGP4 cost; per-sat metadata stays
+     * index-aligned and the scene's per-frame cull covers membership glide.
+     */
+    cullMask?: Uint8Array | null;
 };
 type ModeMessage = { type: 'mode'; mode: ElementMode };
 type BuildGroundTrackMessage = {
@@ -105,7 +116,7 @@ function colorFor(rec: SatRec): number[] {
 async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
     const buildId = ++orbitBuildId;
     const bakeGeneration = catalogVersion;
-    const { requestId, epoch, frame, onlyIndex } = message;
+    const { requestId, epoch, frame, onlyIndex, cullMask } = message;
     // One flat vertex chain per satellite (two ν-continuous periods, refined
     // where chords get long) via the shared per-satellite chain builder in
     // $lib/orbitTrack — the same builder the scene uses for the highlight,
@@ -125,6 +136,14 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
 
     for (let i = 0; i < n; i++) {
         const sat = sats[i];
+        // Culled by the graph selection: zero chain, no SGP4 cost. The
+        // scene's per-frame cull covers membership glide between bakes.
+        if (cullMask && i < cullMask.length && !cullMask[i]) {
+            vertexCounts.push(0);
+            periods.push(0);
+            runs.push(0);
+            continue;
+        }
         // Focus-only bake: every other entry reports a zero chain so per-sat
         // metadata stays index-aligned with the full catalog.
         if (onlyIndex !== null && onlyIndex !== undefined && i !== onlyIndex) {
@@ -140,7 +159,7 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
             continue; // catalog re-initialized mid-build (belt/braces)
         }
         const rec = sat.rec;
-        let chain = null;
+        let chain: OrbitChain | null;
         try {
             chain = buildOrbitChain({
                 rec,
@@ -360,7 +379,7 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
                 positions[i * 3 + 1] = ecf.y * scale;
                 positions[i * 3 + 2] = ecf.z * scale;
                 // Elements screen their own finiteness, so `null` rows stay NaN.
-                let el = null;
+                let el: PlottedElements | null;
                 try {
                     el = elementsFor(
                         elementMode,

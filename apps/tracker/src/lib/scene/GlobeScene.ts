@@ -833,6 +833,7 @@ export class GlobeScene {
     private lastWindowTarget = Number.NaN;
     private lastWindowBake = -1;
     private lastWindowFocus = -2;
+    private lastWindowMask: Uint8Array | null = null;
     private windowFrameTick = 0;
 
     private rebuildOrbitWindows(): void {
@@ -853,9 +854,15 @@ export class GlobeScene {
         const nowMs = renderEpochMs();
         const target = nowMs - this.orbitBakeEpoch;
         const gmstNow = gstime(new Date(nowMs));
+        const mask = this.brushMask;
+        const maskChanged = mask !== this.lastWindowMask;
         // Paused (or scrubbed-in-place) → the windows are identical to the
         // last paint: skip the whole per-frame rebuild.
-        if (target === this.lastWindowTarget && this.orbitBakeEpoch === this.lastWindowBake) {
+        if (
+            target === this.lastWindowTarget &&
+            this.orbitBakeEpoch === this.lastWindowBake &&
+            !maskChanged
+        ) {
             return;
         }
         // Cadence tiers (see the constants): repaint windows every Nth frame
@@ -874,22 +881,31 @@ export class GlobeScene {
             this.windowFrameTick = (this.windowFrameTick + 1) % factor;
             const forced =
                 this.orbitBakeEpoch !== this.lastWindowBake ||
-                this.highlightIndex !== this.lastWindowFocus;
+                this.highlightIndex !== this.lastWindowFocus ||
+                maskChanged;
             if (this.windowFrameTick !== 0 && !forced) return;
         }
         this.lastWindowFocus = this.highlightIndex;
         this.lastWindowBake = this.orbitBakeEpoch;
         this.lastWindowTarget = target;
+        this.lastWindowMask = mask;
 
         for (let s = 0; s < this.orbitVertexCounts.length; s++) {
             const vCount = this.orbitVertexCounts[s];
             if (vCount < 3) continue;
-            const nRuns = this.orbitRuns[this.orbitRunsCursor[s]];
-            if (nRuns !== 1) continue; // static slot, installed per bake
-
             const vOff = this.orbitVertexOffsets[s];
             const cap = this.orbitSlotCaps[s];
             const slotOff = this.orbitSlotOffsets[s];
+            // Brushed-out satellites draw no orbit at all: zero the slot
+            // (sliding and static alike) instead of splicing a window onto
+            // the origin-parked dot, which read as an orbit snapping to the
+            // earth's center.
+            if (mask && s < mask.length && !mask[s]) {
+                scratch.fill(0, slotOff * 6, (slotOff + cap) * 6);
+                continue;
+            }
+            const nRuns = this.orbitRuns[this.orbitRunsCursor[s]];
+            if (nRuns !== 1) continue; // static slot, installed per bake
             const isFocus = s === this.highlightIndex && this.highlightIndex >= 0;
             if (isFocus) {
                 if (!this.highlightScratch || this.highlightScratch.length < cap * 6) {
@@ -1247,6 +1263,15 @@ export class GlobeScene {
         }
         if (this.highlightCapEdges === 0 || !this.highlightScratch) return;
         const scratch = this.highlightScratch;
+        // Brushed-out focus (glided out of the selection as time played):
+        // blank the arc instead of splicing onto the origin-parked dot.
+        const hm = this.brushMask;
+        if (hm && this.highlightIndex < hm.length && !hm[this.highlightIndex]) {
+            scratch.fill(0);
+            (this.highlightGeometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate =
+                true;
+            return;
+        }
         if (chain.runLens.length !== 1) {
             // Fragmented chain (SGP4 gaps): sliding would chord across unknown
             // spans — paint honest static per-run edges like the merged layer.
@@ -1506,7 +1531,8 @@ export class GlobeScene {
             this.orbitRequestEpoch,
             this.orbitRequestSeq,
             trackerState.referenceFrame,
-            onlyIndex
+            onlyIndex,
+            this.brushMask
         );
     }
 

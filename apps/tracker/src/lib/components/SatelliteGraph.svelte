@@ -11,6 +11,7 @@
         brushChipText,
         brushFromCanvasRect,
         brushIsActiveForAxes,
+        brushToScreenRect,
         computeBrushMask,
         canvasXToData,
         canvasYToData,
@@ -174,9 +175,25 @@
         if (!brushIsActiveForAxes(brush, xKey, yKey)) return null;
         return brushChipText(
             brush,
-            (k) => meta(k as Param).short,
-            (k, v) => format(k as Param, v)
+            (k) => paramMeta(k as ParamKey).short,
+            (k, v) => format(k as ParamKey, v)
         );
+    });
+
+    // Canvas rect of the COMMITTED brush, redrawn from data bounds every
+    // render — the live drag rect only exists mid-gesture, so without this
+    // the selection square vanishes the moment the pointer is released.
+    const brushOverlayRect = $derived.by(() => {
+        if (plot.w === 0) return null;
+        return brushToScreenRect(trackerState.graphBrush, {
+            xKey,
+            yKey,
+            plot,
+            xRange,
+            yRange,
+            xLog,
+            yLog
+        });
     });
 
     // Data-space min/max under the live drag rect, for the per-axis labels.
@@ -978,10 +995,10 @@
                         <div
                             class="flex items-center gap-1 rounded border border-brand-text/50 bg-brand-bg px-1.5 py-0.5 text-[10px] text-brand-text-highlight"
                         >
-                            <span class="whitespace-nowrap">Brush {chipText}</span>
+                            <span class="whitespace-nowrap">Selection {chipText}</span>
                             <button
                                 type="button"
-                                aria-label="Clear brush filter"
+                                aria-label="Clear selection"
                                 class="flex h-4 w-4 items-center justify-center rounded border-0 p-0 text-brand-text/70 hover:bg-white/10 hover:text-brand-text"
                                 onclick={clearBrush}
                             >
@@ -1118,7 +1135,27 @@
                         <div
                             class="pointer-events-none absolute inset-0 flex items-center justify-center text-xs text-brand-text/60"
                         >
-                            No satellites in brush
+                            No satellites in selection
+                        </div>
+                    {/if}
+
+                    {#if brushOverlayRect && !brushActive}
+                        <div
+                            class="pointer-events-none absolute z-10 border border-brand-text/70 bg-brand-text/10"
+                            style:left="{brushOverlayRect.x0}px"
+                            style:top="{brushOverlayRect.y0}px"
+                            style:width="{brushOverlayRect.x1 - brushOverlayRect.x0}px"
+                            style:height="{brushOverlayRect.y1 - brushOverlayRect.y0}px"
+                        >
+                            <button
+                                type="button"
+                                aria-label="Clear selection"
+                                title="Clear selection"
+                                class="pointer-events-auto absolute -top-2 -right-2 flex h-4 w-4 items-center justify-center rounded-full border border-brand-text/50 bg-brand-bg text-[10px] leading-none text-brand-text/80 hover:bg-brand-secondary hover:text-brand-text"
+                                onclick={clearBrush}
+                            >
+                                ✕
+                            </button>
                         </div>
                     {/if}
 

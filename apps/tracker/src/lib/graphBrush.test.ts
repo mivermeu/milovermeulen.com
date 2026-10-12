@@ -4,6 +4,7 @@ import {
     brushChipText,
     brushFromCanvasRect,
     brushIsActiveForAxes,
+    brushToScreenRect,
     computeBrushMask,
     canvasXToData,
     canvasYToData,
@@ -286,5 +287,62 @@ describe('brushChipText', () => {
         );
         expect(first).not.toBe(second);
         expect(second).toBe('i 51–60.5 × i 500–600');
+    });
+});
+
+describe('brushToScreenRect', () => {
+    const axes = {
+        xKey: 'perigee',
+        yKey: 'i',
+        plot: { l: 40, t: 18, w: 200, h: 100 },
+        xRange: [0, 1000] as [number, number],
+        yRange: [0, 180] as [number, number],
+        xLog: false,
+        yLog: false
+    };
+    const brush: GraphBrush = {
+        xKey: 'perigee',
+        xMin: 500,
+        xMax: 600,
+        yKey: 'i',
+        yMin: 51,
+        yMax: 60
+    };
+
+    test('maps data bounds to canvas px (y flipped)', () => {
+        expect(brushToScreenRect(brush, axes)).toEqual({
+            x0: 140,
+            x1: 160,
+            y0: 18 + (1 - 60 / 180) * 100,
+            y1: 18 + (1 - 51 / 180) * 100
+        });
+    });
+
+    test('returns null for a stale-axes brush or an empty plot', () => {
+        expect(brushToScreenRect({ ...brush, xKey: 'e' }, axes)).toBeNull();
+        expect(brushToScreenRect(null, axes)).toBeNull();
+        expect(brushToScreenRect(brush, { ...axes, plot: { l: 0, t: 0, w: 0, h: 0 } })).toBeNull();
+    });
+
+    test('round-trips through brushFromCanvasRect', () => {
+        const rect = brushToScreenRect(brush, axes);
+        expect(rect).not.toBeNull();
+        const back = brushFromCanvasRect(rect!, axes);
+        expect(back?.xMin).toBeCloseTo(500, 6);
+        expect(back?.xMax).toBeCloseTo(600, 6);
+        expect(back?.yMin).toBeCloseTo(51, 6);
+        expect(back?.yMax).toBeCloseTo(60, 6);
+    });
+
+    test('maps log axes through the log norm', () => {
+        const logAxes = { ...axes, xRange: [100, 10000] as [number, number], xLog: true };
+        const logBrush: GraphBrush = { ...brush, xMin: 1000, xMax: 10000 };
+        // log10: 100→2, 1000→3, 10000→4 → fractions 0.5 and 1.
+        expect(brushToScreenRect(logBrush, logAxes)).toEqual({
+            x0: 140,
+            x1: 240,
+            y0: 18 + (1 - 60 / 180) * 100,
+            y1: 18 + (1 - 51 / 180) * 100
+        });
     });
 });

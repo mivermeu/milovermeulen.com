@@ -10,8 +10,9 @@
  * - The brush composes with the tree filter as AND. The worker's
  *   positions/elements arrays stay indexed by the TREE-filtered set — brush
  *   filtering must never remove or reorder those rows, so consumers cull
- *   brushed-out points at render time (graph: park offscreen; globe: origin
- *   parking in GlobeScene) while keeping each point's array slot.
+ *   brushed-out points at render time (graph: park offscreen; globe dots:
+ *   origin parking in GlobeScene; globe orbits: zeroed slots, never spliced
+ *   onto the parked dot) while keeping each point's array slot.
  * - Axis ranges deliberately keep scanning ALL tree-active samples (not the
  *   brush-composed set), so committing a brush never rescales the axes and the
  *   drawn region's meaning stays stable while satellites glide.
@@ -102,6 +103,41 @@ export function canvasYToData(
 
 function clamp01(t: number): number {
     return Math.min(1, Math.max(0, t));
+}
+
+/** Forward norm: data value → 0..1 axis fraction (inverse of `invNorm`). */
+function normT(value: number, range: [number, number], log: boolean): number {
+    let t: number;
+    if (log) {
+        const l0 = Math.log10(range[0]);
+        const l1 = Math.log10(range[1]);
+        t = (Math.log10(Math.max(range[0], value)) - l0) / (l1 - l0 || 1);
+    } else {
+        t = (value - range[0]) / (range[1] - range[0] || 1);
+    }
+    return clamp01(t);
+}
+
+/**
+ * Committed brush → canvas-local screen rect for the persistent overlay. The
+ * brush stores DATA-space bounds; the overlay needs px, so map each bound
+ * through the same axis normalization the tick/grid rendering uses. Returns
+ * null when no brush applies to the current axes (or the plot has no size).
+ */
+export function brushToScreenRect(brush: GraphBrush | null, axes: BrushAxes): ScreenRect | null {
+    if (!brush || !brushIsActiveForAxes(brush, axes.xKey, axes.yKey)) return null;
+    const { plot } = axes;
+    if (!(plot.w > 0 && plot.h > 0)) return null;
+    const nx0 = normT(brush.xMin, axes.xRange, axes.xLog);
+    const nx1 = normT(brush.xMax, axes.xRange, axes.xLog);
+    const ny0 = normT(brush.yMin, axes.yRange, axes.yLog);
+    const ny1 = normT(brush.yMax, axes.yRange, axes.yLog);
+    return {
+        x0: plot.l + nx0 * plot.w,
+        x1: plot.l + nx1 * plot.w,
+        y0: plot.t + (1 - ny1) * plot.h,
+        y1: plot.t + (1 - ny0) * plot.h
+    };
 }
 
 function invNorm(t: number, range: [number, number], log: boolean): number {
