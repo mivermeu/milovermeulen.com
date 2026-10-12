@@ -5,6 +5,8 @@
     import { categorize } from '$lib/tree';
     import { orbitalPeriodSeconds, trueAnomalyFromMean } from '$lib/orbit';
     import { blendInto, propagation } from '$lib/propagation';
+    import { epochAction, renderBlend } from '$lib/simclock';
+    import { renderEpochMs } from '$lib/state.svelte';
     import Panel from './Panel.svelte';
     import OrbitModelModal from './OrbitModelModal.svelte';
     import {
@@ -125,6 +127,13 @@
     let elPrevEpoch = 0;
     let elNextEpoch = 0;
     let catalogGen = 0;
+    /**
+     * Data regime of the held-forward snapshot (`message.revision`). -1 forces
+     * the first snapshot to snap; older revisions are stale and dropped; newer
+     * ones (catalog init / element-mode switch, even while paused) snap so the
+     * fresh regime takes effect instead of blending across the switch.
+     */
+    let regimeRevision = -1;
 
     const xLabel = $derived(paramMeta(xKey).label);
     const yLabel = $derived(paramMeta(yKey).label);
@@ -495,10 +504,13 @@
     function frame(): void {
         rafId = requestAnimationFrame(frame);
         if (elCurrent.length === 0) return;
-        const span = elNextEpoch - elPrevEpoch;
-        let blend = span > 0 ? (Date.now() - elPrevEpoch) / span : 1;
-        if (blend < 0) blend = 0;
-        else if (blend > 1) blend = 1;
+        // Blend against the shared simulated clock — the exact same epoch the
+        // globe renders from, so the two views always show the same instant.
+        // renderEpochMs interpolates between clock ticks at frame rate, and
+        // the factor keeps growing past the newest snapshot (dead reckoning,
+        // capped via renderBlend), matching the globe's behavior at 600×.
+        const simEpoch = renderEpochMs();
+        const blend = renderBlend(elPrevEpoch, elNextEpoch, simEpoch);
         blendInto(elPrev, elNext, elCurrent, blend, 7, [3, 4, 5, 6]);
         updatePoints();
     }
@@ -569,9 +581,43 @@
                 elNext = message.elements;
                 elNextEpoch = message.epoch;
                 elCurrent = new Float32Array(message.elements);
+                regimeRevision = message.revision ?? -1;
                 layout();
                 return;
             }
+            // Data-regime versioning: a newer revision (catalog init or
+            // element-mode switch — even while paused) means fresh data must
+            // replace the pair; an older one is a stale in-flight response.
+            // Same-revision backwards epochs are also stale (a watchdog refire
+            // overtaking a slow original, on a FIFO worker) and drop —
+            // deliberate backwards jumps always ride a revision bump.
+            const messageRevision = message.revision ?? -1;
+            if (messageRevision < regimeRevision) return;
+            if (messageRevision === regimeRevision && message.epoch < elNextEpoch) return;
+            // Continuity guard shared with the globe: routine simulated-time
+            // advances blend; discontinuous epochs snap; same-epoch
+            // snapshots (paused clock) drop — repeated stamps have span ≈ 0 and
+            // the render stays static.
+            const action =
+                messageRevision > regimeRevision ||
+                epochAction(
+                    elNextEpoch,
+                    message.epoch,
+                    propagation.cadenceMs * trackerState.simSpeed
+                ) === 'snap'
+                    ? 'snap'
+                    : 'blend';
+            regimeRevision = messageRevision;
+            if (action === 'snap') {
+                elPrev = message.elements;
+                elPrevEpoch = message.epoch;
+                elNext = message.elements;
+                elNextEpoch = message.epoch;
+                elCurrent = new Float32Array(message.elements);
+                layout();
+                return;
+            }
+            if (message.epoch === elNextEpoch) return; // same epoch → same data
             elPrev = elNext;
             elPrevEpoch = elNextEpoch;
             elNext = message.elements;
