@@ -634,22 +634,62 @@ export class GlobeScene {
      * into the same slots, once per bake.
      */
     private setupOrbitWindows(message: WorkerResponse): void {
+        const positions = this.orbitPositions;
         const satCount = message.vertexCounts?.length ?? 0;
         const times = message.vertexTimes ?? null;
         const periods = message.periods ?? [];
         const counts = message.vertexCounts ?? [];
-        const runs = message.runs ?? null;
-        const positions = this.orbitPositions;
+        const runsList = message.runs ?? new Int32Array(0);
+        if (!positions) {
+            this.orbitWindowMode = false;
+            return;
+        }
         if (
-            !positions ||
             !times ||
-            !runs ||
             satCount === 0 ||
             periods.length !== satCount ||
             counts.length !== satCount ||
             this.satellites.length > ORBIT_SLIDE_MAX_SATS
         ) {
+            // Oversized catalogs: draw each satellite's first run statically
+            // into a per-bake buffer (no per-frame sliding at this scale).
             this.orbitWindowMode = false;
+            let staticEdges = 0;
+            let rc = 0;
+            for (let s = 0; s < satCount; s++) {
+                const nRuns = runsList[rc++];
+                const firstLen = nRuns > 0 ? runsList[rc] : 0;
+                for (let r = 1; r < nRuns; r++) rc++;
+                if (firstLen > 1) staticEdges += firstLen - 1;
+            }
+            const staticBuffer = new Float32Array(staticEdges * 6);
+            let w = 0;
+            rc = 0;
+            let vCursor = 0;
+            for (let s = 0; s < satCount; s++) {
+                const nRuns = runsList[rc++];
+                const firstLen = nRuns > 0 ? runsList[rc] : 0;
+                for (let r = 1; r < nRuns; r++) rc++;
+                for (let k = 1; k < firstLen; k++) {
+                    const a = (vCursor + k - 1) * 3;
+                    const b = (vCursor + k) * 3;
+                    staticBuffer.set(
+                        [
+                            positions[a],
+                            positions[a + 1],
+                            positions[a + 2],
+                            positions[b],
+                            positions[b + 1],
+                            positions[b + 2]
+                        ],
+                        w
+                    );
+                    w += 6;
+                }
+                vCursor += counts[s];
+            }
+            this.orbitGeometry.setAttribute('position', new THREE.BufferAttribute(staticBuffer, 3));
+            this.orbitGeometry.setDrawRange(0, staticEdges * 2);
             return;
         }
 
@@ -657,7 +697,7 @@ export class GlobeScene {
         this.orbitVertexTimes = times;
         this.orbitPeriods = periods;
         this.orbitVertexCounts = counts;
-        this.orbitRuns = runs;
+        this.orbitRuns = runsList;
 
         // Chain vertex offsets (prefix sums of counts), per-sat slot capacity
         // (a one-period window with interpolated ends never exceeds the
@@ -674,7 +714,7 @@ export class GlobeScene {
             vOffsets[s] = chainCursor;
             chainCursor += counts[s];
             cursors[s] = runCursor;
-            runCursor += 1 + runs[runCursor]; // [nRuns, lens…]
+            runCursor += 1 + runsList[runCursor]; // [nRuns, lens…]
             caps[s] = counts[s] + 2;
             slotOffsets[s] = slotCursor;
             slotCursor += caps[s];
@@ -685,7 +725,9 @@ export class GlobeScene {
         this.orbitRunsCursor = cursors;
 
         // (Re)allocate the shared slot buffer only when the catalog grew; the
-        // existing BufferAttribute keeps its identity otherwise.
+        // existing BufferAttribute keeps its identity otherwise. Shrinking
+        // slot tables (narrowed filters) must not keep drawing the buffer's
+        // stale tail, so the draw range pins to the live slot-table size.
         const need = slotCursor * 6;
         if (!this.orbitSlotScratch || this.orbitSlotScratch.length < need) {
             this.orbitSlotScratch = new Float32Array(need);
@@ -694,19 +736,21 @@ export class GlobeScene {
                 new THREE.BufferAttribute(this.orbitSlotScratch, 3)
             );
         }
+        this.orbitGeometry.setDrawRange(0, need / 3);
 
         // Preinstall static content for satellites the per-frame pass skips
-        // (fragmented chains with honest SGP4-failure gaps): their per-run
-        // edges, degenerate-padded to the slot capacity.
+        // (fragmented chains with honest SGP4-failure gaps, and degenerate
+        // chains too short to slide): their per-run edges, degenerate-padded
+        // to the slot capacity.
         for (let s = 0; s < satCount; s++) {
-            const nRuns = runs[cursors[s]];
-            if (nRuns === 1) continue;
+            const nRuns = runsList[cursors[s]];
+            if (nRuns === 1 && counts[s] >= 3) continue;
             const slotEnd = (slotOffsets[s] + caps[s]) * 6;
             let w = slotOffsets[s] * 6;
             let vCursor = vOffsets[s];
             let rc = cursors[s] + 1;
             for (let r = 0; r < nRuns; r++) {
-                const len = runs[rc++];
+                const len = runsList[rc++];
                 for (let k = 1; k < len && w + 6 <= slotEnd; k++) {
                     const a = (vCursor + k - 1) * 3;
                     const b = (vCursor + k) * 3;
@@ -780,7 +824,6 @@ export class GlobeScene {
                 // clear its merged slot so it never double-draws.
                 scratch.fill(0, slotOff * 6, (slotOff + cap) * 6);
             }
-
             const period = this.orbitPeriods[s];
             const head = firstVertexAtOrAfter(times, vOff, vCount, target);
             if (head < 0) continue; // stale beyond fallback — keep last frame
@@ -864,6 +907,10 @@ export class GlobeScene {
             // zero pairs (segments at the origin) render as nothing.
             out.fill(0, outBase + n * 6, outBase + cap * 6);
             if (isFocus) {
+                // The highlight buffer's capacity can outlive a smaller focus
+                // chain (it only grows) — pin its draw range to the focus
+                // slot's capacity so stale tails never draw.
+                this.highlightGeometry.setDrawRange(0, cap * 2);
                 (
                     this.highlightGeometry.getAttribute('position') as THREE.BufferAttribute
                 ).needsUpdate = true;
