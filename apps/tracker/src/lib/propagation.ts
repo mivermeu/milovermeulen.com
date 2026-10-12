@@ -23,6 +23,8 @@ export interface WorkerResponse {
     elements?: Float32Array;
     message?: string;
     ranges?: number[];
+    /** Per-track orbital period (ms) — ground tracks carry it for window sliding. */
+    periodMs?: number;
 }
 
 /**

@@ -11,6 +11,7 @@ import { propagation, blendInto, type WorkerResponse } from '$lib/propagation';
 import { eciDirectionToEcf, sunEciDirection, type Vec3 } from '$lib/sun';
 import { renderEpochMs } from '$lib/state.svelte';
 import { epochAction, renderBlend } from '$lib/simclock';
+import { isContiguousPairs, rotateTrackToAnchor, slideUniformWindow } from '$lib/trackSlide';
 
 const EARTH_RADIUS_KM = 6371;
 export const GLOBE_RADIUS = 6.4;
@@ -18,6 +19,10 @@ export const SCALE = GLOBE_RADIUS / EARTH_RADIUS_KM;
 
 const DEG2RAD = Math.PI / 180;
 const ORBIT_REBUILD_INTERVAL_MS = 5000;
+// Ground-track draw window: one orbital period in per-period steps — must
+// match the worker's ground-track sampling (`POINTS`) so a slid window's
+// vertex indices line up with the bake.
+const GROUND_WINDOW_STEPS = 128;
 // While paused, scene geometry is static unless the clock is scrubbed; only
 // re-ask the worker when the simulated epoch drifted well away from the last
 // orbit build — throttled so dragging the slider doesn't queue a storm.
@@ -68,6 +73,13 @@ export class GlobeScene {
     private groundTrackReady = false;
     private groundRequestSeq = 0;
     private lastGroundTrackWall = 0;
+    // Sliding-window bookkeeping for the ground track (decoupled cadence/draw —
+    // see lib/trackSlide).
+    private groundMaster: Float32Array | null = null;
+    private groundTrackEpoch = 0;
+    private groundPeriodMs = 0;
+    private groundContiguous = false;
+    private readonly groundScratch = new Float32Array(GROUND_WINDOW_STEPS * 6);
 
     private readonly onPointerMove: (event: PointerEvent) => void;
     private readonly onPointerDown: (event: PointerEvent) => void;
@@ -98,6 +110,9 @@ export class GlobeScene {
     private pointerDownX = 0;
     private pointerDownY = 0;
     private filteredToOriginal = new Map<number, number>();
+
+    // Sliding-window bookkeeping for the highlighted orbit polyline.
+    private highlightScratch: Float32Array | null = null;
 
     private prevPositions: Float32Array | null = null;
     private nextPositions: Float32Array | null = null;
@@ -592,30 +607,87 @@ export class GlobeScene {
             return;
         }
         const positions = message.positions;
-        this.groundTrackReady = !!positions && positions.length > 0;
-        if (this.groundTrackReady && positions) {
-            this.applyGroundTrackGeometry(positions);
+        if (positions && positions.length >= 2) {
+            this.groundMaster = positions;
+            this.groundTrackEpoch = message.epoch ?? 0;
+            this.groundPeriodMs = message.periodMs ?? 0;
+            this.groundContiguous = isContiguousPairs(positions);
+            this.groundTrackReady = true;
+        } else {
+            this.groundTrackReady = false;
         }
+        this.slideGroundTrack();
         this.updateGroundTrackVisibility();
     }
 
     /**
-     * Reuse the position attribute across cadence rebuilds (set + needsUpdate);
-     * only allocate a new BufferAttribute when the length actually differs
-     * (catalog swap or the initial empty buffer).
+     * Per-frame window slide for the ground track: the visible track always
+     * starts at the satellite's current subpoint (taken from the live blended
+     * dot) and runs one full period ahead, re-derived from the baked master's
+     * uniform time grid. The worker's cadence still refreshes the bake (and
+     * catches J2 drift); the slide covers every frame in between, so at 600×
+     * the track no longer trails the dot by half an orbit. See lib/trackSlide.
      */
-    private applyGroundTrackGeometry(positions: Float32Array): void {
+    private slideGroundTrack(): void {
+        const master = this.groundMaster;
+        if (!master || !this.groundTrackReady || this.groundTrackIndex < 0) return;
+
         const attr = this.groundTrackGeometry.getAttribute('position') as
             THREE.BufferAttribute | undefined;
-        if (attr && positions.length === attr.array.length) {
-            (attr.array as Float32Array).set(positions);
-            attr.needsUpdate = true;
-        } else {
+        if (!this.groundContiguous || !(this.groundPeriodMs > 0)) {
+            // Fragmented bake (honest SGP4 gaps): no reliable anchor order —
+            // draw the first period of the bake, degenerate-padded to the
+            // window length (zero-length segments render nothing).
+            const w = this.groundScratch;
+            const pairs = Math.min(w.length / 6, master.length / 6);
+            let lastX = 0;
+            let lastY = 0;
+            let lastZ = 0;
+            for (let j = 0; j < pairs; j++) {
+                w.set(master.subarray(j * 6, j * 6 + 6), j * 6);
+                lastX = master[j * 6 + 3];
+                lastY = master[j * 6 + 4];
+                lastZ = master[j * 6 + 5];
+            }
+            for (let j = pairs; j < w.length / 6; j++) {
+                w.set([lastX, lastY, lastZ, lastX, lastY, lastZ], j * 6);
+            }
+            if (attr && attr.array === w) attr.needsUpdate = true;
+            else this.groundTrackGeometry.setAttribute('position', new THREE.BufferAttribute(w, 3));
+            return;
+        }
+
+        const i = this.groundTrackIndex * 3;
+        const px = this.positionArray[i];
+        const py = this.positionArray[i + 1];
+        const pz = this.positionArray[i + 2];
+        if (!Number.isFinite(px + py + pz)) return;
+        const r = Math.hypot(px, py, pz);
+        if (!(r > 0)) return;
+        // The satellite's subpoint: its live ECF position projected to the
+        // globe surface.
+        const anchor: [number, number, number] = [
+            (px / r) * GLOBE_RADIUS,
+            (py / r) * GLOBE_RADIUS,
+            (pz / r) * GLOBE_RADIUS
+        ];
+        // One period has GROUND_WINDOW_STEPS steps; the bake holds two, so a
+        // window starting up to one rebuild late still fits.
+        const fraction = (renderEpochMs() - this.groundTrackEpoch) / this.groundPeriodMs;
+        if (
+            slideUniformWindow(master, fraction, GROUND_WINDOW_STEPS, anchor, this.groundScratch) <
+            0
+        ) {
+            // Window past the bake (a badly overdue rebuild) — hold the last
+            // frame rather than draw garbage.
+            return;
+        }
+        if (attr && attr.array === this.groundScratch) attr.needsUpdate = true;
+        else
             this.groundTrackGeometry.setAttribute(
                 'position',
-                new THREE.BufferAttribute(positions, 3)
+                new THREE.BufferAttribute(this.groundScratch, 3)
             );
-        }
     }
 
     /** Single source of truth for whether the ground track renders. */
@@ -756,11 +828,19 @@ export class GlobeScene {
             this.hideHighlight();
             return;
         }
-        const array = master.subarray(start, end);
-        this.highlightGeometry.setAttribute('position', new THREE.BufferAttribute(array, 3));
-        this.highlightMesh.visible = true;
         this.highlightIndex = index;
-        this.updateNodeMarkers(array);
+        this.updateNodeMarkers(master.subarray(start, end));
+        // The polyline itself is painted per frame by slideHighlight — rotated
+        // so it always starts at the live dot position. A fragmented chain
+        // (SGP4-failure gaps) can't be re-anchored coherently, so keep the
+        // static bake draw for that case.
+        if (!isContiguousPairs(master.subarray(start, end))) {
+            this.highlightGeometry.setAttribute(
+                'position',
+                new THREE.BufferAttribute(master.subarray(start, end), 3)
+            );
+        }
+        this.highlightMesh.visible = true;
         this.applyOrbitGeometry();
     }
 
@@ -848,7 +928,15 @@ export class GlobeScene {
         if (this.groundTrackIndex === filteredIndex) return;
         this.groundTrackIndex = filteredIndex;
         this.groundTrackReady = false;
-        this.applyGroundTrackGeometry(new Float32Array(0));
+        // A new pin invalidates the previous track's bake entirely.
+        this.groundMaster = null;
+        this.groundTrackEpoch = 0;
+        this.groundPeriodMs = 0;
+        this.groundContiguous = false;
+        this.groundTrackGeometry.setAttribute(
+            'position',
+            new THREE.BufferAttribute(new Float32Array(0), 3)
+        );
         this.updateGroundTrackVisibility();
         if (filteredIndex >= 0 && this.ready && this.showGroundTrack) {
             this.requestGroundTrack();
@@ -867,11 +955,11 @@ export class GlobeScene {
     private requestGroundTrack(): void {
         this.lastGroundTrackWall = performance.now();
         this.groundRequestSeq++;
-        propagation.buildGroundTrack(
-            Math.round(Date.now()),
-            this.groundRequestSeq,
-            this.groundTrackIndex
-        );
+        // Rebuild for the SHARED SIMULATED clock, not the wall — under the
+        // scrubbed clock a wall-anchored track drifted a whole day for each
+        // ±30 d of simulated offset and never matched the moving dots.
+        const epoch = Math.round(renderEpochMs());
+        propagation.buildGroundTrack(epoch, this.groundRequestSeq, this.groundTrackIndex);
     }
 
     setFilter(filteredSatellites: ParsedSatellite[], activeIndices: number[]): void {
@@ -973,6 +1061,8 @@ export class GlobeScene {
         }
 
         this.updatePositions();
+        this.slideHighlight();
+        this.slideGroundTrack();
 
         if (this.highlightIndex >= 0 && this.pointerOverCanvas) {
             const sat = this.satellites[this.highlightIndex];
@@ -1017,6 +1107,36 @@ export class GlobeScene {
         const blend = renderBlend(this.prevEpoch, this.nextEpoch, simEpoch);
         blendInto(this.prevPositions, this.nextPositions, this.positionArray, blend, 3, []);
         this.pointsGeometry.attributes.position.needsUpdate = true;
+    }
+
+    /**
+     * Per-frame window slide for the highlighted orbit: re-anchors the baked
+     * one-period polyline (contiguous chains only) so it starts and ends at
+     * the satellite's live dot position — the decoupled mirror of the ground
+     * track's slide. The worker's cadence still refreshes the geometry itself.
+     */
+    private slideHighlight(): void {
+        if (this.highlightIndex < 0 || !this.orbitsReady || !this.orbitPositions) return;
+        const start = this.orbitRanges[this.highlightIndex * 2];
+        const end = this.orbitRanges[this.highlightIndex * 2 + 1];
+        if (!(start >= 0) || end <= start + 2) return;
+        const sub = this.orbitPositions.subarray(start, end);
+        if (!isContiguousPairs(sub)) return; // fragmented: static bake draw
+        const i = this.highlightIndex * 3;
+        const ax = this.positionArray[i];
+        const ay = this.positionArray[i + 1];
+        const az = this.positionArray[i + 2];
+        if (!Number.isFinite(ax + ay + az)) return;
+        if (!this.highlightScratch || this.highlightScratch.length !== sub.length) {
+            this.highlightScratch = new Float32Array(sub.length);
+            this.highlightGeometry.setAttribute(
+                'position',
+                new THREE.BufferAttribute(this.highlightScratch, 3)
+            );
+        }
+        if (rotateTrackToAnchor(sub, [ax, ay, az], this.highlightScratch) < 0) return;
+        (this.highlightGeometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate =
+            true;
     }
 
     dispose(): void {

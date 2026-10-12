@@ -306,13 +306,16 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
 }
 
 /**
- * Nadir ground track for ONE satellite: sample SGP4 forward exactly one
- * orbital period (future only — the orbit lines and the ground track share the
- * same window) and project each ECI position through its own GMST onto the
- * globe surface as an ECF subpoint. Unlike ECI orbit lines there is no shared
- * -GMST(epoch) bake — every sample carries the GMST at its own time, so the
- * result is always earth-fixed regardless of the reference-frame toggle.
- * Emitted as line segments with honest gaps where SGP4 fails.
+ * Nadir ground track for ONE satellite. Baked span is TWO full periods (the
+ * drawn window is only one — starting at the live dot position — but the
+ * render lets that window drift into the second period between cadence
+ * rebuilds at high time accelerations, so the extra orbit is the headroom the
+ * sliding needs). Sampled forward from the request epoch and projected per
+ * ECI position through its own GMST onto the globe surface as an ECF subpoint.
+ * Unlike ECI orbit lines there is no shared -GMST(epoch) bake — every sample
+ * carries the GMST at its own time, so the result is always earth-fixed
+ * regardless of the reference-frame toggle. Emitted as line segments with
+ * honest gaps where SGP4 fails.
  */
 function buildGroundTrack(message: BuildGroundTrackMessage): void {
     const { requestId, epoch, index } = message;
@@ -328,7 +331,7 @@ function buildGroundTrack(message: BuildGroundTrackMessage): void {
     const out: number[] = [];
     const POINTS = 128;
     let prev: Vec3 | null = null;
-    for (let k = 0; k <= POINTS; k++) {
+    for (let k = 0; k <= 2 * POINTS; k++) {
         const t = epoch + (k / POINTS) * periodMs;
         const p = sgp4Position(rec, t);
         if (!p) {
@@ -346,9 +349,10 @@ function buildGroundTrack(message: BuildGroundTrackMessage): void {
         prev = point;
     }
     const positions = new Float32Array(out);
-    postMessage({ type: 'groundTrack', requestId, generation: catalogVersion, positions }, [
-        positions.buffer
-    ]);
+    postMessage(
+        { type: 'groundTrack', requestId, generation: catalogVersion, epoch, periodMs, positions },
+        [positions.buffer]
+    );
 }
 
 function handleMessage(event: MessageEvent<WorkerMessage>): void {
