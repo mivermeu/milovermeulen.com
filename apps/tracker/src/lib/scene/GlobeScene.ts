@@ -19,6 +19,12 @@ export const SCALE = GLOBE_RADIUS / EARTH_RADIUS_KM;
 
 const DEG2RAD = Math.PI / 180;
 const ORBIT_REBUILD_INTERVAL_MS = 5000;
+// Bake time scales with the catalog (~6 s for a full ~10k catalog), so the
+// rebuild cadence grows with it instead of cancelling every in-flight bake;
+// and the auto-disable far exceeds realistic filters — static drawing is
+// cheap, only the bake cost matters.
+const ORBIT_AUTO_DISABLE = 10000;
+const ORBIT_CADENCE_PER_SAT_MS = 3;
 // Ground-track draw window: one orbital period in per-period steps — must
 // match the worker's ground-track sampling (`POINTS`) so a slid window's
 // vertex indices line up with the bake.
@@ -133,6 +139,10 @@ export class GlobeScene {
     // The focused satellite's window paints into its own fixed slot buffer.
     private highlightScratch: Float32Array | null = null;
     private highlightSlotCap = 0;
+    // Static (non-sliding) draws record per-sat ranges so the focus can still
+    // highlight: [firstEdge, edgeCount] pairs; the buffer they index lives on.
+    private staticOrbitRanges: number[] = [];
+    private staticOrbitBuffer: Float32Array | null = null;
 
     private prevPositions: Float32Array | null = null;
     private nextPositions: Float32Array | null = null;
@@ -654,13 +664,16 @@ export class GlobeScene {
             // Oversized catalogs: draw each satellite's first run statically
             // into a per-bake buffer (no per-frame sliding at this scale).
             this.orbitWindowMode = false;
+            const ranges: number[] = [];
             let staticEdges = 0;
             let rc = 0;
             for (let s = 0; s < satCount; s++) {
                 const nRuns = runsList[rc++];
                 const firstLen = nRuns > 0 ? runsList[rc] : 0;
                 for (let r = 1; r < nRuns; r++) rc++;
-                if (firstLen > 1) staticEdges += firstLen - 1;
+                const edges = firstLen > 1 ? firstLen - 1 : 0;
+                ranges.push(staticEdges, edges);
+                staticEdges += edges;
             }
             const staticBuffer = new Float32Array(staticEdges * 6);
             let w = 0;
@@ -690,6 +703,9 @@ export class GlobeScene {
             }
             this.orbitGeometry.setAttribute('position', new THREE.BufferAttribute(staticBuffer, 3));
             this.orbitGeometry.setDrawRange(0, staticEdges * 2);
+            this.staticOrbitBuffer = staticBuffer;
+            this.staticOrbitRanges = ranges;
+            this.refreshStaticHighlight();
             return;
         }
 
@@ -1125,9 +1141,43 @@ export class GlobeScene {
         }
         this.highlightIndex = index;
         this.updateNodeMarkers(this.chainSlice(index));
-        // The focused window is painted per frame by rebuildOrbitWindows
-        // (slid to the live dot position); this only owns markers/visibility.
+        // The focused window is painted per frame by rebuildOrbitWindows when
+        // sliding; without sliding (big catalogs) the static range is copied.
+        if (!this.orbitWindowMode) this.refreshStaticHighlight();
         this.updateOrbitVisibility();
+    }
+
+    /**
+     * Static-draw mode focus: copy the focus satellite's static edges into the
+     * highlight slot so pinned/hovered orbits still stand out on oversized
+     * catalogs (they don't participate in the per-frame sliding).
+     */
+    private refreshStaticHighlight(): void {
+        const idx = this.highlightIndex;
+        if (!this.staticOrbitBuffer || idx < 0 || idx * 2 + 1 >= this.staticOrbitRanges.length) {
+            this.highlightGeometry.setDrawRange(0, 0);
+            return;
+        }
+        const startEdge = this.staticOrbitRanges[idx * 2];
+        const edges = this.staticOrbitRanges[idx * 2 + 1];
+        if (edges < 1) {
+            this.highlightGeometry.setDrawRange(0, 0);
+            return;
+        }
+        const need = edges * 6;
+        if (!this.highlightScratch || this.highlightScratch.length < need) {
+            this.highlightScratch = new Float32Array(need);
+            this.highlightGeometry.setAttribute(
+                'position',
+                new THREE.BufferAttribute(this.highlightScratch, 3)
+            );
+        }
+        this.highlightScratch.set(
+            this.staticOrbitBuffer.subarray(startEdge * 6, startEdge * 6 + need)
+        );
+        this.highlightGeometry.setDrawRange(0, edges * 2);
+        (this.highlightGeometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate =
+            true;
     }
 
     /** The focus satellite's full vertex chain (flat 3-float vertices). */
@@ -1243,6 +1293,8 @@ export class GlobeScene {
         this.orbitWindowMode = false;
         this.orbitSlotScratch = null;
         this.highlightScratch = null;
+        this.staticOrbitRanges = [];
+        this.staticOrbitBuffer = null;
         this.orbitMesh.visible = false;
         this.orbitGeometry.setAttribute(
             'position',
@@ -1259,8 +1311,7 @@ export class GlobeScene {
         this.prevPositions = null;
         this.nextPositions = null;
 
-        // Auto-disable orbits for large catalogs; restore when count drops.
-        const ORBIT_AUTO_DISABLE = 5000;
+        // Auto-disable orbits for very large catalogs; restore when count drops.
         if (activeIndices.length > ORBIT_AUTO_DISABLE) {
             if (this.showOrbits) {
                 this.showOrbits = false;
@@ -1320,7 +1371,12 @@ export class GlobeScene {
                 Math.abs(trackerState.simEpochMs - this.orbitRequestEpoch) >
                     ORBIT_PAUSE_DRIFT_MS) &&
             now - this.lastOrbitBuildWall >=
-                (trackerState.simPlaying ? ORBIT_REBUILD_INTERVAL_MS : ORBIT_PAUSE_REBUILD_MS)
+                (trackerState.simPlaying
+                    ? Math.max(
+                          ORBIT_REBUILD_INTERVAL_MS,
+                          this.satellites.length * ORBIT_CADENCE_PER_SAT_MS
+                      )
+                    : ORBIT_PAUSE_REBUILD_MS)
         ) {
             this.requestOrbits();
         }
