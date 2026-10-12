@@ -67,6 +67,12 @@ const YIELD_EVERY = 400;
  * a tangential graze that fits inside the step.
  */
 const GRAZE_MARGIN_DEG = 5;
+/**
+ * Finalization-phase wall budget (ms): the stranded-tail loop (open runs +
+ * capped graze strands) mirrors the search fuse so it can never freeze the
+ * worker; if it trips, remaining finals are undisclosed → `partial`.
+ */
+const FINALIZE_BUDGET_MS = 500;
 
 export interface ObserverLocation {
     /** Geodetic latitude, degrees north. */
@@ -762,16 +768,30 @@ export function* findPasses(
         }
     }
 
-    // Runs still open at the window end: keep the clipped tail of the pass.
+    // Finalization: runs still open at the window end plus each closed
+    // satellite's leftover tail gap. A tail deadline mirrors the search's own
+    // fuse so a pathological strand can never block the worker past it; when
+    // it trips we disclose incompleteness via `partial`.
+    const tailDeadline = performance.now() + FINALIZE_BUDGET_MS;
     for (const s of states) {
+        if (performance.now() >= tailDeadline) {
+            partial = true;
+            break;
+        }
         if (s.openRunLo === null) {
-            // Closed sat: the tail gap after its last sample never got a
-            // coarse sample — graze-scan it too.
-            grazeScan(s, resolved.endMs);
+            // Closed sat: graze-scan the tail gap after its last sample.
+            // Cap the strand at the state's pending sample: everything from
+            // there on either starts past the already-unbeatable top-N
+            // boundary (early exit) or is disclosed by `partial` (budget
+            // exit) / impossible (normal heap exhaustion ⇒ nextT ≥ endMs).
+            // Without the cap a ~days-long strand executed tens of thousands
+            // of SGP4 evaluations synchronously here, freezing propagation.
+            grazeScan(s, Math.min(resolved.endMs, s.nextT));
             continue;
         }
         // Budget-cut or window-tail runs span an arbitrary number of passes;
-        // refineRun returns them all (the window's earlier passes too).
+        // refineRun samples at maxDuration/8, so even a multi-day open run
+        // stays bounded and returns all of its passes.
         const rows = refineRun(
             s.candidate.rec,
             s.candidate.name,
