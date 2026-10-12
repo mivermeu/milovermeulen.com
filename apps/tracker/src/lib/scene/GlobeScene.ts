@@ -9,6 +9,7 @@ import { trackerState } from '$lib/state.svelte';
 import type { ParsedSatellite } from '$lib/satellites/types';
 import { propagation, blendInto, type WorkerResponse } from '$lib/propagation';
 import { eciDirectionToEcf, sunEciDirection, type Vec3 } from '$lib/sun';
+import { renderEpochMs } from '$lib/state.svelte';
 import { epochAction, renderBlend } from '$lib/simclock';
 
 const EARTH_RADIUS_KM = 6371;
@@ -325,7 +326,7 @@ export class GlobeScene {
 
         // Prime the sun state so frame 0 already has the terminator and the
         // night overlay oriented correctly to the (real-time default) clock.
-        this.updateSun(gstime(new Date(trackerState.simEpochMs)));
+        this.updateSun(gstime(new Date(renderEpochMs())));
 
         this.canvas = canvas;
         this.onPointerMove = (event: PointerEvent) => this.handlePointerMove(event);
@@ -426,7 +427,7 @@ export class GlobeScene {
      * geometry is rebuilt from the same GMST-rotated vector the shader uses.
      */
     private updateSun(gmst: number): void {
-        const nowMs = trackerState.simEpochMs;
+        const nowMs = renderEpochMs();
         this.sunEci = sunEciDirection(nowMs);
         this.updateTerminatorGeometry(eciDirectionToEcf(this.sunEci, gmst));
         const sunEcf = eciDirectionToEcf(this.sunEci, gmst);
@@ -532,6 +533,12 @@ export class GlobeScene {
         // an older one is stale and dropped.
         const revision = message.revision ?? -1;
         if (revision < this.snapshotRevision) return;
+        // Same-revision backwards epoch: a watchdog-refired request overtaking
+        // a slow original response — the worker is FIFO, so the late arrival
+        // can only be superseded data. Intentional backwards jumps (scrubs)
+        // always ride a revision bump, handled below, so dropping here can
+        // never eat them.
+        if (revision === this.snapshotRevision && epoch < this.nextEpoch) return;
         if (
             revision > this.snapshotRevision ||
             epochAction(this.nextEpoch, epoch, propagation.cadenceMs * trackerState.simSpeed) ===
@@ -985,7 +992,7 @@ export class GlobeScene {
         // The ECF/ECI frame delta rotates with the shared simulated clock, so
         // the orbit mesh keeps step with the propagated dots under scrubbing
         // (and the terminator/sun dimming follow the same clock).
-        const gmst = gstime(new Date(trackerState.simEpochMs));
+        const gmst = gstime(new Date(renderEpochMs()));
         this.updateSun(gmst);
         const eci = trackerState.referenceFrame === 'eci';
         const orbitDelta = eci ? this.orbitBuildGmst - gmst : 0;
@@ -1006,7 +1013,7 @@ export class GlobeScene {
         // Past the newest snapshot the factor keeps growing (dead reckoning
         // along the pair's velocity, capped in renderBlend), so worker-arrival
         // jitter at high speeds holds no stuttering pauses.
-        const simEpoch = trackerState.simEpochMs;
+        const simEpoch = renderEpochMs();
         const blend = renderBlend(this.prevEpoch, this.nextEpoch, simEpoch);
         blendInto(this.prevPositions, this.nextPositions, this.positionArray, blend, 3, []);
         this.pointsGeometry.attributes.position.needsUpdate = true;

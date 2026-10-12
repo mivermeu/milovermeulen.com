@@ -22,6 +22,33 @@ import {
 
 export type { TreeNode, TriState } from '$lib/tree';
 
+// High-resolution render anchor. The shared clock ticks at SIM_CLOCK_TICK_MS,
+// but renderers run per RAF frame — rendering from the ticked value advances
+// motion in tick-sized steps, and at 600× one tick is ~30 s of simulated travel
+// (order-10 px on the globe) landing every few frames. Views therefore read
+// `renderEpochMs()`, which interpolates the epoch between ticks at frame rate;
+// the anchor is re-recorded whenever the epoch is assigned, so scrubs, NOW and
+// resume all stay exact.
+let renderAnchor: { epoch: number; wall: number } = { epoch: 0, wall: Date.now() };
+
+/** Assign the shared epoch and re-anchor the per-frame interpolation. */
+function assignSimEpoch(epochMs: number, wallMs: number = Date.now()): void {
+    trackerState.simEpochMs = epochMs;
+    renderAnchor = { epoch: epochMs, wall: wallMs };
+}
+
+/**
+ * The epoch the renderers should display this frame: the last ticked epoch
+ * extrapolated by elapsed wall time × speed — continuous at any speed, never
+ * step-quantized to the clock tick. While paused it is simply the frozen
+ * value. (It may run roughly one tick past the scrub-window edges; that's
+ * sub-second of harmless overshoot.)
+ */
+export function renderEpochMs(): number {
+    if (!trackerState.simPlaying) return trackerState.simEpochMs;
+    return renderAnchor.epoch + (Date.now() - renderAnchor.wall) * trackerState.simSpeed;
+}
+
 export interface HoverInfo {
     originalIndex: number;
     name: string;
@@ -65,8 +92,7 @@ export const trackerState = $state({
     // slider, NOW) so propagation can snap views onto post-jump snapshots.
     simEpochMs: Date.now(),
     simPlaying: true,
-    simSpeed: DEFAULT_SIM_SPEED,
-    // True while the epoch is pinned to the wall clock (offset 0, 1×, playing)
+    simSpeed: DEFAULT_SIM_SPEED, // True while the epoch is pinned to the wall clock (offset 0, 1×, playing)
     // — the default and the state the Now button re-engages. Making this a
     // mode rather than an offset arithmetic result is what keeps the UI from
     // flickering: a tick-quantized epoch compared against a coarse wall-clock
@@ -137,7 +163,7 @@ export function pinSatellite(index: number): boolean {
 
 /** Reset to exactly real time: offset 0, playing, 1×. */
 export function resetSimClock(): void {
-    trackerState.simEpochMs = Date.now();
+    assignSimEpoch(Date.now());
     trackerState.simRealtime = true;
     trackerState.simPlaying = true;
     trackerState.simSpeed = DEFAULT_SIM_SPEED;
@@ -164,11 +190,14 @@ export function pauseSimClock(): void {
 export function resumeSimClock(): void {
     const drift = Date.now() - trackerState.simEpochMs;
     if (drift >= 0 && drift <= REALTIME_SNAP_MS) {
-        trackerState.simEpochMs = Date.now();
+        assignSimEpoch(Date.now());
         trackerState.simRealtime = true;
     } else {
         trackerState.simRealtime = false;
     }
+    // Re-anchor from the frozen epoch so the per-frame interpolation starts
+    // where the pause left off, not from a pre-pause anchor.
+    assignSimEpoch(trackerState.simEpochMs);
     trackerState.simScrubSeq++;
     trackerState.simPlaying = true;
 }
@@ -197,10 +226,10 @@ export function setSimOffsetMs(offsetMs: number): void {
     // only while running), so parked-clock scrubs never end in a "now" label
     // over frozen data.
     if (Math.abs(offsetMs) <= REALTIME_SNAP_MS && trackerState.simPlaying) {
-        trackerState.simEpochMs = now;
+        assignSimEpoch(now, now);
         trackerState.simRealtime = true;
     } else {
-        trackerState.simEpochMs = clampSimEpoch(now + offsetMs, now);
+        assignSimEpoch(clampSimEpoch(now + offsetMs, now), now);
         trackerState.simRealtime = false;
     }
     trackerState.simScrubSeq++;
@@ -220,13 +249,11 @@ if (browser) {
         lastTickWall = now;
         if (!trackerState.simPlaying) return;
         if (trackerState.simRealtime) {
-            trackerState.simEpochMs = now;
+            assignSimEpoch(now, now);
             return;
         }
-        trackerState.simEpochMs = stepSimClock(
-            trackerState.simEpochMs,
-            elapsedRealMs,
-            trackerState.simSpeed,
+        assignSimEpoch(
+            stepSimClock(trackerState.simEpochMs, elapsedRealMs, trackerState.simSpeed, now),
             now
         );
     }, SIM_CLOCK_TICK_MS);

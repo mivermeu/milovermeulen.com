@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import {
     ACCURACY_SOFT_LIMIT_MS,
-    DEAD_RECKON_CADENCES,
+    DEAD_RECKON_EXTRA,
     DEFAULT_SIM_SPEED,
     REALTIME_SNAP_MS,
     SCRUB_RANGE_MS,
@@ -129,6 +129,16 @@ describe('epochAction', () => {
         expect(epochAction(0, 30_001, LEAD)).toBe('snap');
     });
 
+    it('glides across worker-stall gaps several intervals long', () => {
+        // At a real 600× interval (120 ms cadence × 600), 5 expected advances
+        // is still continuous motion — catch up fast instead of teleporting;
+        // only beyond 6× does it read as a jump. (With tiny cadences the 30 s
+        // floor governs instead, so calibrate against the real interval.)
+        const interval = 120 * 600;
+        expect(epochAction(0, 6 * interval - 1, interval)).toBe('blend');
+        expect(epochAction(0, 6 * interval + 1, interval)).toBe('snap');
+    });
+
     it('graceful for expected advances at high speeds', () => {
         // Max cadence (600 ms) × max speed (600×) = 6 min of simulated time.
         const maxAdvance = 600 * 600;
@@ -158,11 +168,11 @@ describe('renderBlend', () => {
     it('dead-reckons linearly past the newest snapshot', () => {
         // One extra interval past the end moves at the same rate.
         expect(renderBlend(P, N, N + 180_000)).toBeCloseTo(1.5, 10);
-        expect(renderBlend(P, N, N + 360_000)).toBeCloseTo(2, 10);
     });
 
-    it('caps extrapolation at 1 + DEAD_RECKON_CADENCES', () => {
-        expect(renderBlend(P, N, N + 999 * 360_000)).toBe(1 + DEAD_RECKON_CADENCES);
+    it('caps extrapolation at 1 + DEAD_RECKON_EXTRA', () => {
+        expect(renderBlend(P, N, N + 999 * 360_000)).toBe(1 + DEAD_RECKON_EXTRA);
+        expect(1 + DEAD_RECKON_EXTRA).toBe(1.5);
     });
 
     it('does not go negative for epochs before the pair start', () => {

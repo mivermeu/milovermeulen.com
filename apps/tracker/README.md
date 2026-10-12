@@ -164,8 +164,15 @@ src/
   simulated epoch plus a future-of-cadence lead in simulated time, and all views blend against the
   same simulated epoch — so globe, graph, and info panel are always in lockstep.
 - **Continuity guard** (`epochAction` in `lib/simclock.ts`): snapshots whose simulated epoch is
-  future-of-cadence blend; backwards/discontinuous epochs (scrub jumps/reverses, hidden-tab gaps)
-  snap; equal epochs (paused clock) drop.
+  future-of-cadence blend; backwards epochs on an unchanged revision are dropped (a watchdog refire
+  overtaking a slow original, on a FIFO worker); discontinuous epochs (scrub jumps/reverses — always
+  revision-bumped) snap; equal epochs (paused clock) drop.
+- **Frame-rate rendering epoch** (`renderEpochMs()` in `state.svelte.ts`): the clock ticks every 50
+  ms for state/propagation, but renderers interpolate the epoch at RAF rate — at 600× a tick is ~30
+  s of simulated motion, enough to visibly step the dots.
+- **Dead reckoning** (`renderBlend`): past the newest snapshot the blend keeps gliding along the
+  pair's own velocity (capped at half an interval), so worker-arrival jitter at high speeds holds no
+  stuttering pauses.
 - **Single draw call** for all satellite dots (radial gradient texture, vertex colors).
 - **Zoom-adaptive point size** — dots scale relative to the globe as you zoom in.
 - **Orbit ellipses** sampled over one full period in ECI (closed loops), rotated by delta GMST for

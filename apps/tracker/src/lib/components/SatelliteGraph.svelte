@@ -6,6 +6,7 @@
     import { orbitalPeriodSeconds, trueAnomalyFromMean } from '$lib/orbit';
     import { blendInto, propagation } from '$lib/propagation';
     import { epochAction, renderBlend } from '$lib/simclock';
+    import { renderEpochMs } from '$lib/state.svelte';
     import Panel from './Panel.svelte';
     import OrbitModelModal from './OrbitModelModal.svelte';
     import {
@@ -505,9 +506,10 @@
         if (elCurrent.length === 0) return;
         // Blend against the shared simulated clock — the exact same epoch the
         // globe renders from, so the two views always show the same instant.
-        // Past the newest snapshot the factor keeps growing (dead reckoning,
+        // renderEpochMs interpolates between clock ticks at frame rate, and
+        // the factor keeps growing past the newest snapshot (dead reckoning,
         // capped via renderBlend), matching the globe's behavior at 600×.
-        const simEpoch = trackerState.simEpochMs;
+        const simEpoch = renderEpochMs();
         const blend = renderBlend(elPrevEpoch, elNextEpoch, simEpoch);
         blendInto(elPrev, elNext, elCurrent, blend, 7, [3, 4, 5, 6]);
         updatePoints();
@@ -586,10 +588,14 @@
             // Data-regime versioning: a newer revision (catalog init or
             // element-mode switch — even while paused) means fresh data must
             // replace the pair; an older one is a stale in-flight response.
+            // Same-revision backwards epochs are also stale (a watchdog refire
+            // overtaking a slow original, on a FIFO worker) and drop —
+            // deliberate backwards jumps always ride a revision bump.
             const messageRevision = message.revision ?? -1;
             if (messageRevision < regimeRevision) return;
+            if (messageRevision === regimeRevision && message.epoch < elNextEpoch) return;
             // Continuity guard shared with the globe: routine simulated-time
-            // advances blend; backwards/scrub-jumped epochs snap; same-epoch
+            // advances blend; discontinuous epochs snap; same-epoch
             // snapshots (paused clock) drop — repeated stamps have span ≈ 0 and
             // the render stays static.
             const action =

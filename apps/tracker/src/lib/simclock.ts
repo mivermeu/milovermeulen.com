@@ -109,22 +109,23 @@ export function nextPropagateEpoch(simEpochMs: number, leadMs: number): number {
 }
 
 /**
- * How many snapshot intervals a view may dead-reckon past the newest snapshot
- * before clamping. Worker responses arrive on a real-time cadence while the
- * simulated clock runs unthrottled, so at high speeds the clock regularly
- * spends a fraction of an interval waiting for the next response — holding
- * still until it lands reads as stutter, while gliding along the pair's own
- * velocity is visually exact (orbital tracks are near-straight across one
- * interval). The cap keeps a stalled or dead worker from flinging dots along a
- * tangent forever.
+ * How far past the newest snapshot a view may dead-reckon, in snapshot
+ * intervals. Worker responses arrive on a real-time cadence while the
+ * simulated clock runs unthrottled, so at high speeds the clock can spend part
+ * of an interval waiting for the next response — holding still until it lands
+ * reads as stutter, while gliding along the pair's own velocity is visually
+ * exact right past the pair end. The extra allowance is deliberately *small*
+ * — half an interval: a satellite's track curves ~4.5° per interval, so far
+ * extrapolation drifts quadratically off the arc and reads as a jump when the
+ * next snapshot lands.
  */
-export const DEAD_RECKON_CADENCES = 2;
+export const DEAD_RECKON_EXTRA = 0.5;
 
 /**
  * Per-frame blend factor for a snapshot pair at `simEpoch`. Returns 0 before
  * the pair window, the linear blend inside it — and beyond the newest snapshot
  * continues past 1 (dead reckoning along the pair's implied velocity), clamped
- * at `1 + DEAD_RECKON_CADENCES`. Paired with `blendInto`, whose linear/angle
+ * at `1 + DEAD_RECKON_EXTRA`. Paired with `blendInto`, whose linear/angle
  * interpolation is well-behaved for any factor.
  */
 export function renderBlend(prevEpoch: number, nextEpoch: number, simEpoch: number): number {
@@ -132,7 +133,7 @@ export function renderBlend(prevEpoch: number, nextEpoch: number, simEpoch: numb
     if (!(span > 0)) return 1; // degenerate pair (fresh regime): hold the newest
     const blend = (simEpoch - prevEpoch) / span;
     if (blend <= 0) return 0;
-    const cap = 1 + DEAD_RECKON_CADENCES;
+    const cap = 1 + DEAD_RECKON_EXTRA;
     return blend > cap ? cap : blend;
 }
 
@@ -153,12 +154,22 @@ export type EpochAction = 'blend' | 'snap' | 'drop';
  * but a hidden-tab throttle can legitimately produce seconds).
  */
 const SNAP_FLOOR_MS = 30_000;
+/**
+ * Forward gaps between the routine advance and a genuine clock jump snap only
+ * beyond this multiple of the expected advance. Everything below it — including
+ * a response stretched by a worker stall of several intervals — glides across,
+ * because the gap is still real, continuous motion along the same track and a
+ * catch-up glide looks far better than a teleport.
+ */
+const BLEND_TOLERANCE_MULTIPLE = 6;
 
 /**
  * Continuity guard comparing an incoming snapshot's epoch against the epoch of
  * the snapshot a view currently holds forward.
  *
- * - 'blend': routine forward advance (±cadence) — glide between the endpoints.
+ * - 'blend': routine forward advance — glide between the endpoints. Stretches
+ *   from a slow worker (a few intervals) also blend: a fast catch-up glide
+ *   across real, continuous motion beats a teleport.
  * - 'snap' : backwards or discontinuous simulated epoch — replace the pair
  *   outright, never interpolate across a time jump. User scrubs reach the views
  *   as explicit regime-revision bumps and take this path directly; the
@@ -176,5 +187,7 @@ export function epochAction(
     const delta = incomingEpoch - nextEpoch;
     if (delta === 0) return 'drop';
     if (delta < 0) return 'snap';
-    return delta > Math.max(expectedAdvanceMs * 3, SNAP_FLOOR_MS) ? 'snap' : 'blend';
+    return delta > Math.max(expectedAdvanceMs * BLEND_TOLERANCE_MULTIPLE, SNAP_FLOOR_MS)
+        ? 'snap'
+        : 'blend';
 }

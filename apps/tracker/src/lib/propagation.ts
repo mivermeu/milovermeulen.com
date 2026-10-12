@@ -119,6 +119,12 @@ class PropagationService {
             else this.stopLoop();
         } else if (message.type === 'positions' && message.positions && message.elements) {
             this.pending = false;
+            // Anchor the cadence on receipt, not send: the next request fires
+            // cadence.ms after the previous response LANDS, so stamps advance
+            // at (real response interval)× speed and the worker stays single-
+            // flight — no watchdog refire can upstage a still-outstanding
+            // response (the watchdog below only covers a genuinely lost one).
+            this.lastRequestWall = performance.now();
         }
         this.emit(message);
     }
