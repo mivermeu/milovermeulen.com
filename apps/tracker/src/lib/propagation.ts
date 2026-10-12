@@ -179,7 +179,7 @@ class PropagationService {
         this.ensure()?.postMessage({ type: 'buildOrbits', epoch, requestId, frame });
     }
 
-    /** Nadir subpoint polyline for one satellite (worker index) over ±1 period. */
+    /** Nadir subpoint polyline for one satellite (worker index), one period into the future. */
     buildGroundTrack(epoch: number, requestId: number, index: number): void {
         this.ensure()?.postMessage({ type: 'buildGroundTrack', epoch, requestId, index });
     }

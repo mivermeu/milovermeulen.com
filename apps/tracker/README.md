@@ -16,8 +16,8 @@ panels.
   Earth shadow, eclipsed dots dimmed
 - **Hover** to see satellite name + orbit highlight
 - **Click** to pin — detailed orbital info panel (eccentricity, inclination, RAAN, altitude, etc.),
-  a white **ground track** (nadir subpoints over ±1 orbital period, always ECF) behind the orbit
-  highlight
+  a subtly-dimmed **ground track** (nadir subpoints one orbital period into the future, always ECF)
+  behind the orbit highlight
 - **Time controls** — pause, speed up to 60×, scrub ±30 days
 - **ECF/ECI reference frame** toggle
 - **Data sources** — local API → CelesTrak (live) → bundled sample catalog
@@ -111,9 +111,10 @@ src/
   rotated to ECF with the frame's GMST. `renderOrder = -1` keeps it under dots/orbit lines.
 - **Orbit ellipses** sampled over one full period in ECI (closed loops), rotated by delta GMST for
   ECF display.
-- **Ground track** is always ECF (each sample rotated by its own GMST, ±1 period at 256 samples) and
-  is never affected by the reference-frame toggle; rebuilt on the same 5 s cadence as orbits, only
-  while a satellite is pinned ("Ground track" toggle in the controls).
+- **Ground track** is always ECF (each sample rotated by its own GMST, one period into the future at
+  128 samples, matching the future-only orbit-line window) and is never affected by the
+  reference-frame toggle; rebuilt on the same 5 s cadence as orbits, only while a satellite is
+  pinned ("Ground track" toggle in the controls).
 - **Single draw call** for all satellite dots (radial gradient texture, vertex colors).
 - **Zoom-adaptive point size** — dots scale relative to the globe as you zoom in.
 - **Hover highlight** extracts one satellite's orbit from the shared buffer; pin persists it.

@@ -300,12 +300,13 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
 }
 
 /**
- * Nadir ground track for ONE satellite: sample SGP4 over ±1 orbital period and
- * project each ECI position through its own GMST onto the globe surface as an
- * ECF subpoint. Unlike ECI orbit lines there is no shared -GMST(epoch) bake —
- * every sample carries the GMST at its own time, so the result is always
- * earth-fixed regardless of the reference-frame toggle. Emitted as line
- * segments with honest gaps where SGP4 fails.
+ * Nadir ground track for ONE satellite: sample SGP4 forward exactly one
+ * orbital period (future only — the orbit lines and the ground track share the
+ * same window) and project each ECI position through its own GMST onto the
+ * globe surface as an ECF subpoint. Unlike ECI orbit lines there is no shared
+ * -GMST(epoch) bake — every sample carries the GMST at its own time, so the
+ * result is always earth-fixed regardless of the reference-frame toggle.
+ * Emitted as line segments with honest gaps where SGP4 fails.
  */
 function buildGroundTrack(message: BuildGroundTrackMessage): void {
     const { requestId, epoch, index } = message;
@@ -319,10 +320,10 @@ function buildGroundTrack(message: BuildGroundTrackMessage): void {
     const periodMs = TAU / meanMotionRadPerMs;
     const surfaceRadius = scale * EARTH_RADIUS_KM;
     const out: number[] = [];
-    const POINTS = 256;
+    const POINTS = 128;
     let prev: Vec3 | null = null;
     for (let k = 0; k <= POINTS; k++) {
-        const t = epoch - periodMs + (k / POINTS) * 2 * periodMs;
+        const t = epoch + (k / POINTS) * periodMs;
         const p = sgp4Position(rec, t);
         if (!p) {
             prev = null;

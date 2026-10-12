@@ -298,9 +298,9 @@ export class GlobeScene {
         this.groundTrackMesh = new THREE.LineSegments(
             this.groundTrackGeometry,
             new THREE.LineBasicMaterial({
-                color: 0xffffff,
+                color: 0x8b9cc9,
                 transparent: true,
-                opacity: 0.9,
+                opacity: 0.45,
                 depthWrite: false
             })
         );
