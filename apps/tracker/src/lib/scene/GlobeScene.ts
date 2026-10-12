@@ -30,7 +30,7 @@ const GROUND_WINDOW_STEPS = 128;
 // keep pinned/hovered orbit lines alive at any catalog size.
 const ORBIT_MAX_SATS = 1000;
 // Window-rebuild cadence tiers: only small catalogs repaint their slid
-// windows every frame; larger ones step down to 20/10/5 Hz (the dots stay
+// windows every frame; larger ones step down to 20/10/1 Hz (the dots stay
 // per-frame smooth; the merged arcs are big enough that the coarser window
 // steps read as intentional). A fresh bake or a focus change forces an
 // immediate repaint regardless of tier.
@@ -39,7 +39,7 @@ const ORBIT_WINDOW_MEDIUM_SATS = 400;
 const ORBIT_WINDOW_LARGE_SATS = 900;
 const ORBIT_WINDOW_SLOTS_EVERY = 3; // >150 … ≤400 sats → 20 Hz
 const ORBIT_WINDOW_SLOTS_EVERY_BIG = 6; // >400 … ≤900 sats → 10 Hz
-const ORBIT_WINDOW_SLOTS_EVERY_HUGE = 12; // >900 sats → 5 Hz
+const ORBIT_WINDOW_SLOTS_EVERY_HUGE = 60; // >900 sats → 1 Hz
 // While paused, scene geometry is static unless the clock is scrubbed; only
 // re-ask the worker when the simulated epoch drifted well away from the last
 // orbit build — throttled so dragging the slider doesn't queue a storm.
