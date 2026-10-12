@@ -351,7 +351,8 @@
 
         <p class="shrink-0 pt-1 text-[10px] leading-snug text-brand-text">
             {#if capInfo?.capped}
-                Searching {capInfo.searched} of {capInfo.active} satellites (shortest-period first).
+                Searching {capInfo.searched} of {capInfo.active} passable satellites (shortest-period
+                first).
             {/if}
             {#if partial && visiblePasses.length > 0}
                 Search budget reached — later passes may be missing.

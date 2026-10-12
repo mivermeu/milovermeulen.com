@@ -269,18 +269,27 @@ function resolveParams(params: PassSearchParams): ResolvedParams {
  * always lies on the orbit's great circle, so the best a satellite can ever
  * do equals the observer's angular distance to the orbit plane.
  *
- * That distance is `d(t) = |sinI·cosφ·sin(Ω−θ) + cosI·sinφ|` (φ = geodetic
- * latitude, θ = local sidereal longitude, Ω = ascending node right
- * ascension). The phase (Ω−θ) advances one full cycle per sidereal day, so
- * for any window of a day or more the minimum is exactly
- * `asin(max(0, |cosI·sinφ| − sinI·cosφ))`. Slow J2 RAAN drift can only
- * tighten the daily envelope and is absorbed by the 1° pad. (An exact
- * window-minimum would need phase sampling; sampling that phase at fixed
- * intervals aliases at ~1 sample per day and used to wrongly screen out
- * whole orbital classes — hence this analytic envelope.)
+ * That distance is `d(t) = |sinI·cosφ·sin(Ω−θ) + cosI·sinφ|` (φ = satellite.js
+ * geodetic latitude, used as geocentric here — the ≤ 0.2° substitution error
+ * is inside the 1° pad; θ = local sidereal longitude; Ω = ascending node
+ * right ascension). The phase (Ω−θ) advances one full cycle per sidereal day,
+ * so for any window of a day or more the minimum is exactly
+ * `asin(max(0, |cosI·sinφ| − sinI·cosφ))`.
  *
- * Returning true excludes the satellite from a pass search without a single
- * SGP4 call.
+ * Both directions are already safe, where barriers matter:
+ * - Skip direction: the true window minimum can only be LARGER than the
+ *   full-cycle envelope (the phase has not yet saturated on sub-day windows,
+ *   and RAAN drift merely re-plays the same envelope with shifted phase), so
+ *   skipping on the envelope never excludes a satellite that can pass.
+ * - Keep direction: plane distance is a lower bound for orbit-point distance,
+ *   so keep decisions never miss a pass either.
+ * The 1° pad is therefore slack for the small φ-substitution and
+ * radius-convention errors only.
+ *
+ * (This analytic bound replaced a fixed-interval phase sweep: sampling
+ * (Ω−θ) at ~2 samples/day aliases against the once-daily cycle and can skip
+ * every daily trough, which used to wrongly screen out whole orbital
+ * classes — sun-sync (~98°) at mid-latitudes failed brute-force checks.)
  */
 export function planeScreensOut(rec: SatRec, observerLatDeg: number, minElDeg = 10): boolean {
     const n = meanMotionRadPerSec(rec);
@@ -295,6 +304,8 @@ export function planeScreensOut(rec: SatRec, observerLatDeg: number, minElDeg = 
     const cosI = Math.cos(rec.inclo);
     const reach = Math.abs(cosI * Math.sin(lat)) - sinI * Math.cos(lat);
     const distDeg = Math.asin(Math.min(1, Math.max(0, reach))) * RAD2DEG;
+    // Never reachable: the observer's floor distance to the plane stays more
+    // than a pad (≥ 1°) beyond the largest horizon-cone angle.
     return distDeg - 1 >= psiDeg;
 }
 
@@ -674,14 +685,22 @@ export function* findPasses(
     };
 
     // All future discoveries start after the earliest pending sample time or
-    // open-run start, so once the top list is full and those are past the
-    // Nth pass's start, nothing can beat the current result.
+    // the last/first sample that could still bracket a pass, so once the top
+    // list is full and those are past the Nth pass's start, nothing can beat
+    // the current result.
     const mayStopEarly = (): boolean => {
         if (top.length < resolved.maxPasses) return false;
         const boundary = top[top.length - 1].startMs;
         const heapKey = heap.minKey;
         if (heapKey !== null && heapKey <= boundary) return false;
-        return states.every((s) => s.openRunLo === null || s.openRunLo >= boundary);
+        // Closed state: any still-hiding pass rises AFTER its last sample
+        // (`prevT`) — so `prevT >= boundary` closes the barrier. Open state:
+        // its next pass could start anywhere past the run window; the window
+        // opened on the previous (below-threshold) sample, so the run's
+        // `openRunLo` is the earliest start it can contribute.
+        return states.every((s) =>
+            s.openRunLo === null ? s.prevT >= boundary : s.openRunLo >= boundary
+        );
     };
 
     while (heap.size > 0) {

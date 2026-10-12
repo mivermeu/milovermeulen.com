@@ -33,7 +33,7 @@ export interface PassesRequest {
 
 /** Result cap bookkeeping the UI surfaces as a "limited to N" note. */
 export interface PassCapInfo {
-    /** Satellites in the active (tree-filtered) set. */
+    /** Satellites the search could pass at this location (after the plane-cone screen). */
     active: number;
     /** Satellites actually searched after the cap. */
     searched: number;

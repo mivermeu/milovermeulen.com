@@ -421,9 +421,6 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
                         rec,
                         epochEl,
                         nRadPerSec,
-                        // satellite.js stores the full Julian date in jdsatepoch.
-                        // satellite.js stores the full Julian date in jdsatepoch.
-                        // satellite.js stores the full Julian date in jdsatepoch.
                         epochMs: tleEpochMs(rec),
                         name: sat.name,
                         srcIndex
