@@ -29,6 +29,13 @@ const GROUND_WINDOW_STEPS = 128;
 // orbits (the plot would be unreadable spaghetti) — but focus-only bakes
 // keep pinned/hovered orbit lines alive at any catalog size.
 const ORBIT_MAX_SATS = 1000;
+// Window-rebuild cadence tiers: small catalogs repaint their slid windows
+// every frame; larger ones every Nth frame (the dots stay per-frame smooth;
+// only the window geometry updates slightly chunkier, which is invisible at
+// arc scale). A fresh bake or a focus change forces an immediate repaint.
+const ORBIT_WINDOW_SMOOTH_SATS = 250;
+const ORBIT_WINDOW_SLOTS_EVERY = 3;
+const ORBIT_WINDOW_SLOTS_EVERY_BIG = 5;
 // While paused, scene geometry is static unless the clock is scrubbed; only
 // re-ask the worker when the simulated epoch drifted well away from the last
 // orbit build — throttled so dragging the slider doesn't queue a storm.
@@ -781,6 +788,8 @@ export class GlobeScene {
      */
     private lastWindowTarget = Number.NaN;
     private lastWindowBake = -1;
+    private lastWindowFocus = -2;
+    private windowFrameTick = 0;
 
     private rebuildOrbitWindows(): void {
         if (!this.orbitWindowMode || !this.orbitPositions || !this.orbitVertexTimes) return;
@@ -803,8 +812,24 @@ export class GlobeScene {
         if (target === this.lastWindowTarget && this.orbitBakeEpoch === this.lastWindowBake) {
             return;
         }
-        this.lastWindowTarget = target;
+        // Cadence tiers (see the constants): repaint windows every Nth frame
+        // on bigger catalogs. A fresh bake or a focus change always repaints.
+        const factor =
+            this.satellites.length <= ORBIT_WINDOW_SMOOTH_SATS
+                ? 1
+                : this.satellites.length <= ORBIT_MAX_SATS
+                  ? ORBIT_WINDOW_SLOTS_EVERY
+                  : ORBIT_WINDOW_SLOTS_EVERY_BIG;
+        if (factor > 1) {
+            this.windowFrameTick = (this.windowFrameTick + 1) % factor;
+            const forced =
+                this.orbitBakeEpoch !== this.lastWindowBake ||
+                this.highlightIndex !== this.lastWindowFocus;
+            if (this.windowFrameTick !== 0 && !forced) return;
+        }
+        this.lastWindowFocus = this.highlightIndex;
         this.lastWindowBake = this.orbitBakeEpoch;
+        this.lastWindowTarget = target;
 
         for (let s = 0; s < this.orbitVertexCounts.length; s++) {
             const vCount = this.orbitVertexCounts[s];
