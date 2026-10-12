@@ -1,15 +1,123 @@
 <script lang="ts">
-    import { trackerState } from '$lib/state.svelte';
+    import { untrack } from 'svelte';
+    import {
+        trackerState,
+        pinSatellite,
+        resetSimClock,
+        setSimOffsetMs,
+        pauseSimClock,
+        resumeSimClock,
+        setSimSpeed
+    } from '$lib/state.svelte';
+    import { catalogByNorad } from '$lib/url-state';
+    import {
+        SCRUB_SLIDER_STEPS,
+        SIM_SPEEDS,
+        REALTIME_SNAP_MS,
+        simAccuracy,
+        scrubOffsetMsToSlider,
+        scrubSliderToOffsetMs
+    } from '$lib/simclock';
     import Panel from './Panel.svelte';
 
-    let now = $state(new Date());
-
+    // Real-time anchor for the scrub slider's offset value; refreshed a couple
+    // of times a second — the simulated UTC readout below instead reacts
+    // directly to the central clock's own ticks.
+    let wall = $state(Date.now());
     $effect(() => {
-        const id = setInterval(() => (now = new Date()), 1000);
+        const id = setInterval(() => (wall = Date.now()), 100);
         return () => clearInterval(id);
     });
 
-    const utcString = $derived(now.toISOString().replace('T', ' ').slice(0, 19) + ' UTC');
+    const favoriteEntries = $derived.by(() => {
+        // Track the ids and the catalog reference; scan the TLE lines untracked
+        // (deep proxy reads must not become dependencies — a tracked deep read
+        // re-fires on any catalog object mutation). The NORAD index itself is
+        // cached by array reference in catalogByNorad, so repeated favorites
+        // changes don't rescan the catalog.
+        const ids = trackerState.favorites;
+        const sats = trackerState.satellites;
+        if (ids.length === 0 || sats.length === 0) return [];
+        return untrack(() => {
+            const byNorad = catalogByNorad(sats);
+            return ids
+                .map((norad) => ({ norad, index: byNorad.get(norad) ?? -1 }))
+                .filter((entry) => entry.index >= 0);
+        });
+    });
+
+    const offsetMs = $derived(trackerState.simEpochMs - wall);
+    // Real-time is a clock *mode*, not an offset comparison: while in it, the
+    // central tick pins the epoch to the wall clock, so the offset is 0 by
+    // construction and the state never flickers between "now" and "±0 s".
+    const atNow = $derived(trackerState.simRealtime);
+    const accuracy = $derived(simAccuracy(atNow ? 0 : offsetMs));
+    const simUtc = $derived(
+        new Date(trackerState.simEpochMs).toISOString().replace('T', ' ').slice(0, 19) + ' UTC'
+    );
+
+    /** Compact signed offset: largest single unit — −30.2 d, +4 h, +12 m, +45 s. */
+    function formatOffset(ms: number): string {
+        if (Math.abs(ms) < 100) return 'now';
+        const sign = ms < 0 ? '−' : '+';
+        const abs = Math.abs(ms);
+        if (abs >= 86_400_000) return `${sign}${(abs / 86_400_000).toFixed(1)} d`;
+        if (abs >= 3_600_000) return `${sign}${Math.round(abs / 3_600_000)} h`;
+        if (abs >= 60_000) return `${sign}${Math.round(abs / 60_000)} m`;
+        return `${sign}${Math.round(abs / 1000)} s`;
+    }
+
+    // The slider fights a playing clock (its value attribute re-centers the
+    // thumb every render), so a drag runs against a paused clock: pointerdown
+    // pauses, pointerup/change commits the final offset and restores play.
+    // `input` still commits mid-drag so the views glide while dragging, and the
+    // rendered position freezes for the drag's duration — the offset-vs-wall
+    // arithmetic otherwise nudges the thumb under the pointer.
+    //
+    // The slider is symmetric-log: `0..SCRUB_SLIDER_STEPS` maps exponentially
+    // to the ±30-day offset range, giving ~0.2 s of resolution at the center
+    // for LEO-scale nudges and full ±30 days at the ends.
+    let scrubbing = $state(false);
+    let scrubWasPlaying = false;
+    let scrubPos = $state(SCRUB_SLIDER_STEPS / 2);
+    let scrubStartOffset = 0;
+
+    function displayedSliderPos(): number {
+        return atNow ? SCRUB_SLIDER_STEPS / 2 : scrubOffsetMsToSlider(offsetMs);
+    }
+
+    function beginScrub(event: Event): void {
+        scrubbing = true;
+        scrubPos = (event.target as HTMLInputElement).valueAsNumber;
+        scrubStartOffset = scrubSliderToOffsetMs(scrubPos);
+        scrubWasPlaying = trackerState.simPlaying;
+        pauseSimClock();
+    }
+
+    function endScrub(event: Event): void {
+        const position = (event.target as HTMLInputElement).valueAsNumber;
+        if (scrubbing) {
+            scrubbing = false;
+            if (scrubWasPlaying) resumeSimClock();
+        }
+        // Commit only when the value actually changed (fires for both pointer
+        // release and keyboard changes; sets the same offset the last `input`
+        // committed for pointer use). Offsets near zero snap to the live feed.
+        // NOTE: keyboard-driven `change` events don't pass through beginScrub,
+        // so they commit without the pause-while-scrub treatment — wiring that
+        // would need focus/blur tracking; the commit itself is already correct.
+        const offset = scrubSliderToOffsetMs(position);
+        // A pointer drag runs paused, so the center snap (which needs a playing
+        // clock) can't engage mid-drag — and the change-only guard would then
+        // skip the post-resume commit that snaps. Force it when parked live.
+        const snappedLive =
+            scrubWasPlaying &&
+            trackerState.simPlaying &&
+            Math.abs(offset) <= REALTIME_SNAP_MS &&
+            !trackerState.simRealtime;
+        if (offset !== scrubStartOffset || snappedLive) setSimOffsetMs(offset);
+        scrubStartOffset = offset;
+    }
 </script>
 
 {#snippet optionButton(label: string, tip: string, active: boolean, onclick: () => void)}
@@ -52,6 +160,15 @@
                 class="h-3 w-3 accent-brand-primary"
             />
             <span class="text-xs text-brand-text">All orbits</span>
+        </label>
+
+        <label class="flex cursor-pointer items-center gap-2">
+            <input
+                type="checkbox"
+                bind:checked={trackerState.showGroundTrack}
+                class="h-3 w-3 accent-brand-primary"
+            />
+            <span class="text-xs text-brand-text">Ground track</span>
         </label>
 
         <label class="flex cursor-pointer items-center gap-2">
@@ -105,11 +222,100 @@
             </div>
         </div>
 
+        {#if favoriteEntries.length > 0}
+            <div>
+                <p class="mb-1 text-[10px] text-brand-text">
+                    Favorites ({favoriteEntries.length})
+                </p>
+                <div
+                    class="max-h-24 space-y-0.5 overflow-y-auto pr-1"
+                    aria-label="Favorited satellites"
+                >
+                    {#each favoriteEntries as entry (entry.norad)}
+                        <button
+                            type="button"
+                            class="flex w-full items-center justify-between gap-2 rounded px-1 py-0.5 text-left text-[11px] text-brand-text transition-colors hover:bg-white/10 {trackerState.pinnedIndex ===
+                            entry.index
+                                ? 'bg-white/15 text-brand-text-highlight'
+                                : ''}"
+                            onclick={() => pinSatellite(entry.index)}
+                        >
+                            <span class="truncate">
+                                {trackerState.satellites[entry.index]?.name ??
+                                    `NORAD ${entry.norad}`}
+                            </span>
+                            <span class="shrink-0 font-mono text-[9px] text-brand-text/50"
+                                >{entry.norad}</span
+                            >
+                        </button>
+                    {/each}
+                </div>
+            </div>
+        {/if}
+
         <div>
             <p class="mb-1 text-[10px] text-brand-text">Time</p>
-            <p class="font-mono text-[10px] text-brand-text-highlight">
-                {utcString}
+            <div class="flex flex-wrap items-center gap-1">
+                {@render optionButton(
+                    trackerState.simPlaying ? 'Pause' : 'Play',
+                    'Pause or resume the simulated clock.',
+                    !trackerState.simPlaying,
+                    () => (trackerState.simPlaying ? pauseSimClock() : resumeSimClock())
+                )}
+                {#each SIM_SPEEDS as speed (speed)}
+                    {@render optionButton(
+                        `${speed}×`,
+                        `Simulated time runs ${speed}× faster than real time.`,
+                        trackerState.simSpeed === speed,
+                        () => setSimSpeed(speed)
+                    )}
+                {/each}
+                {@render optionButton(
+                    'Now',
+                    'Back to exact real time: offset 0, playing at 1×.',
+                    atNow,
+                    resetSimClock
+                )}
+            </div>
+            <input
+                type="range"
+                min={0}
+                max={SCRUB_SLIDER_STEPS}
+                step={1}
+                value={scrubbing ? scrubPos : displayedSliderPos()}
+                onpointerdown={beginScrub}
+                onpointerup={endScrub}
+                onpointercancel={endScrub}
+                onchange={endScrub}
+                oninput={(event) => {
+                    const position = (event.target as HTMLInputElement).valueAsNumber;
+                    scrubPos = position;
+                    const offset = scrubSliderToOffsetMs(position);
+                    scrubStartOffset = offset;
+                    setSimOffsetMs(offset);
+                }}
+                class="mt-2 w-full accent-brand-primary"
+                aria-label="Time scrub — log scale, up to ±30 days around real time (1 step ≈ 0.2 s at the center)"
+                aria-valuetext={atNow ? 'real time' : `${formatOffset(offsetMs)} from real time`}
+            />
+            <div class="flex items-center justify-between text-[9px] text-brand-text/60">
+                <span>−30 d</span>
+                <span class="font-mono text-brand-text">
+                    {atNow ? 'now' : formatOffset(offsetMs)}
+                </span>
+                <span>+30 d</span>
+            </div>
+            <p class="font-mono text-[10px] text-brand-text-highlight" aria-live="off">
+                {simUtc}
             </p>
+            {#if accuracy === 'degrading'}
+                <p class="mt-1 text-[9px] leading-snug text-brand-text/70">
+                    simulated · accuracy degrading — SGP4 extrapolates from TLE epoch, so offsets
+                    beyond ~2 days drift
+                </p>
+            {:else if !atNow}
+                <p class="mt-1 text-[9px] leading-snug text-brand-text/70">simulated time</p>
+            {/if}
         </div>
     </div>
 </Panel>

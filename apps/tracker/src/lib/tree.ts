@@ -276,17 +276,29 @@ export function toggleNodeInTree(root: TreeNode, id: string): number[] {
     return active;
 }
 
+// An all-digit query is treated as a NORAD catalog ID (prefix match, so typing
+// "2554" narrows toward ISS's 25544); anything else matches labels as before.
 export function findMatchingNodeIds(
     root: TreeNode,
-    query: string
+    query: string,
+    satellites?: ParsedSatellite[]
 ): { matching: Set<string>; expand: Set<string> } {
     const matching = new Set<string>();
     const expand = new Set<string>();
     if (!query) return { matching, expand };
     const lower = query.toLowerCase();
+    const norad =
+        /^\d+$/.test(query) && satellites
+            ? (node: TreeNode) => {
+                  if (node.satelliteIndex === undefined) return false;
+                  const id = satellites[node.satelliteIndex]?.noradId;
+                  return id !== undefined && id !== null && String(id).startsWith(query);
+              }
+            : null;
 
     function walk(node: TreeNode): boolean {
-        const selfMatch = node.label.toLowerCase().includes(lower);
+        let selfMatch = node.label.toLowerCase().includes(lower);
+        if (!selfMatch && norad) selfMatch = norad(node);
         let childMatch = false;
         for (const child of node.children) {
             if (walk(child)) childMatch = true;
@@ -302,6 +314,46 @@ export function findMatchingNodeIds(
 
     walk(root);
     return { matching, expand };
+}
+
+/**
+ * Locate the tree leaf that belongs to a satellite (by catalog index) — used to
+ * reveal/pin favorites and URL `sat` deep links without inventing duplicate
+ * tree rows (leaf ids must stay unique: `sat-<index>`).
+ */
+export function findLeafByIndex(root: TreeNode, index: number): TreeNode | null {
+    if (root.satelliteIndex === index) return root;
+    for (const child of root.children) {
+        const found = findLeafByIndex(child, index);
+        if (found) return found;
+    }
+    return null;
+}
+
+/** Ensure `leaf` is selected and recompute tri-states. Returns the active indices. */
+export function activateLeafNode(root: TreeNode, leaf: TreeNode): number[] {
+    if (!leaf.selected) {
+        setDescendants(leaf, true);
+        computeTriStates(root);
+    }
+    const active: number[] = [];
+    collectLeaves(root, active);
+    return active;
+}
+
+/** Expand all ancestors of `leaf` so it is visible in the tree. */
+export function revealLeafNode(root: TreeNode, leaf: TreeNode): void {
+    function walk(node: TreeNode): boolean {
+        if (node === leaf) return true;
+        for (const child of node.children) {
+            if (walk(child)) {
+                node.expanded = true;
+                return true;
+            }
+        }
+        return false;
+    }
+    walk(root);
 }
 
 export function saveExpanded(root: TreeNode, target: Map<string, boolean>): void {

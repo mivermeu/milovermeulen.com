@@ -1,0 +1,4 @@
+[test]
+# Bun cannot resolve Vite "?raw" imports natively; this preload overlays a resolver
+# so `bun test` runs the same modules Vite does.
+preload = ["./tests/bun-plugin-raw.ts"]
