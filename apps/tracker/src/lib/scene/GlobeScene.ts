@@ -778,6 +778,14 @@ export class GlobeScene {
      */
     private rebuildOrbitWindows(): void {
         if (!this.orbitWindowMode || !this.orbitPositions || !this.orbitVertexTimes) return;
+        // The merged layer is the only consumer of these slots: when "All
+        // orbits" is off (forced off by the size cap on big filters), don't
+        // pay the per-frame window rebuild at all — at 5000 sats it was
+        // several milliseconds of invisible work every frame, dragging the
+        // frame rate (and with it the orbit-controls damping) down hard
+        // enough that the globe visibly kept spinning after a drag. The
+        // focused highlight paints separately and is unaffected.
+        if (!this.showOrbits) return;
         const positions = this.orbitPositions; // chain vertices, 3 floats each
         const times = this.orbitVertexTimes;
         const scratch = this.orbitSlotScratch;
