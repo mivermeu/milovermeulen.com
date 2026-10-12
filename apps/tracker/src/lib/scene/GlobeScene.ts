@@ -762,8 +762,11 @@ export class GlobeScene {
     /** Visibility only — window geometry is painted per frame while sliding. */
     private updateOrbitVisibility(): void {
         this.orbitMesh.visible = this.showOrbits && this.orbitsReady;
-        // Highlight mesh stays visible when focused, regardless of showOrbits.
-        this.highlightMesh.visible = this.highlightIndex >= 0 && this.orbitsReady;
+        // The highlight chain is built synchronously on the main thread — it
+        // needs no bake, so the highlight shows the moment the focus exists
+        // (on big catalogs the merged bake may never land; that must not
+        // starve the highlight).
+        this.highlightMesh.visible = this.highlightIndex >= 0 && !!this.highlightChain;
     }
 
     /**
@@ -1354,7 +1357,11 @@ export class GlobeScene {
         this.lastFrameWall = now;
 
         if (
-            (this.showOrbits || this.highlightIndex >= 0) &&
+            // Merged-orbit bakes only matter for a drawn merged layer; on
+            // size-capped catalogs the highlight is main-thread built and the
+            // bake would never complete (churn + cancelled worker work).
+            this.showOrbits &&
+            this.satellites.length <= ORBIT_MAX_SATS &&
             this.ready &&
             // A paused clock renders a static scene; rebuild only when a scrub
             // moved the simulated epoch away from the last build's anchor.

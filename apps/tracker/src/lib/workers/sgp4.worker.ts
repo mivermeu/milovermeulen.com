@@ -110,8 +110,8 @@ function sgp4Position(rec: SatRec, tMs: number): Vec3 | null {
 
 async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
     const buildId = ++orbitBuildId;
+    const bakeGeneration = catalogVersion;
     const { requestId, epoch, frame } = message;
-    const total = satellites.length;
     // One flat vertex chain per satellite (two ν-continuous periods, refined
     // where chords get long) via the shared per-satellite chain builder in
     // $lib/orbitTrack — the same builder the scene uses for the highlight,
@@ -124,8 +124,10 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
     const CHUNK = 100;
     const epochMs = epoch;
 
-    for (let i = 0; i < total; i++) {
-        const rec = satellites[i].rec;
+    for (let i = 0; i < satellites.length; i++) {
+        const sat = satellites[i];
+        if (!sat) continue; // catalog re-initialized mid-build (belt/braces)
+        const rec = sat.rec;
         const chain = buildOrbitChain({
             rec,
             anchorEpochMs: epochMs,
@@ -147,6 +149,9 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
         }
         if ((i + 1) % CHUNK === 0) {
             if (buildId !== orbitBuildId) return;
+            // A re-initialization mid-build invalidates our satellite list —
+            // bail instead of mixing chains from two catalogs.
+            if (bakeGeneration !== catalogVersion) return;
             await new Promise((resolve) => setTimeout(resolve, 0));
         }
     }
