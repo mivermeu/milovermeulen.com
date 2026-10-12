@@ -1080,6 +1080,11 @@ export class GlobeScene {
                     );
                 }
                 this.highlightCapEdges = capEdges;
+                // The per-frame paint pads the buffer's tail with degenerate
+                // pairs instead of using a draw range — but a filter reset or
+                // a broken-bake guard may have zeroed the range earlier, and
+                // nothing else re-arms it. Re-arm it here, once per re-anchor.
+                this.highlightGeometry.setDrawRange(0, capEdges * 2);
                 this.updateNodeMarkers(chain.positions);
             } else {
                 this.highlightChain = null;
@@ -1110,7 +1115,8 @@ export class GlobeScene {
             this.reanchorHighlight();
             return; // the caller paints again from the recomputed chain
         }
-        if (this.highlightCapEdges === 0) return;
+        if (this.highlightCapEdges === 0 || !this.highlightScratch) return;
+        const scratch = this.highlightScratch;
         // The highlight meshes rotate with the chain's own GMST basis; the
         // anchor's ECF world position is rotated by the inverse delta into
         // the chain's baked frame before splicing (ECI mode).
@@ -1135,7 +1141,7 @@ export class GlobeScene {
             chain.periodMs,
             [ax, ay, az],
             target,
-            this.highlightScratch!,
+            scratch,
             0,
             this.highlightCapEdges
         );
@@ -1151,6 +1157,8 @@ export class GlobeScene {
 
     hideHighlight(): void {
         if (this.highlightIndex === -1) return;
+        this.highlightIndex = -1;
+        this.highlightChain = null;
         this.highlightMesh.visible = false;
         this.ascendingNode.visible = false;
         this.descendingNode.visible = false;
@@ -1254,6 +1262,7 @@ export class GlobeScene {
         // Slid-window bookkeeping belongs to the old catalog's bake.
         this.orbitWindowMode = false;
         this.orbitSlotScratch = null;
+        this.highlightChain = null;
         this.highlightScratch = null;
         this.highlightGeometry.setDrawRange(0, 0);
         this.orbitMesh.visible = false;
@@ -1330,6 +1339,9 @@ export class GlobeScene {
 
     private loop = (): void => {
         if (this.disposed) return;
+        // Schedule the next frame before the body runs: a per-frame bug then
+        // surfaces as a console error instead of freezing the whole app.
+        this.raf = requestAnimationFrame(this.loop);
         const now = performance.now();
         this.lastFrameWall = now;
 
@@ -1401,7 +1413,6 @@ export class GlobeScene {
         }
         this.controls.update();
         this.renderer.render(this.scene, this.camera);
-        this.raf = requestAnimationFrame(this.loop);
     };
 
     private updatePositions(): void {
