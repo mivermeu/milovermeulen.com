@@ -29,13 +29,17 @@ const GROUND_WINDOW_STEPS = 128;
 // orbits (the plot would be unreadable spaghetti) — but focus-only bakes
 // keep pinned/hovered orbit lines alive at any catalog size.
 const ORBIT_MAX_SATS = 1000;
-// Window-rebuild cadence tiers: small catalogs repaint their slid windows
-// every frame; larger ones every Nth frame (the dots stay per-frame smooth;
-// only the window geometry updates slightly chunkier, which is invisible at
-// arc scale). A fresh bake or a focus change forces an immediate repaint.
-const ORBIT_WINDOW_SMOOTH_SATS = 250;
-const ORBIT_WINDOW_SLOTS_EVERY = 3;
-const ORBIT_WINDOW_SLOTS_EVERY_BIG = 5;
+// Window-rebuild cadence tiers: only small catalogs repaint their slid
+// windows every frame; larger ones step down to 20/10/5 Hz (the dots stay
+// per-frame smooth; the merged arcs are big enough that the coarser window
+// steps read as intentional). A fresh bake or a focus change forces an
+// immediate repaint regardless of tier.
+const ORBIT_WINDOW_SMOOTH_SATS = 150;
+const ORBIT_WINDOW_MEDIUM_SATS = 400;
+const ORBIT_WINDOW_LARGE_SATS = 900;
+const ORBIT_WINDOW_SLOTS_EVERY = 3; // >150 … ≤400 sats → 20 Hz
+const ORBIT_WINDOW_SLOTS_EVERY_BIG = 6; // >400 … ≤900 sats → 10 Hz
+const ORBIT_WINDOW_SLOTS_EVERY_HUGE = 12; // >900 sats → 5 Hz
 // While paused, scene geometry is static unless the clock is scrubbed; only
 // re-ask the worker when the simulated epoch drifted well away from the last
 // orbit build — throttled so dragging the slider doesn't queue a storm.
@@ -817,9 +821,11 @@ export class GlobeScene {
         const factor =
             this.satellites.length <= ORBIT_WINDOW_SMOOTH_SATS
                 ? 1
-                : this.satellites.length <= ORBIT_MAX_SATS
+                : this.satellites.length <= ORBIT_WINDOW_MEDIUM_SATS
                   ? ORBIT_WINDOW_SLOTS_EVERY
-                  : ORBIT_WINDOW_SLOTS_EVERY_BIG;
+                  : this.satellites.length <= ORBIT_WINDOW_LARGE_SATS
+                    ? ORBIT_WINDOW_SLOTS_EVERY_BIG
+                    : ORBIT_WINDOW_SLOTS_EVERY_HUGE;
         if (factor > 1) {
             this.windowFrameTick = (this.windowFrameTick + 1) % factor;
             const forced =
