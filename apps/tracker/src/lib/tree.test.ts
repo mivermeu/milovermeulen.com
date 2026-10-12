@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 import type { ParsedSatellite } from './satellites/types';
+import { parseNoradId } from './satellites/tle';
 import {
     buildRoot,
     toggleNodeInTree,
@@ -7,6 +8,9 @@ import {
     extractPrefix,
     starlinkShell,
     findMatchingNodeIds,
+    findLeafByIndex,
+    activateLeafNode,
+    revealLeafNode,
     type TreeNode
 } from './tree';
 
@@ -14,6 +18,7 @@ function sat(name: string): ParsedSatellite {
     return {
         name,
         line1: '1 00000U 00000A   00000.00000000  .00000000  00000-0  00000-0 0  0000',
+        noradId: 0,
         line2: '2 00000   0.0000   0.0000 0000000   0.0000   0.0000  0.00000000  0000'
     };
 }
@@ -23,6 +28,14 @@ function satWithInc(name: string, inc: number): ParsedSatellite {
         ...sat(name),
         line2: `2 00000 ${inc.toFixed(4).padStart(8)}  0.0000 0000000   0.0000   0.0000  0.00000000  0000`
     };
+}
+
+// Line 1 with the NORAD field (cols 3-7) swapped for a literal TLE field —
+// plain digits or alpha-5 ('A2345' = 102345). The decimal value is derived
+// once, through the same decode rule the parser implements.
+function satField(name: string, field: string): ParsedSatellite {
+    const line1 = sat(name).line1.replace(/^1 .{5}/, `1 ${field}`);
+    return { ...sat(name), line1, noradId: parseNoradId(line1) };
 }
 
 function getActive(root: TreeNode): number[] {
@@ -193,6 +206,72 @@ describe('grouping', () => {
     });
 });
 
+describe('satellite lookup/activation helpers', () => {
+    // Fixture: ISS (index 0) is science → selected by default; GPS BIIF-2
+    // (index 2) hides two levels deep (Navigation > GPS > leaf); NOAA-19
+    // (index 3) is a hidden lone leaf under Weather.
+    function fixture(): TreeNode {
+        return buildRoot([
+            sat('ISS (ZARYA)'),
+            sat('GPS BIIF-1'),
+            sat('GPS BIIF-2'),
+            sat('NOAA-19')
+        ]);
+    }
+
+    it('findLeafByIndex locates leaves by catalog index, or null when absent', () => {
+        const root = fixture();
+        expect(findLeafByIndex(root, 0)?.label).toBe('ISS (ZARYA)');
+        expect(findLeafByIndex(root, 2)?.label).toBe('GPS BIIF-2');
+        expect(findLeafByIndex(root, 3)?.label).toBe('NOAA-19');
+        expect(findLeafByIndex(root, 99)).toBeNull();
+    });
+
+    it('activateLeafNode leaves an already-selected leaf untouched', () => {
+        const root = fixture();
+        const leaf = findLeafByIndex(root, 0)!;
+        expect(leaf.selected).toBe(true);
+        const before = getActive(root);
+        const after = activateLeafNode(root, leaf);
+        expect(after).toEqual(before);
+        expect(after).toEqual([0]);
+    });
+
+    it('activating a hidden lone leaf selects it and recomputes tri-states', () => {
+        const root = fixture();
+        const leaf = findLeafByIndex(root, 3)!;
+        expect(leaf.selected).toBe(false);
+        const after = activateLeafNode(root, leaf);
+        expect(leaf.selected).toBe(true);
+        expect(after).toContain(0);
+        expect(after).toContain(3);
+        expect(root.children.find((c) => c.label === 'Weather')!.triState).toBe('all');
+        expect(root.children.find((c) => c.label === 'Science')!.triState).toBe('all');
+    });
+
+    it('activating a hidden leaf deep in a folder selects it, leaving its sibling off', () => {
+        const root = fixture();
+        const leaf = findLeafByIndex(root, 2)!;
+        expect(leaf.selected).toBe(false);
+        const after = activateLeafNode(root, leaf);
+        expect(after).toContain(2);
+        expect(after).not.toContain(1); // sibling GPS BIIF-1 stays off
+        const nav = root.children.find((c) => c.label === 'Navigation')!;
+        expect(nav.triState).toBe('some');
+    });
+
+    it('revealLeafNode expands exactly the ancestors on the path', () => {
+        const root = fixture();
+        const leaf = findLeafByIndex(root, 2)!;
+        revealLeafNode(root, leaf);
+        const nav = root.children.find((c) => c.label === 'Navigation')!;
+        expect(nav.expanded).toBe(true);
+        expect(findInChildren(nav.children, 'GPS')!.expanded).toBe(true);
+        // Unrelated branches stay collapsed; the leaf has no children to open.
+        expect(root.children.find((c) => c.label === 'Weather')!.expanded).toBe(false);
+    });
+});
+
 describe('object type metadata', () => {
     it('uses SATCAT objectType to classify debris and rocket bodies', () => {
         const root = buildRoot([
@@ -343,3 +422,93 @@ describe('findMatchingNodeIds (search)', () => {
         expect(expand.size).toBe(0);
     });
 });
+
+describe('NORAD ID search', () => {
+    // GPS pair in a group, lone science sat, alpha-5 ID in comms.
+    function noradTree(): { root: TreeNode; sats: ParsedSatellite[] } {
+        const sats = [
+            satField('GPS BIIF-1', '40001'),
+            satField('GPS BIIF-2', '40002'),
+            satField('ISS (ZARYA)', '25544'),
+            satField('RISING-2', 'A2345') // alpha-5 field for 102345
+        ];
+        return { root: buildRoot(sats), sats };
+    }
+
+    function leafFor(root: TreeNode, sats: ParsedSatellite[], name: string): TreeNode | undefined {
+        return allNodes(root).find((n) => sats[n.satelliteIndex!]?.name === name);
+    }
+
+    it('matches the exact NORAD ID and unfolds its ancestors', () => {
+        const { root, sats } = noradTree();
+        const { matching, expand } = findMatchingNodeIds(root, '40001', sats);
+        const leaf = leafFor(root, sats, 'GPS BIIF-1')!;
+        expect(leaf).toBeDefined();
+        expect(sats[leaf.satelliteIndex!].noradId).toBe(40001);
+        expect(matching.has(leaf.id)).toBe(true);
+        // The "GPS" group, "Navigation" category and root unfold to reach the
+        // leaf; the leaf itself stays a listed row.
+        const nav = root.children.find((c) => c.label === 'Navigation')!;
+        const gpsGroup = nav.children.find((c) => c.label === 'GPS')!;
+        for (const id of ['root', 'func-navigation', nav.id, gpsGroup.id]) {
+            expect(expand.has(id)).toBe(true);
+        }
+        expect(expand.has(leaf.id)).toBe(false);
+    });
+
+    it('supports prefix matching so partial typing still narrows', () => {
+        const { root, sats } = noradTree();
+        const { matching } = findMatchingNodeIds(root, '4000', sats);
+        const leaves = [...matching].filter((id) => id.startsWith('sat-'));
+        expect(leaves).toHaveLength(2); // 40001 and 40002
+    });
+
+    it('excludes IDs that merely contain the query', () => {
+        const { root, sats } = noradTree();
+        expect(findMatchingNodeIds(root, '99999', sats).matching.size).toBe(0);
+        const full = findMatchingNodeIds(root, '40001', sats);
+        expect([...full.matching].filter((id) => id.startsWith('sat-'))).toHaveLength(1);
+    });
+
+    it('finds alpha-5 encoded IDs by their decimal value', () => {
+        const { root, sats } = noradTree();
+        const alphaLeaf = leafFor(root, sats, 'RISING-2')!;
+        expect(alphaLeaf).toBeDefined();
+        expect(sats[alphaLeaf.satelliteIndex!].noradId).toBe(102345);
+
+        const { matching } = findMatchingNodeIds(root, '102345', sats);
+        expect(matching.has(alphaLeaf.id)).toBe(true);
+        expect(findMatchingNodeIds(root, '102344', sats).matching.size).toBe(0);
+    });
+
+    it('treats only all-digit queries as NORAD ID queries', () => {
+        const { root, sats } = noradTree();
+        const { matching: digit } = findMatchingNodeIds(root, '25544', sats);
+        expect(digit.has(leafFor(root, sats, 'ISS (ZARYA)')!.id)).toBe(true);
+        // "25544 " with a letter appended is not an ID: the name contains no
+        // such substring and 102345 starts with "1023", so nothing matches.
+        const { matching: letter, expand: letterExpand } = findMatchingNodeIds(root, '2554a', sats);
+        expect(letter.size).toBe(0);
+        expect(letterExpand.size).toBe(0);
+        // Plain labels keep the substring behavior.
+        const { matching: label } = findMatchingNodeIds(root, 'zarya', sats);
+        expect(label.has(leafFor(root, sats, 'ISS (ZARYA)')!.id)).toBe(true);
+    });
+
+    it('keeps label matching alive for digit queries too', () => {
+        const { root, sats } = noradTree();
+        // "2" hits GPS BIIF-2 by name even though 40002 doesn't start with 2.
+        const { matching } = findMatchingNodeIds(root, '2', sats);
+        expect(matching.has(leafFor(root, sats, 'GPS BIIF-2')!.id)).toBe(true);
+    });
+
+    it('digit queries without satellite data stay label-only', () => {
+        const { root } = noradTree();
+        const { matching } = findMatchingNodeIds(root, '2');
+        expect(matching.size).toBeGreaterThan(0);
+    });
+});
+
+function allNodes(node: TreeNode): TreeNode[] {
+    return [node, ...node.children.flatMap(allNodes)];
+}

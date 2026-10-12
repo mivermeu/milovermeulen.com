@@ -1,4 +1,3 @@
-import sampleTles from '$lib/satellites/data/sample-tles.txt?raw';
 import type { CatalogResult, ParsedSatellite } from './types';
 
 const LOCAL_API_URL =
@@ -16,6 +15,25 @@ const FETCH_TIMEOUT_MS = 8000;
 // typically lags ~2 weeks).
 export const MAX_TLE_AGE_DAYS = 30;
 
+// NORAD catalog ID from TLE line 1, cols 3-7. Once the 5-digit field runs out
+// (the catalog passed 99999), IDs are encoded "alpha-5": the first character is
+// a letter for the leading digit(s) — A=10, B=11 … Z=35 — so E8493 means
+// 148493. Parse both encodings; null if unparsable.
+export function parseNoradId(line1: string): number | null {
+    const field = line1.slice(2, 7);
+    if (!/^[A-Za-z0-9]{5}$/.test(field)) return null;
+    const first = field[0];
+    if (first >= 'A' && first <= 'Z') {
+        const rest = field.slice(1);
+        if (!/^\d{4}$/.test(rest)) return null;
+        // Space-Track's table: A0000 = 100000, i.e. letter value (A=10) × 10⁴
+        // plus the remaining four digits — E8493 = 148493.
+        return (first.charCodeAt(0) - 55) * 10000 + parseInt(rest, 10);
+    }
+    if (!/^\d{5}$/.test(field)) return null;
+    return parseInt(field, 10);
+}
+
 // Epoch field (cols 19-32: YYDDD.DDDDDDDD) as unix ms, or null if unparsable.
 export function tleEpochMs(line1: string): number | null {
     const yy = parseInt(line1.slice(18, 20), 10);
@@ -23,6 +41,13 @@ export function tleEpochMs(line1: string): number | null {
     if (!Number.isFinite(yy) || !Number.isFinite(dayOfYear)) return null;
     const year = yy < 57 ? 2000 + yy : 1900 + yy;
     return Date.UTC(year, 0, 1) + (dayOfYear - 1) * 86400000;
+}
+
+// Secret-code naming aside, "how stale is this TLE" is the question: age of the
+// line-1 epoch relative to `nowMs` in days, or null without a parsable epoch.
+export function epochAgeDays(line1: string, nowMs: number): number | null {
+    const epoch = tleEpochMs(line1);
+    return epoch === null ? null : (nowMs - epoch) / 86400000;
 }
 
 export function partitionFresh(
@@ -56,7 +81,12 @@ export function parseTleText(text: string): ParsedSatellite[] {
                 break;
             }
         }
-        satellites.push({ name, line1: line1.trimEnd(), line2: line2.trimEnd() });
+        satellites.push({
+            name,
+            line1: line1.trimEnd(),
+            line2: line2.trimEnd(),
+            noradId: parseNoradId(line1)
+        });
         i++;
     }
     return satellites;
@@ -91,6 +121,7 @@ async function fetchLocalApi(): Promise<ParsedSatellite[] | null> {
                     name: s.name,
                     line1: s.line1,
                     line2: s.line2,
+                    noradId: parseNoradId(s.line1),
                     objectType: s.objectType,
                     category: s.category
                 })
@@ -100,6 +131,14 @@ async function fetchLocalApi(): Promise<ParsedSatellite[] | null> {
     } catch {
         return null;
     }
+}
+
+// The bundled fallback catalog rides in via Vite's `?raw` loader. It stays a
+// dynamic import: bun's test runner can't rewrite the `?raw`/alias module id,
+// and loadCatalog only runs in the browser anyway.
+async function loadSampleTles(): Promise<string> {
+    const mod = await import('$lib/satellites/data/sample-tles.txt?raw');
+    return (mod.default ?? '') as string;
 }
 
 export async function loadCatalog(): Promise<CatalogResult> {
@@ -139,7 +178,7 @@ export async function loadCatalog(): Promise<CatalogResult> {
     }
 
     // 3. Fall back to bundled sample (synthetic, zero-drag — exempt from aging).
-    const sample = parseTleText(sampleTles);
+    const sample = parseTleText(await loadSampleTles());
     if (sample.length === 0) {
         return { satellites: [], source: 'error', error: 'No satellite data available.' };
     }

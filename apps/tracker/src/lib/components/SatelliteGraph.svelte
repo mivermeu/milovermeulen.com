@@ -3,113 +3,23 @@
     import { untrack } from 'svelte';
     import { trackerState } from '$lib/state.svelte';
     import { categorize } from '$lib/tree';
-    import { orbitalPeriodSeconds, trueAnomalyFromMean, type OrbitalElements } from '$lib/orbit';
+    import { orbitalPeriodSeconds, trueAnomalyFromMean } from '$lib/orbit';
     import { blendInto, propagation } from '$lib/propagation';
+    import { epochAction, renderBlend } from '$lib/simclock';
+    import { renderEpochMs } from '$lib/state.svelte';
     import Panel from './Panel.svelte';
     import OrbitModelModal from './OrbitModelModal.svelte';
-
-    type BaseParam = keyof OrbitalElements | 'u';
-    type DerivedParam = 'perigee' | 'apogee' | 'period' | 'nu';
-    type Param = BaseParam | DerivedParam;
-
-    const EARTH_RADIUS_KM = 6371;
-    // Log axes clamp to this floor so altitude ~0 (or negative, for decaying
-    // orbits) doesn't blow up log10; it never affects `a` or period.
-    const LOG_FLOOR = 1;
-    const LOG_PARAMS = new Set<Param>(['a', 'period', 'perigee', 'apogee']);
-
-    // The six fundamental Keplerian elements. `short` is the symbol, `label` the
-    // precise axis name, and `desc` a plain-language explanation for the tooltip.
-    const FUNDAMENTAL: { key: Param; label: string; short: string; desc: string }[] = [
-        {
-            key: 'a',
-            label: 'Semi-major axis (km)',
-            short: 'a',
-            desc: "The orbit's size — roughly its average distance from Earth's centre."
-        },
-        {
-            key: 'e',
-            label: 'Eccentricity',
-            short: 'e',
-            desc: "The orbit's shape: 0 is a perfect circle, higher values are more stretched."
-        },
-        {
-            key: 'i',
-            label: 'Inclination (°)',
-            short: 'i',
-            desc: 'How far the orbit is tilted from the equator (0° means it never leaves it).'
-        },
-        {
-            key: 'raan',
-            label: 'RAAN (°)',
-            short: 'Ω',
-            desc: 'Where the orbit crosses the equator heading north.'
-        },
-        {
-            key: 'argp',
-            label: 'Arg. of periapsis (°)',
-            short: 'ω',
-            desc: "Where the orbit's closest point to Earth sits within the orbit."
-        },
-        {
-            key: 'm',
-            label: 'Mean anomaly (°)',
-            short: 'M',
-            desc: 'Where the satellite is along its orbit, measured from that closest point.'
-        }
-    ];
-
-    // Derived quantities, shown after a separator in the pickers. All are pure
-    // functions of the live element set, so they work in every mode.
-    const DERIVED: { key: Param; label: string; short: string; desc: string }[] = [
-        {
-            key: 'u',
-            label: 'Anomaly past asc. node (°)',
-            short: 'u',
-            desc: 'The angle from the equator crossing to the satellite; it advances as the satellite moves.'
-        },
-        {
-            key: 'perigee',
-            label: 'Perigee altitude (km)',
-            short: 'peri',
-            desc: 'How low the orbit gets — its closest approach to the surface.'
-        },
-        {
-            key: 'apogee',
-            label: 'Apogee altitude (km)',
-            short: 'apo',
-            desc: 'How high the orbit gets — its farthest point from the surface.'
-        },
-        {
-            key: 'period',
-            label: 'Orbital period (min)',
-            short: 'T',
-            desc: 'How long one full orbit takes.'
-        },
-        {
-            key: 'nu',
-            label: 'True anomaly (°)',
-            short: 'ν',
-            desc: "The satellite's actual angle from perigee — its real position along the orbit."
-        }
-    ];
-    const ALL_PARAMS = [...FUNDAMENTAL, ...DERIVED];
-
-    function meta(key: Param) {
-        return ALL_PARAMS.find((p) => p.key === key) ?? ALL_PARAMS[0];
-    }
-
-    // Natural bounds for parameters that have them; axes are clamped to these so
-    // e.g. Ω / ω / M / u never show a tick past 360°.
-    const LIMITS: Partial<Record<Param, [number, number]>> = {
-        e: [0, 1],
-        i: [0, 180],
-        raan: [0, 360],
-        argp: [0, 360],
-        m: [0, 360],
-        u: [0, 360],
-        nu: [0, 360]
-    };
+    import {
+        EARTH_RADIUS_KM,
+        FUNDAMENTAL,
+        DERIVED,
+        paramMeta,
+        LIMITS,
+        LOG_FLOOR,
+        LOG_PARAMS,
+        type ParamKey,
+        type BaseParamKey
+    } from '$lib/graph-params';
 
     const CATEGORY_COLORS: Record<string, number> = {
         communications: 0x818cf8,
@@ -143,8 +53,10 @@
         color: THREE.Color;
     }
 
-    let xKey = $state<Param>('perigee');
-    let yKey = $state<Param>('apogee');
+    // The graph axis keys live in trackerState (not component-local state) so
+    // URL deep links (`gx`/`gy`) can seed and mirror them.
+    let xKey = $derived(trackerState.graphXKey);
+    let yKey = $derived(trackerState.graphYKey);
 
     // Starts minimized; the + button in the corner expands it.
     let collapsed = $state(true);
@@ -186,7 +98,17 @@
     let yRange = $state<[number, number]>([0, 1]);
     let xLog = $state(false);
     let yLog = $state(false);
-    let hover = $state<{ x: number; y: number; name: string } | null>(null);
+    // Tooltip tracking the highlighted point: `uIndex` is the sample's position
+    // in the filtered samples list so frame() can re-derive x/y values as the
+    // blend glides — otherwise the tooltip drifts from the ring during playback.
+    let hover = $state<{
+        x: number;
+        y: number;
+        uIndex: number;
+        name: string;
+        xVal: number;
+        yVal: number;
+    } | null>(null);
 
     let renderer: THREE.WebGLRenderer | undefined;
     let scene: THREE.Scene | undefined;
@@ -205,12 +127,27 @@
     let elPrevEpoch = 0;
     let elNextEpoch = 0;
     let catalogGen = 0;
+    /**
+     * Data regime of the held-forward snapshot (`message.revision`). -1 forces
+     * the first snapshot to snap; older revisions are stale and dropped; newer
+     * ones (catalog init / element-mode switch, even while paused) snap so the
+     * fresh regime takes effect instead of blending across the switch.
+     */
+    let regimeRevision = -1;
 
-    const xLabel = $derived(meta(xKey).label);
-    const yLabel = $derived(meta(yKey).label);
+    const xLabel = $derived(paramMeta(xKey).label);
+    const yLabel = $derived(paramMeta(yKey).label);
 
     // Where each parameter sits inside the worker's 7-element-per-satellite block.
-    const EL_INDEX: Record<BaseParam, number> = { a: 0, e: 1, i: 2, raan: 3, argp: 4, m: 5, u: 6 };
+    const EL_INDEX: Record<BaseParamKey, number> = {
+        a: 0,
+        e: 1,
+        i: 2,
+        raan: 3,
+        argp: 4,
+        m: 5,
+        u: 6
+    };
 
     // Static per-satellite data; recomputed only when the catalog/filter changes.
     const samples = $derived.by(() => {
@@ -240,11 +177,11 @@
     // frame (from the RAF blend) rather than per snapshot.
     const samplesByIndex = $derived.by(() => new Map(samples.map((s) => [s.index, s])));
 
-    function baseValue(els: Float32Array, s: Sample, key: BaseParam): number {
+    function baseValue(els: Float32Array, s: Sample, key: BaseParamKey): number {
         return els[s.uIndex * 7 + EL_INDEX[key]] ?? 0;
     }
 
-    function paramValueAt(els: Float32Array, s: Sample, key: Param): number {
+    function paramValueAt(els: Float32Array, s: Sample, key: ParamKey): number {
         switch (key) {
             case 'perigee':
                 return baseValue(els, s, 'a') * (1 - baseValue(els, s, 'e')) - EARTH_RADIUS_KM;
@@ -259,7 +196,7 @@
         }
     }
 
-    function paramValue(s: Sample, key: Param): number {
+    function paramValue(s: Sample, key: ParamKey): number {
         return paramValueAt(elCurrent, s, key);
     }
 
@@ -296,6 +233,19 @@
     // White ring around the focused satellite's point, refreshed per frame.
     let highlightPoint = $state<{ x: number; y: number } | null>(null);
 
+    function highlightValues(s: Sample): { xVal: number; yVal: number } {
+        return { xVal: paramValue(s, xKey), yVal: paramValue(s, yKey) };
+    }
+
+    // Per-frame tooltip refresh, paired with updateHighlight() so the text and
+    // the white ring always show the same instantaneous blend values.
+    function updateHoverValues(): void {
+        if (!hover) return;
+        const sample = samples[hover.uIndex];
+        if (!sample || elCurrent.length === 0) return;
+        ({ xVal: hover.xVal, yVal: hover.yVal } = highlightValues(sample));
+    }
+
     function updateHighlight(): void {
         if (focusIndex < 0 || plot.w === 0) {
             highlightPoint = null;
@@ -318,7 +268,7 @@
         };
     }
 
-    function format(key: Param, value: number): string {
+    function format(key: ParamKey, value: number): string {
         if (key === 'e') return value.toFixed(3);
         if (key === 'a' || key === 'perigee' || key === 'apogee')
             return Math.round(value).toLocaleString();
@@ -366,7 +316,7 @@
     // Scan both endpoints of the current blend so points stay inside the axis
     // while they glide between snapshots.
     function scanRange(
-        key: Param,
+        key: ParamKey,
         isLog: boolean,
         limit: [number, number] | undefined
     ): [number, number] {
@@ -412,6 +362,7 @@
         const n = Math.min(samples.length, MAX_POINTS);
         if (n === 0 || elCurrent.length === 0) {
             geometry.setDrawRange(0, 0);
+            updateHoverValues();
             updateHighlight();
             renderer.render(scene, camera);
             return;
@@ -439,6 +390,7 @@
         // Keep pick raycasts honest: invalidate the cached bounding sphere (it
         // is recomputed lazily from the live buffer on the next pick).
         geometry.boundingSphere = null;
+        updateHoverValues();
         updateHighlight();
         renderer.render(scene, camera);
     }
@@ -483,7 +435,9 @@
         hover = {
             x: event.clientX - rect.left,
             y: event.clientY - rect.top,
-            name: trackerState.satellites[sample.index]?.name ?? ''
+            uIndex: index,
+            name: trackerState.satellites[sample.index]?.name ?? '',
+            ...highlightValues(sample)
         };
     }
 
@@ -550,10 +504,13 @@
     function frame(): void {
         rafId = requestAnimationFrame(frame);
         if (elCurrent.length === 0) return;
-        const span = elNextEpoch - elPrevEpoch;
-        let blend = span > 0 ? (Date.now() - elPrevEpoch) / span : 1;
-        if (blend < 0) blend = 0;
-        else if (blend > 1) blend = 1;
+        // Blend against the shared simulated clock — the exact same epoch the
+        // globe renders from, so the two views always show the same instant.
+        // renderEpochMs interpolates between clock ticks at frame rate, and
+        // the factor keeps growing past the newest snapshot (dead reckoning,
+        // capped via renderBlend), matching the globe's behavior at 600×.
+        const simEpoch = renderEpochMs();
+        const blend = renderBlend(elPrevEpoch, elNextEpoch, simEpoch);
         blendInto(elPrev, elNext, elCurrent, blend, 7, [3, 4, 5, 6]);
         updatePoints();
     }
@@ -624,9 +581,43 @@
                 elNext = message.elements;
                 elNextEpoch = message.epoch;
                 elCurrent = new Float32Array(message.elements);
+                regimeRevision = message.revision ?? -1;
                 layout();
                 return;
             }
+            // Data-regime versioning: a newer revision (catalog init or
+            // element-mode switch — even while paused) means fresh data must
+            // replace the pair; an older one is a stale in-flight response.
+            // Same-revision backwards epochs are also stale (a watchdog refire
+            // overtaking a slow original, on a FIFO worker) and drop —
+            // deliberate backwards jumps always ride a revision bump.
+            const messageRevision = message.revision ?? -1;
+            if (messageRevision < regimeRevision) return;
+            if (messageRevision === regimeRevision && message.epoch < elNextEpoch) return;
+            // Continuity guard shared with the globe: routine simulated-time
+            // advances blend; discontinuous epochs snap; same-epoch
+            // snapshots (paused clock) drop — repeated stamps have span ≈ 0 and
+            // the render stays static.
+            const action =
+                messageRevision > regimeRevision ||
+                epochAction(
+                    elNextEpoch,
+                    message.epoch,
+                    propagation.cadenceMs * trackerState.simSpeed
+                ) === 'snap'
+                    ? 'snap'
+                    : 'blend';
+            regimeRevision = messageRevision;
+            if (action === 'snap') {
+                elPrev = message.elements;
+                elPrevEpoch = message.epoch;
+                elNext = message.elements;
+                elNextEpoch = message.epoch;
+                elCurrent = new Float32Array(message.elements);
+                layout();
+                return;
+            }
+            if (message.epoch === elNextEpoch) return; // same epoch → same data
             elPrev = elNext;
             elPrevEpoch = elNextEpoch;
             elNext = message.elements;
@@ -665,18 +656,18 @@
     });
 </script>
 
-{#snippet infoTip(key: Param)}
+{#snippet infoTip(key: ParamKey)}
     <span class="group relative inline-flex">
         <button
             type="button"
-            aria-label={`About ${meta(key).label}`}
+            aria-label={`About ${paramMeta(key).label}`}
             class="flex h-5 w-5 items-center justify-center rounded-full border border-brand-text/30 p-0 text-[9px] font-semibold text-brand-text/60 hover:border-brand-text/60 hover:bg-transparent hover:text-brand-text"
             >i</button
         >
         <span
             role="tooltip"
             class="pointer-events-none absolute top-5 right-0 z-40 hidden w-52 rounded border border-brand-secondary bg-brand-bg/95 p-2 text-[10px] leading-snug text-brand-text shadow-lg group-focus-within:block group-hover:block"
-            >{meta(key).desc}</span
+            >{paramMeta(key).desc}</span
         >
     </span>
 {/snippet}
@@ -727,7 +718,7 @@
                     class="flex shrink-0 flex-wrap items-center gap-1 pb-2 text-[10px] text-brand-text"
                 >
                     <select
-                        bind:value={xKey}
+                        bind:value={trackerState.graphXKey}
                         aria-label="X axis parameter"
                         class="rounded border border-brand-secondary bg-brand-bg px-1 py-0.5"
                     >
@@ -742,7 +733,7 @@
                     {@render infoTip(xKey)}
                     <span class="text-brand-text/50">×</span>
                     <select
-                        bind:value={yKey}
+                        bind:value={trackerState.graphYKey}
                         aria-label="Y axis parameter"
                         class="rounded border border-brand-secondary bg-brand-bg px-1 py-0.5"
                     >
@@ -858,7 +849,14 @@
                             style:left="{hover.x + 10}px"
                             style:top="{hover.y + 10}px"
                         >
-                            {hover.name}
+                            <div class="font-medium text-brand-text-highlight">{hover.name}</div>
+                            <div class="text-brand-text/80">
+                                {#if Number.isFinite(hover.xVal)}
+                                    {paramMeta(xKey).short} {format(xKey, hover.xVal)}{:else}—{/if}
+                                <span class="text-brand-text/50">×</span>
+                                {#if Number.isFinite(hover.yVal)}
+                                    {paramMeta(yKey).short} {format(yKey, hover.yVal)}{:else}—{/if}
+                            </div>
                         </div>
                     {/if}
                 </div>
