@@ -1176,14 +1176,21 @@ export class GlobeScene {
         let ay = this.positionArray[this.highlightIndex * 3 + 1];
         const az = this.positionArray[this.highlightIndex * 3 + 2];
         if (!Number.isFinite(ax + ay + az)) return;
+        // In ECI mode the highlight mesh rotates by the chain's own bake-vs-
+        // render GMST delta, so the anchor's ECF world position is rotated by
+        // the inverse delta into the chain's baked frame before splicing. In
+        // ECF mode the chain vertices are plain ECF — no rotation, or the
+        // spliced head drifts off the dot as simulated time advances.
         const gmstNow = gstime(new Date(renderEpochMs()));
-        const delta = chain.bakeGmst - gmstNow;
-        if (delta !== 0) {
-            const c = Math.cos(delta);
-            const s = Math.sin(delta);
-            const rx = c * ax + s * ay;
-            ay = -s * ax + c * ay;
-            ax = rx;
+        if (trackerState.referenceFrame === 'eci') {
+            const delta = chain.bakeGmst - gmstNow;
+            if (delta !== 0) {
+                const c = Math.cos(delta);
+                const s = Math.sin(delta);
+                const rx = c * ax + s * ay;
+                ay = -s * ax + c * ay;
+                ax = rx;
+            }
         }
         writeWindowEdges(
             chain.positions,
