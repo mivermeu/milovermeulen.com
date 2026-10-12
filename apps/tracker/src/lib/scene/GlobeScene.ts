@@ -9,6 +9,7 @@ import { trackerState } from '$lib/state.svelte';
 import type { ParsedSatellite } from '$lib/satellites/types';
 import { propagation, blendInto, type WorkerResponse } from '$lib/propagation';
 import { eciDirectionToEcf, sunEciDirection, type Vec3 } from '$lib/sun';
+import { epochAction } from '$lib/simclock';
 
 const EARTH_RADIUS_KM = 6371;
 export const GLOBE_RADIUS = 6.4;
@@ -16,6 +17,11 @@ export const SCALE = GLOBE_RADIUS / EARTH_RADIUS_KM;
 
 const DEG2RAD = Math.PI / 180;
 const ORBIT_REBUILD_INTERVAL_MS = 5000;
+// While paused, scene geometry is static unless the clock is scrubbed; only
+// re-ask the worker when the simulated epoch drifted well away from the last
+// orbit build — throttled so dragging the slider doesn't queue a storm.
+const ORBIT_PAUSE_DRIFT_MS = 60_000;
+const ORBIT_PAUSE_REBUILD_MS = 1000;
 const POINTER_THROTTLE_MS = 66;
 // The sun's apparent motion is ~15°/hour; an ephemeris refresh every minute
 // keeps the terminator well under a degree of drift at a per-frame cost of
@@ -96,6 +102,14 @@ export class GlobeScene {
     private nextPositions: Float32Array | null = null;
     private prevEpoch = 0;
     private nextEpoch = 0;
+    private orbitRequestEpoch = 0;
+    /**
+     * Data regime of the held-forward snapshot (`message.revision`). -1 forces
+     * the very first snapshot to snap; an older revision incoming is stale and
+     * dropped; a newer one (catalog init / element-mode switch, even while
+     * paused) snaps so the fresh regime takes effect immediately.
+     */
+    private snapshotRevision = -1;
     private catalogGeneration = 0;
     private raf = 0;
     private disposed = false;
@@ -310,8 +324,8 @@ export class GlobeScene {
         this.scene.add(this.groundTrackMesh);
 
         // Prime the sun state so frame 0 already has the terminator and the
-        // night overlay oriented correctly.
-        this.updateSun(gstime(new Date()));
+        // night overlay oriented correctly to the (real-time default) clock.
+        this.updateSun(gstime(new Date(trackerState.simEpochMs)));
 
         this.canvas = canvas;
         this.onPointerMove = (event: PointerEvent) => this.handlePointerMove(event);
@@ -399,8 +413,13 @@ export class GlobeScene {
      * recompute cadence bounds the ring's own drift to ~0.25°.
      */
     private updateSun(gmst: number): void {
-        const nowMs = Date.now();
-        if (nowMs - this.lastSunComputeMs >= SUN_RECOMPUTE_INTERVAL_MS) {
+        // The sun's position follows the shared simulated clock, not the wall:
+        // at real time the two are identical (real-time pins the epoch), but a
+        // scrubbed clock must carry the day/night lighting with it. The
+        // absolute difference keeps a reverse scrub from leaving the ring stale
+        // until the clock begs forward past another interval.
+        const nowMs = trackerState.simEpochMs;
+        if (Math.abs(nowMs - this.lastSunComputeMs) >= SUN_RECOMPUTE_INTERVAL_MS) {
             this.sunEci = sunEciDirection(nowMs);
             this.updateTerminatorGeometry(eciDirectionToEcf(this.sunEci, gmst));
             this.lastSunComputeMs = nowMs;
@@ -497,22 +516,37 @@ export class GlobeScene {
         // Drop snapshots from before the current catalog's init (stale race).
         if (message.generation !== this.catalogGeneration) return;
         const positions = message.positions;
-        const epoch = message.epoch ?? Date.now();
+        const epoch = message.epoch ?? trackerState.simEpochMs;
         if (!positions) return;
         // Eclipse colors describe "now", not the snapshot's epoch — applying
         // them before the stale-snapshot drop means a crossed eclipse boundary
         // is never lost to a duplicate/out-of-order positions message.
         this.applySunlitColors(message.colors);
-        if (epoch <= this.nextEpoch && this.nextPositions) return;
+        // Data-regime versioning: a newer revision (catalog init or
+        // element-mode switch — even while paused) snaps in replacement data;
+        // an older one is stale and dropped.
+        const revision = message.revision ?? -1;
+        if (revision < this.snapshotRevision) return;
+        if (
+            revision > this.snapshotRevision ||
+            epochAction(this.nextEpoch, epoch, propagation.cadenceMs * trackerState.simSpeed) ===
+                'snap'
+        ) {
+            // Discontinuous simulated epoch (scrub jump/reverse) or a fresh
+            // regime — replace the pair outright instead of blending across it.
+            this.snapshotRevision = revision;
+            this.prevPositions = positions;
+            this.prevEpoch = epoch;
+            this.nextPositions = positions;
+            this.nextEpoch = epoch;
+            this.points.visible = true;
+            return;
+        }
+        if (epoch === this.nextEpoch) return; // same epoch → same data (paused clock)
         this.prevPositions = this.nextPositions;
         this.prevEpoch = this.nextEpoch;
         this.nextPositions = positions;
         this.nextEpoch = epoch;
-        if (!this.prevPositions) {
-            this.prevPositions = new Float32Array(positions.length);
-            this.prevPositions.set(positions);
-            this.prevEpoch = epoch;
-        }
         this.points.visible = true;
     }
 
@@ -531,7 +565,10 @@ export class GlobeScene {
         if (!positions || positions.length === 0) return;
         this.orbitPositions = positions;
         this.orbitRanges = message.ranges ?? [];
-        this.orbitBuildGmst = gstime(new Date());
+        // GMST of the epoch the orbits were built for (simulated time), not of
+        // wall-clock now — otherwise the mesh would drift out of alignment with
+        // the simulated clock.
+        this.orbitBuildGmst = gstime(new Date(this.orbitRequestEpoch));
         this.orbitsReady = true;
         this.applyOrbitGeometry();
         if (this.highlightIndex >= 0) this.showHighlight(this.highlightIndex);
@@ -880,8 +917,11 @@ export class GlobeScene {
     private requestOrbits(): void {
         this.lastOrbitBuildWall = performance.now();
         this.orbitRequestSeq++;
+        // Orbits anchor at the shared simulated epoch, matching the propagated
+        // dots — globe and graph never sample different times.
+        this.orbitRequestEpoch = Math.round(trackerState.simEpochMs);
         propagation.buildOrbits(
-            Math.round(Date.now()),
+            this.orbitRequestEpoch,
             this.orbitRequestSeq,
             trackerState.referenceFrame
         );
@@ -895,7 +935,13 @@ export class GlobeScene {
         if (
             (this.showOrbits || this.highlightIndex >= 0) &&
             this.ready &&
-            now - this.lastOrbitBuildWall >= ORBIT_REBUILD_INTERVAL_MS
+            // A paused clock renders a static scene; rebuild only when a scrub
+            // moved the simulated epoch away from the last build's anchor.
+            (trackerState.simPlaying ||
+                Math.abs(trackerState.simEpochMs - this.orbitRequestEpoch) >
+                    ORBIT_PAUSE_DRIFT_MS) &&
+            now - this.lastOrbitBuildWall >=
+                (trackerState.simPlaying ? ORBIT_REBUILD_INTERVAL_MS : ORBIT_PAUSE_REBUILD_MS)
         ) {
             this.requestOrbits();
         }
@@ -931,7 +977,10 @@ export class GlobeScene {
             this.callbacks.onHover?.(this.highlightIndex, sat?.name ?? null, sx, sy);
         }
 
-        const gmst = gstime(new Date());
+        // The ECF/ECI frame delta rotates with the shared simulated clock, so
+        // the orbit mesh keeps step with the propagated dots under scrubbing
+        // (and the terminator/sun dimming follow the same clock).
+        const gmst = gstime(new Date(trackerState.simEpochMs));
         this.updateSun(gmst);
         const eci = trackerState.referenceFrame === 'eci';
         const orbitDelta = eci ? this.orbitBuildGmst - gmst : 0;
@@ -949,7 +998,9 @@ export class GlobeScene {
     private updatePositions(): void {
         if (!this.nextPositions || !this.prevPositions) return;
         const span = this.nextEpoch - this.prevEpoch;
-        let blend = span > 0 ? (Date.now() - this.prevEpoch) / span : 1;
+        // Blend against the shared simulated clock — never a per-view wall time.
+        const simEpoch = trackerState.simEpochMs;
+        let blend = span > 0 ? (simEpoch - this.prevEpoch) / span : 1;
         if (blend < 0) blend = 0;
         if (blend > 1) blend = 1;
         blendInto(this.prevPositions, this.nextPositions, this.positionArray, blend, 3, []);

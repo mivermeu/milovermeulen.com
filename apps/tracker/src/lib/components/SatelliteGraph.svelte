@@ -5,6 +5,7 @@
     import { categorize } from '$lib/tree';
     import { orbitalPeriodSeconds, trueAnomalyFromMean } from '$lib/orbit';
     import { blendInto, propagation } from '$lib/propagation';
+    import { epochAction } from '$lib/simclock';
     import Panel from './Panel.svelte';
     import OrbitModelModal from './OrbitModelModal.svelte';
     import {
@@ -125,6 +126,13 @@
     let elPrevEpoch = 0;
     let elNextEpoch = 0;
     let catalogGen = 0;
+    /**
+     * Data regime of the held-forward snapshot (`message.revision`). -1 forces
+     * the first snapshot to snap; older revisions are stale and dropped; newer
+     * ones (catalog init / element-mode switch, even while paused) snap so the
+     * fresh regime takes effect instead of blending across the switch.
+     */
+    let regimeRevision = -1;
 
     const xLabel = $derived(paramMeta(xKey).label);
     const yLabel = $derived(paramMeta(yKey).label);
@@ -496,7 +504,10 @@
         rafId = requestAnimationFrame(frame);
         if (elCurrent.length === 0) return;
         const span = elNextEpoch - elPrevEpoch;
-        let blend = span > 0 ? (Date.now() - elPrevEpoch) / span : 1;
+        // Blend against the shared simulated clock — the exact same epoch the
+        // globe renders from, so the two views always show the same instant.
+        const simEpoch = trackerState.simEpochMs;
+        let blend = span > 0 ? (simEpoch - elPrevEpoch) / span : 1;
         if (blend < 0) blend = 0;
         else if (blend > 1) blend = 1;
         blendInto(elPrev, elNext, elCurrent, blend, 7, [3, 4, 5, 6]);
@@ -569,9 +580,39 @@
                 elNext = message.elements;
                 elNextEpoch = message.epoch;
                 elCurrent = new Float32Array(message.elements);
+                regimeRevision = message.revision ?? -1;
                 layout();
                 return;
             }
+            // Data-regime versioning: a newer revision (catalog init or
+            // element-mode switch — even while paused) means fresh data must
+            // replace the pair; an older one is a stale in-flight response.
+            const messageRevision = message.revision ?? -1;
+            if (messageRevision < regimeRevision) return;
+            // Continuity guard shared with the globe: routine simulated-time
+            // advances blend; backwards/scrub-jumped epochs snap; same-epoch
+            // snapshots (paused clock) drop — repeated stamps have span ≈ 0 and
+            // the render stays static.
+            const action =
+                messageRevision > regimeRevision ||
+                epochAction(
+                    elNextEpoch,
+                    message.epoch,
+                    propagation.cadenceMs * trackerState.simSpeed
+                ) === 'snap'
+                    ? 'snap'
+                    : 'blend';
+            regimeRevision = messageRevision;
+            if (action === 'snap') {
+                elPrev = message.elements;
+                elPrevEpoch = message.epoch;
+                elNext = message.elements;
+                elNextEpoch = message.epoch;
+                elCurrent = new Float32Array(message.elements);
+                layout();
+                return;
+            }
+            if (message.epoch === elNextEpoch) return; // same epoch → same data
             elPrev = elNext;
             elPrevEpoch = elNextEpoch;
             elNext = message.elements;

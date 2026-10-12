@@ -12,6 +12,13 @@ import {
     activateLeafNode
 } from '$lib/tree';
 import type { ParamKey } from '$lib/graph-params';
+import {
+    type SimSpeed,
+    clampSimEpoch,
+    DEFAULT_SIM_SPEED,
+    REALTIME_SNAP_MS,
+    stepSimClock
+} from '$lib/simclock';
 
 export type { TreeNode, TriState } from '$lib/tree';
 
@@ -51,6 +58,22 @@ export const trackerState = $state({
     referenceFrame: INITIAL_URL_PARAMS.frame as 'ecf' | 'eci',
     // Which orbital-element set the graph plots and the explorer draws.
     elementMode: INITIAL_URL_PARAMS.mode as 'epoch' | 'smoothed' | 'instantaneous',
+    // The shared simulated clock: one epoch drives the globe, the graph, and
+    // the info panel — no view keeps its own time. Defaults are exactly
+    // real-time (epoch = now, playing, 1×), so today's behavior is unchanged
+    // until a control is touched. `simScrubSeq` counts user clock jumps (scrub
+    // slider, NOW) so propagation can snap views onto post-jump snapshots.
+    simEpochMs: Date.now(),
+    simPlaying: true,
+    simSpeed: DEFAULT_SIM_SPEED,
+    // True while the epoch is pinned to the wall clock (offset 0, 1×, playing)
+    // — the default and the state the Now button re-engages. Making this a
+    // mode rather than an offset arithmetic result is what keeps the UI from
+    // flickering: a tick-quantized epoch compared against a coarse wall-clock
+    // sample never sits at offset exactly 0, so a derived "atNow" would flip
+    // every few hundred milliseconds.
+    simRealtime: true,
+    simScrubSeq: 0,
     hovered: null as HoverInfo | null,
     // Satellite under the pointer in either view (globe or graph), or -1.
     hoveredIndex: -1,
@@ -112,7 +135,102 @@ export function pinSatellite(index: number): boolean {
     return true;
 }
 
+/** Reset to exactly real time: offset 0, playing, 1×. */
+export function resetSimClock(): void {
+    trackerState.simEpochMs = Date.now();
+    trackerState.simRealtime = true;
+    trackerState.simPlaying = true;
+    trackerState.simSpeed = DEFAULT_SIM_SPEED;
+    // NOW is a clock jump too — the propagation service promotes it to a
+    // regime-revision bump so views snap instead of blending across it.
+    trackerState.simScrubSeq++;
+}
+
+/**
+ * Pause freezes the epoch where it is. Paused-at-now is still simulated time
+ * (the live feed marches on without you), so this leaves real-time mode —
+ * the offset starts growing relative to the wall clock.
+ */
+export function pauseSimClock(): void {
+    trackerState.simRealtime = false;
+    trackerState.simPlaying = false;
+}
+
+/**
+ * Resume from the frozen epoch — unless the freeze happened so close to now
+ * (within `REALTIME_SNAP_MS`) that a pause/play round-trip shouldn't cost the
+ * live feed; then re-join real time.
+ */
+export function resumeSimClock(): void {
+    const drift = Date.now() - trackerState.simEpochMs;
+    if (drift >= 0 && drift <= REALTIME_SNAP_MS) {
+        trackerState.simEpochMs = Date.now();
+        trackerState.simRealtime = true;
+    } else {
+        trackerState.simRealtime = false;
+    }
+    trackerState.simScrubSeq++;
+    trackerState.simPlaying = true;
+}
+
+/** Set the sim speed. An unchanged 1× selection is a no-op so hovering the
+ * speed row can't silently kick a live clock out of real-time mode. */
+export function setSimSpeed(speed: SimSpeed): void {
+    if (trackerState.simSpeed === speed) return;
+    trackerState.simRealtime = false;
+    trackerState.simSpeed = speed;
+}
+
+/**
+ * Jump the clock via the scrub slider. `offsetMs` is the desired offset from
+ * real time, clamped to the ±30 day scrub window; offsets within the
+ * realtime snap of zero re-engage the live feed instead of parking the clock
+ * a fraction of a second off. A user scrub is an explicit regime change:
+ * `simScrubSeq` tells the propagation service to revision-bump the next
+ * stamped snapshot so the views snap onto it (magnitude heuristics stay as
+ * backstop for gaps no user action explains).
+ */
+export function setSimOffsetMs(offsetMs: number): void {
+    if (!Number.isFinite(offsetMs)) return;
+    const now = Date.now();
+    // Real-time implies playing (the tick pins the epoch to the wall clock
+    // only while running), so parked-clock scrubs never end in a "now" label
+    // over frozen data.
+    if (Math.abs(offsetMs) <= REALTIME_SNAP_MS && trackerState.simPlaying) {
+        trackerState.simEpochMs = now;
+        trackerState.simRealtime = true;
+    } else {
+        trackerState.simEpochMs = clampSimEpoch(now + offsetMs, now);
+        trackerState.simRealtime = false;
+    }
+    trackerState.simScrubSeq++;
+}
+
 if (browser) {
+    // The central simulated clock: a single interval advances the shared epoch
+    // by elapsed real time × speed while playing. Every view reads
+    // `simEpochMs` from here — stepping math lives in $lib/simclock. In
+    // real-time mode the epoch is pinned to the wall clock each tick instead
+    // of stepped, so the offset stays exactly 0 by construction.
+    const SIM_CLOCK_TICK_MS = 50;
+    let lastTickWall = Date.now();
+    setInterval(() => {
+        const now = Date.now();
+        const elapsedRealMs = now - lastTickWall;
+        lastTickWall = now;
+        if (!trackerState.simPlaying) return;
+        if (trackerState.simRealtime) {
+            trackerState.simEpochMs = now;
+            return;
+        }
+        trackerState.simEpochMs = stepSimClock(
+            trackerState.simEpochMs,
+            elapsedRealMs,
+            trackerState.simSpeed,
+            now
+        );
+    }, SIM_CLOCK_TICK_MS);
+
     loadCatalog().then(({ satellites, source, error, staleHidden }) => {
         trackerState.satellites = satellites;
         trackerState.dataSource = source;

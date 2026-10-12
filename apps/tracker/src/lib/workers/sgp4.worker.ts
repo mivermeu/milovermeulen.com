@@ -16,7 +16,13 @@ type InitMessage = {
     scale: number;
     mode: ElementMode;
 };
-type PropagateMessage = { type: 'propagate'; epoch: number; requestId: number };
+type PropagateMessage = {
+    type: 'propagate';
+    epoch: number;
+    requestId: number;
+    /** Echoed on the positions response so views can detect regime changes. */
+    revision?: number;
+};
 type BuildOrbitsMessage = {
     type: 'buildOrbits';
     epoch: number;
@@ -471,6 +477,7 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
                     epoch,
                     count,
                     generation: catalogVersion,
+                    revision: message.revision,
                     positions,
                     elements,
                     colors

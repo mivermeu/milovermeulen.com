@@ -32,7 +32,9 @@
     $effect(() => {
         let raf: number;
         const tick = () => {
-            now = Date.now();
+            // The info panel renders the pinned satellite at the shared
+            // simulated epoch — the same instant the globe and graph show.
+            now = trackerState.simEpochMs;
             raf = requestAnimationFrame(tick);
         };
         raf = requestAnimationFrame(tick);

@@ -23,7 +23,11 @@ panels.
   queries match labels
 - **Orbital element graph** — any pair of elements/derived values as a scatter plot with live hover
   coordinates
-- **Time controls** — pause, speed up to 60×, scrub ±30 days
+- **Global simulated clock** — one shared simulated time fans out to every view: pause/play, speed
+  stepper (1× / 10× / 60× / 600×), a **symmetric-log ±30-day scrub slider** (~0.2 s resolution at
+  the center for LEO-scale nudges; ±30 days still one sweep away), a simulated-UTC readout, and a
+  **NOW** reset that re-engages exact real time ("now" is a clock _mode_ pinned to the wall clock,
+  so the stay-live state never flickers between now/±0 s)
 - **ECF/ECI reference frame** toggle
 - **Orbital element explorer** — scatter the catalog over any pair of graph parameters
 - **Favorites** — star a satellite from its info panel; the watch list persists in localStorage
@@ -46,7 +50,22 @@ never a new history entry). Links stay clean: params equal to the defaults are o
 Example: `https://milovermeulen.com/tracker?sat=25544&frame=eci&gx=e&gy=period`
 
 Invalid values are ignored silently. URL params are applied on load (after the catalog and filter
-tree initialise) and win over localStorage; favorites are an independent convenience layer.
+tree initialise) and win over localStorage; favorites are an independent convenience layer. The
+shared simulated clock deliberately stays out of the URL: scrub/pause state is a session, not a
+destination.
+
+> **Note on simulated time:** SGP4 propagates from each satellite's published TLE elements, so
+> accuracy degrades as simulated time moves away from the TLE epochs — positions stay plausible, but
+> expect growing drift past ~2 days. The UI flags that band ("simulated · accuracy degrading"); the
+> ±30-day scrub window exists because simulation is approximate, not a prediction.
+
+The default state is exact real time (0 offset, playing, 1×) — the app behaves as a real-time
+tracker until a time control is touched. Real time is a first-class clock mode rather than an offset
+comparison: while live, the central tick pins the epoch to the wall clock and no count of scrubbing,
+pausing (a pause/play round-trip within half a second re-joins the live feed), or speed changing
+leaves half-measures. A snapshot whose simulated epoch jumps backwards or discontinuously (scrub
+jump, reverse) is snapped into place rather than blended so the globe and orbital-parameter graph
+cannot diverge; blend is reserved for routine simulated-time advances.
 
 ## Setup
 
@@ -137,8 +156,18 @@ src/
   geometry. The worker recomputes it per propagate tick for the cylindrical-shadow classification
   and ships a color buffer only when some satellite crosses an eclipse boundary.
 - **Night dimming** is a slightly oversized sphere with a small custom `ShaderMaterial` whose alpha
-  follows each fragment's normal·sunECF; the ECI sun vector is recomputed on a 60 s wall cadence and
-  rotated to ECF with the frame's GMST. `renderOrder = -1` keeps it under dots/orbit lines.
+  follows each fragment's normal·sunECF; the ECI sun vector follows the shared simulated clock
+  (recomputed on a 60 s simulated cadence and rotated to ECF with the clock's GMST), so a scrub
+  carries the day/night lighting with it. `renderOrder = -1` keeps it under dots/orbit lines.
+- **One shared simulated clock** (`trackerState.simEpochMs`, stepped in `state.svelte.ts`; the pure
+  stepping/continuity math lives in `lib/simclock.ts`). Propagation requests are stamped with the
+  simulated epoch plus a future-of-cadence lead in simulated time, and all views blend against the
+  same simulated epoch — so globe, graph, and info panel are always in lockstep.
+- **Continuity guard** (`epochAction` in `lib/simclock.ts`): snapshots whose simulated epoch is
+  future-of-cadence blend; backwards/discontinuous epochs (scrub jumps/reverses, hidden-tab gaps)
+  snap; equal epochs (paused clock) drop.
+- **Single draw call** for all satellite dots (radial gradient texture, vertex colors).
+- **Zoom-adaptive point size** — dots scale relative to the globe as you zoom in.
 - **Orbit ellipses** sampled over one full period in ECI (closed loops), rotated by delta GMST for
   ECF display.
 - **Ground track** is always ECF (each sample rotated by its own GMST, one period into the future at

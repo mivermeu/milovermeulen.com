@@ -1,4 +1,6 @@
 import type { ParsedSatellite } from '$lib/satellites/types';
+import { nextPropagateEpoch } from './simclock';
+import { trackerState } from './state.svelte';
 import type { ElementMode } from './orbit';
 
 export type { ElementMode };
@@ -10,6 +12,12 @@ export interface WorkerResponse {
     epoch?: number;
     /** Worker-side catalog version; bumped on every init so views can drop stale snapshots. */
     generation?: number;
+    /**
+     * Service-side data-regime version (bumped on init and element-mode switch),
+     * echoed from the propagate request; a view holding an older revision must
+     * snap to the new data instead of blending across the switch.
+     */
+    revision?: number;
     colors?: Float32Array;
     positions?: Float32Array;
     elements?: Float32Array;
@@ -68,11 +76,16 @@ class PropagationService {
     private worker: Worker | undefined;
     private readonly listeners = new Set<Listener>();
     private count = 0;
-    private cadenceMs = MIN_CADENCE_MS;
+    /** Current snapshot cadence (wall ms); feeds the simclock advance math at call sites. */
+    cadenceMs = MIN_CADENCE_MS;
     private timer: ReturnType<typeof setInterval> | undefined;
     private pending = false;
     private lastRequestWall = 0;
     private requestSeq = 0;
+    /** Regime counter (see $lib/simclock for why epoch deltas alone can't serve views). */
+    private revision = 0;
+    /** Last seen `simScrubSeq`; a user scrub is a regime change that must snap, not blend. */
+    private lastSeenScrubSeq = 0;
 
     private ensure(): Worker | undefined {
         if (typeof Worker === 'undefined') return undefined;
@@ -139,10 +152,18 @@ class PropagationService {
             this.lastRequestWall = now;
             this.pending = true;
             this.requestSeq++;
+            if (trackerState.simScrubSeq !== this.lastSeenScrubSeq) {
+                this.lastSeenScrubSeq = trackerState.simScrubSeq;
+                this.revision++;
+            }
             this.worker?.postMessage({
                 type: 'propagate',
-                epoch: Math.round(Date.now() + this.cadenceMs),
-                requestId: this.requestSeq
+                epoch: nextPropagateEpoch(
+                    trackerState.simEpochMs,
+                    this.cadenceMs * trackerState.simSpeed
+                ),
+                requestId: this.requestSeq,
+                revision: this.revision
             });
         }
     }
@@ -162,6 +183,7 @@ class PropagationService {
     }
 
     init(satellites: ParsedSatellite[], scale: number, mode: ElementMode): void {
+        this.revision++;
         this.ensure()?.postMessage({
             type: 'init',
             satellites: satellites.map(({ name, line1, line2 }) => ({ name, line1, line2 })),
@@ -172,6 +194,7 @@ class PropagationService {
 
     /** Switch which orbital-element set the worker emits. */
     setMode(mode: ElementMode): void {
+        this.revision++; // regime change: the next stamped response must snap
         this.ensure()?.postMessage({ type: 'mode', mode });
     }
 
