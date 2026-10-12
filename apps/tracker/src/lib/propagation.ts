@@ -22,7 +22,6 @@ export interface WorkerResponse {
     positions?: Float32Array;
     elements?: Float32Array;
     message?: string;
-    ranges?: number[];
     /** Per-track orbital period (ms) — ground tracks carry it for window sliding. */
     periodMs?: number;
     /** Orbit bakes: flat per-sat vertex time offsets (ms from the bake epoch). */
@@ -31,6 +30,12 @@ export interface WorkerResponse {
     periods?: number[];
     /** Orbit bakes: per-satellite chain vertex counts (aligned with vertexTimes). */
     vertexCounts?: number[];
+    /**
+     * Orbit bakes: flat SGP4-failure run layout, grouped per satellite as
+     * [nRuns, vertsRun1, vertsRun2, …]. A single run (nRuns === 1) means the
+     * chain is contiguous and safely slidable.
+     */
+    runs?: Int32Array;
 }
 
 /**

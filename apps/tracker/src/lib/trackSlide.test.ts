@@ -1,21 +1,22 @@
 import { describe, expect, it } from 'bun:test';
 import { firstVertexAtOrAfter, isContiguousPairs, slideUniformWindow } from './trackSlide';
 
-/** Build a flat pair-chain of a closed ring with `v` vertices on the unit circle. */
-function circleRing(vertices: number): Float32Array {
-    const sub = new Float32Array((vertices - 1) * 6);
-    const at = (i: number): [number, number, number] => [
-        Math.cos((i / vertices) * Math.PI * 2),
-        Math.sin((i / vertices) * Math.PI * 2),
-        0
-    ];
-    for (let j = 0; j < vertices - 1; j++) {
-        const [ax, ay, az] = at(j);
-        const [bx, by, bz] = at(j + 1);
-        sub.set([ax, ay, az, bx, by, bz], j * 6);
+describe('isContiguousPairs', () => {
+    const master = new Float32Array(8 * 6);
+    for (let k = 0; k < 8; k++) {
+        master.set([k, 0, 0, k + 1, 0, 0], k * 6);
     }
-    return sub;
-}
+
+    it('accepts a chain whose pairs share endpoints', () => {
+        expect(isContiguousPairs(master)).toBe(true);
+    });
+
+    it('rejects a chain with an SGP4-failure gap', () => {
+        const broken = new Float32Array(master);
+        broken[3 * 6] += 5; // displace pair 3's start
+        expect(isContiguousPairs(broken)).toBe(false);
+    });
+});
 
 describe('firstVertexAtOrAfter', () => {
     // Two-period chain: offsets double the [0, 60) grid over [0, 120).
@@ -39,19 +40,6 @@ describe('firstVertexAtOrAfter', () => {
         expect(firstVertexAtOrAfter(times, 0, times.length, 120)).toBe(-1);
         expect(firstVertexAtOrAfter(times, 0, 0, 0)).toBe(-1);
         expect(firstVertexAtOrAfter(times, 11, 4, 0)).toBe(-1); // slice out of bounds
-    });
-});
-
-describe('isContiguousPairs', () => {
-    it('accepts a chain whose pairs share endpoints', () => {
-        expect(isContiguousPairs(circleRing(8))).toBe(true);
-    });
-
-    it('rejects a chain with an SGP4-failure gap', () => {
-        const broken = circleRing(8);
-        // Displace pair 3's start so it no longer continues pair 2.
-        broken[3 * 6] += 5;
-        expect(isContiguousPairs(broken)).toBe(false);
     });
 });
 

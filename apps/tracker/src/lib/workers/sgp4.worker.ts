@@ -136,14 +136,19 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
     const total = satellites.length;
     const inertial = frame === 'eci';
     const chordLimit2 = (inertial ? MAX_CHORD_ECI : MAX_CHORD_ECF) ** 2;
-    const out: number[] = [];
-    const ranges: number[] = [];
+    // One flat vertex CHAIN per satellite (3 floats per vertex, two continuous
+    // ν periods, refined where chords get long) — no pair formatting: views
+    // regenerate edges per frame when they slide, and see runs (SGP4-failure
+    // breaks, rare) as explicit counts.
+    const allVerts: number[] = [];
     // Per-sat vertex time offsets (ms from the bake epoch) — flat, aligned with
     // `vertexCounts` — plus each satellite's period, so views can slide a
     // one-period window to the live dot position between rebuilds.
     const allTimes: number[] = [];
     const periods: number[] = [];
     const vertexCounts: number[] = [];
+    // Flat run layout, grouped per satellite: [nRuns, vertsRun1, vertsRun2, …].
+    const runs: number[] = [];
     const CHUNK = 100;
     const epochMs = epoch;
 
@@ -202,15 +207,14 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
 
     for (let i = 0; i < total; i++) {
         const rec = satellites[i].rec;
-        const rangeStart = out.length;
-        const satStartVertex = allTimes.length;
+        const satStartVertex = allVerts.length / 3;
         const ecc = rec.ecco;
         // Hyperbolic/parabolic elements (e.g. translunar coast TLEs) have no
         // closed period to sample — skip orbit drawing rather than garbage.
         if (!(ecc < 1)) {
-            ranges.push(rangeStart, rangeStart);
-            periods.push(0);
             vertexCounts.push(0);
+            periods.push(0);
+            runs.push(0);
             continue;
         }
         const count = Math.min(
@@ -219,9 +223,9 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
         );
         const meanMotionRadPerMs = rec.no / 60000;
         if (!(meanMotionRadPerMs > 0)) {
-            ranges.push(rangeStart, rangeStart);
-            periods.push(0);
             vertexCounts.push(0);
+            periods.push(0);
+            runs.push(0);
             continue;
         }
         const periodMs = TAU / meanMotionRadPerMs;
@@ -271,9 +275,9 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
                 }
             }
             if (first < 0) {
-                ranges.push(rangeStart, rangeStart);
-                periods.push(0);
                 vertexCounts.push(0);
+                periods.push(0);
+                runs.push(0);
                 continue;
             }
             if (inertial) {
@@ -293,9 +297,11 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
         // Emit per good run; split long chords at mid-times (SGP4 only —
         // a failed midpoint keeps the whole chord, never an invented point).
         // Vertex times ride along so views can slide a one-period window to
-        // the live dot position between rebuilds (see lib/trackSlide).
+        // the live dot position between rebuilds (see lib/trackSlide). Runs
+        // (SGP4-failure breaks) are emitted as explicit per-sat counts.
         let totalPts = 0;
         let runStart = 0;
+        const satRunLens: number[] = [];
         while (runStart < eArr.length) {
             while (runStart < eArr.length && !eArr[runStart]) runStart++;
             if (runStart >= eArr.length) break;
@@ -305,18 +311,16 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
             let rP: Vec3[] = [];
             for (let s = runStart; s <= runEnd; s++) rP.push(project(eArr[s] as Vec3, tArr[s]));
             [rT, rP] = refine(rec, rT, rP, MAX_PTS_PER_SAT - totalPts);
-            for (let j = 0; j + 1 < rP.length; j++) {
-                const a = rP[j];
-                const b = rP[j + 1];
-                out.push(a[0], a[1], a[2], b[0], b[1], b[2]);
-            }
+            for (const p of rP) allVerts.push(p[0], p[1], p[2]);
             for (const t of rT) allTimes.push(t - epochMs);
-            totalPts += rT.length;
+            satRunLens.push(rP.length);
+            totalPts += rP.length;
             runStart = runEnd + 1;
         }
-        ranges.push(rangeStart, out.length);
+        vertexCounts.push(allVerts.length / 3 - satStartVertex);
         periods.push(periodMs);
-        vertexCounts.push(allTimes.length - satStartVertex);
+        runs.push(satRunLens.length);
+        for (const len of satRunLens) runs.push(len);
 
         if ((i + 1) % CHUNK === 0) {
             if (buildId !== orbitBuildId) return;
@@ -325,7 +329,7 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
     }
 
     if (buildId !== orbitBuildId) return;
-    const positions = new Float32Array(out);
+    const positions = new Float32Array(allVerts);
     postMessage(
         {
             type: 'orbits',
@@ -335,10 +339,10 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
             // between dispatch and arrival that mismatch rewinds every window.
             epoch,
             positions,
-            ranges,
             vertexTimes: new Float32Array(allTimes),
             periods,
-            vertexCounts
+            vertexCounts,
+            runs: new Int32Array(runs)
         },
         [positions.buffer]
     );

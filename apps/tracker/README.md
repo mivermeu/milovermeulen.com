@@ -173,25 +173,30 @@ src/
 - **Dead reckoning** (`renderBlend`): past the newest snapshot the blend keeps gliding along the
   pair's own velocity (capped at half an interval), so worker-arrival jitter at high speeds holds no
   stuttering pauses.
-- **Tracks slide between rebuilds** (`lib/trackSlide.ts`): orbit chains bake **two** ν-continuous
-  periods per satellite with per-vertex time offsets and periods, and every drawn orbit's visible
-  window (one period, starting at that satellite's live dot position) is re-derived per frame by a
-  time-window slide — catalogs up to the slide cap; larger ones keep the cadence-rebuilt static draw
-  of the bake's first period. Identical treatment for pinned, hovered, and unpinned orbits. Ground
-  tracks slide the same way on their own two-period time-uniform bake. The ECF space track is open
-  by construction (the earth rotates ~22° under a LEO period, so the one-period arc's endpoints
-  don't coincide in ECF) — windows never wrap or close on themselves, because the old index-rotation
-  approach bridged start to end with that giant chord.
+- **Tracks slide between rebuilds** (`lib/trackSlide.ts`): the worker bakes each satellite's orbit
+  as a vertex **chain** of two ν-continuous periods with per-vertex time offsets and the satellite's
+  period (plus an SGP4-failure run list). Every drawn satellite owns a **fixed edge-slot range** in
+  one shared LineSegments buffer; per frame its window — one period of chain vertices starting at
+  the satellite's live dot position and ending at an interpolated vertex exactly one period ahead —
+  is written into its slot as explicit duplicated-endpoint edges, with degenerate point pairs
+  padding the unused tail (they render as nothing). No draw ranges, no per-frame reallocation, no
+  adjacency assumptions anywhere. Identical treatment for pinned, hovered, and unpinned orbits up to
+  the slide cap (1500 satellites); fragmented chains (honest SGP4-failure gaps) and oversized
+  catalogs draw the bake's first run statically into the same slots. The ECF space track is open by
+  construction (the earth rotates ~22° under a LEO period, so a one-period arc's endpoints don't
+  coincide in ECF) — windows never wrap or close on themselves.
+- **Ground track** slides the same way on its own two-period time-uniform bake (128 uniform steps
+  per period; the visible window starts at the satellite's live subpoint).
 - **Single draw call** for all satellite dots (radial gradient texture, vertex colors).
 - **Zoom-adaptive point size** — dots scale relative to the globe as you zoom in.
 - **Orbit ellipses** sampled over two full ν-continuous periods in ECI, rotated by delta GMST for
   ECF display; only one period is drawn per orbit, slid to the live dot position.
 - **Ground track** is always ECF (each sample rotated by its own GMST, drawn one period into the
-  future at 128 samples from a two-period bake) and is never affected by the reference-frame toggle;
+  future from a two-period time-uniform bake) and is never affected by the reference-frame toggle;
   rebuilt on the same 5 s cadence as orbits, only while a satellite is pinned ("Ground track" toggle
   in the controls).
-- **Hover highlight** mirrors the focus satellite's slid window from the shared per-frame rebuild;
-  pin persists it.
+- **Hover highlight** paints the focus satellite's slid window into its own fixed slot; pin persists
+  it.
 - **Graph axis keys live in `trackerState`** (not component-local state) so URL deep links can seed
   and mirror them; the graph parameter metadata is shared with the URL encoder in `graph-params.ts`.
 - **URL writes use `history.replaceState`**, debounced and skipped when nothing changed; the
