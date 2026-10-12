@@ -779,6 +779,9 @@ export class GlobeScene {
      * unpinned orbits (the focused satellite paints into its own highlight
      * slot instead of the merged layer).
      */
+    private lastWindowTarget = Number.NaN;
+    private lastWindowBake = -1;
+
     private rebuildOrbitWindows(): void {
         if (!this.orbitWindowMode || !this.orbitPositions || !this.orbitVertexTimes) return;
         // The merged layer is the only consumer of these slots: when "All
@@ -795,6 +798,13 @@ export class GlobeScene {
         if (!scratch) return;
         // Window target relative to the epoch of the bake we hold.
         const target = renderEpochMs() - this.orbitBakeEpoch;
+        // Paused (or scrubbed-in-place) → the windows are identical to the
+        // last paint: skip the whole per-frame rebuild.
+        if (target === this.lastWindowTarget && this.orbitBakeEpoch === this.lastWindowBake) {
+            return;
+        }
+        this.lastWindowTarget = target;
+        this.lastWindowBake = this.orbitBakeEpoch;
 
         for (let s = 0; s < this.orbitVertexCounts.length; s++) {
             const vCount = this.orbitVertexCounts[s];
