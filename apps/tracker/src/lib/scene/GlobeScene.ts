@@ -33,12 +33,6 @@ const ORBIT_MAX_SATS = 1000;
 const ORBIT_PAUSE_DRIFT_MS = 60_000;
 const ORBIT_PAUSE_REBUILD_MS = 1000;
 const POINTER_THROTTLE_MS = 66;
-// Temporary orbit-debug instrumentation: append ?orbitdebug to the page URL;
-// highlight changes, bake arrivals, and focused-window frame skips log to the
-// console (change-of-state only, so hover spam doesn't flood). Remove once
-// the highlight flakiness is root-caused.
-const ORBIT_DEBUG =
-    typeof location !== 'undefined' && new URLSearchParams(location.search).has('orbitdebug');
 // The sun's motion is ~15°/hour in longitude, but the ephemeris + ring refill
 // is cheap enough to run per rendered frame, so the terminator tracks the
 // rendered clock exactly instead of stepping on a refresh cadence.
@@ -612,49 +606,35 @@ export class GlobeScene {
         attr.needsUpdate = true;
     }
 
-    private debugLastKey = '';
-
-    /** Log only when the transition key changes (hover-spam safe). */
-    private debugOrbit(key: string, detail: Record<string, unknown>): void {
-        if (!ORBIT_DEBUG || key === this.debugLastKey) return;
-        this.debugLastKey = key;
-        console.log(
-            '[orbitdebug]',
-            Math.floor(Date.now() / 1000) % 100000,
-            key,
-            JSON.stringify(detail)
-        );
-    }
-
+    /**
+     * Accept an orbit bake. Freshness gates, NOT request-id equality: the
+     * worker processes requests FIFO with build cancellation, so responses
+     * can land after later requests superseded them — a hover wave fires a
+     * bake per focus change, and dropping everything with a stale request id
+     * wedged the slot table on the old filter until no bake ever accepted.
+     * A bake is stale when its catalog generation doesn't match, or when it
+     * anchors before the bake we already hold (time regression).
+     */
     private onOrbits(message: WorkerResponse): void {
-        if (ORBIT_DEBUG && message.requestId !== this.orbitRequestSeq) {
-            console.log('[orbitdebug]', Math.floor(Date.now() / 1000) % 100000, 'bake/superseded', {
-                got: message.requestId,
-                want: this.orbitRequestSeq
-            });
+        if (
+            message.generation !== undefined &&
+            message.generation !== this.catalogGeneration
+        ) {
+            return;
         }
-        if (message.requestId !== this.orbitRequestSeq) return;
+        const incomingEpoch = message.epoch ?? Number.NEGATIVE_INFINITY;
+        if (incomingEpoch < this.orbitBakeEpoch) return;
         const positions = message.positions;
         if (!positions || positions.length === 0) return;
         this.orbitPositions = positions;
         // The bake's epoch rides in the message — every view slides against
         // the epoch of the bake it actually holds.
-        this.orbitBakeEpoch = message.epoch ?? this.orbitRequestEpoch;
+        this.orbitBakeEpoch = incomingEpoch;
         // GMST of the epoch the orbits were built for (simulated time), not of
         // wall-clock now — otherwise the mesh would drift out of alignment with
         // the simulated clock.
-        this.orbitBuildGmst = gstime(new Date(this.orbitRequestEpoch));
+        this.orbitBuildGmst = gstime(new Date(incomingEpoch));
         this.orbitsReady = true;
-        if (ORBIT_DEBUG) {
-            const fi = this.highlightIndex;
-            console.log('[orbitdebug]', Math.floor(Date.now() / 1000) % 100000, 'bake', {
-                seq: message.requestId,
-                lagMs: Date.now() - (message.epoch ?? 0),
-                sats: message.vertexCounts?.length ?? 0,
-                focusVerts: fi >= 0 ? (message.vertexCounts?.[fi] ?? -1) : -1,
-                focusRuns: fi >= 0 ? (message.runs?.[this.orbitRunsCursor[fi] ?? -1] ?? -1) : -1
-            });
-        }
         this.setupOrbitWindows(message);
         this.updateOrbitVisibility();
         if (this.highlightIndex >= 0) this.showHighlight(this.highlightIndex);
@@ -765,8 +745,7 @@ export class GlobeScene {
                 vCursor += len;
             }
             // Degenerate pad from the last written edge to the slot end.
-            this.orbitSlotScratch.fill(0, Math.min(w, slotEnd), slotEnd);
-        }
+            this.orbitSlotScratch.fill(0, Math.min(w, slotEnd), slotEnd);        }
         (this.orbitGeometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
         this.rebuildOrbitWindows();
     }
@@ -902,13 +881,6 @@ export class GlobeScene {
             // zero pairs (segments at the origin) render as nothing.
             out.fill(0, outBase + n * 6, outBase + cap * 6);
             if (isFocus) {
-                this.debugOrbit('focus/window', {
-                    seq: this.orbitRequestSeq,
-                    head,
-                    outLimit,
-                    edges: n,
-                    periodMs: Math.round(period)
-                });
                 // The highlight buffer's capacity can outlive a smaller focus
                 // chain (it only grows) — pin its draw range to the focus
                 // slot's capacity so stale tails never draw.
@@ -1127,22 +1099,12 @@ export class GlobeScene {
             return;
         }
         this.highlightIndex = index;
-        this.debugOrbit('highlight/show', {
-            index,
-            sats: this.orbitVertexCounts.length,
-            focusVerts: this.orbitVertexCounts[index] ?? -1,
-            focusRuns:
-                this.orbitRunsCursor.length > 0
-                    ? (this.orbitRuns[this.orbitRunsCursor[index] ?? -1] ?? -1)
-                    : -1,
-            windowMode: this.orbitWindowMode,
-            showOrbits: this.showOrbits
-        });
         this.updateNodeMarkers(this.chainSlice(index));
         // The focused window is painted per frame by rebuildOrbitWindows
         // (slid to the live dot position); this only owns markers/visibility —
-        // plus a focus-only bake when orbits are hidden by the size cap.
-        if (!this.orbitWindowMode && !this.showOrbits) this.requestOrbits();
+        // plus a focus-only bake when orbits are hidden by the size cap
+        // (requestOrbits coalesces hover waves to one bake per 250 ms).
+        if (!this.orbitWindowMode && !this.showOrbits && this.ready) this.requestOrbits();
         this.updateOrbitVisibility();
     }
 
@@ -1154,8 +1116,6 @@ export class GlobeScene {
 
     hideHighlight(): void {
         if (this.highlightIndex === -1) return;
-        this.debugOrbit('highlight/hide', {});
-        this.highlightIndex = -1;
         this.highlightMesh.visible = false;
         this.ascendingNode.visible = false;
         this.descendingNode.visible = false;
@@ -1308,7 +1268,12 @@ export class GlobeScene {
     }
 
     private requestOrbits(): void {
-        this.lastOrbitBuildWall = performance.now();
+        const now = performance.now();
+        // Focus-only bakes coalesce hover waves: a request per focus change
+        // queued 30 rebuilds on the FIFO worker whose responses all dropped.
+        const minGap = this.showOrbits ? 0 : 250;
+        if (now - this.lastOrbitBuildWall < minGap) return;
+        this.lastOrbitBuildWall = now;
         this.orbitRequestSeq++;
         // Orbits anchor at the shared simulated epoch, matching the propagated
         // dots — globe and graph never sample different times. With orbits
