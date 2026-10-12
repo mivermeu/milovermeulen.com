@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import {
     ACCURACY_SOFT_LIMIT_MS,
+    DEAD_RECKON_CADENCES,
     DEFAULT_SIM_SPEED,
     REALTIME_SNAP_MS,
     SCRUB_RANGE_MS,
@@ -10,6 +11,7 @@ import {
     clampSimEpoch,
     epochAction,
     nextPropagateEpoch,
+    renderBlend,
     scrubOffsetMsToSlider,
     scrubSliderToOffsetMs,
     simAccuracy,
@@ -131,6 +133,40 @@ describe('epochAction', () => {
         // Max cadence (600 ms) × max speed (600×) = 6 min of simulated time.
         const maxAdvance = 600 * 600;
         expect(epochAction(1000, 1000 + maxAdvance, maxAdvance)).toBe('blend');
+    });
+});
+
+describe('renderBlend', () => {
+    const P = NOW;
+    const N = NOW + 360_000; // a 600× interval (cadence·speed)
+
+    it('returns 1 for a degenerate pair (span ≤ 0)', () => {
+        expect(renderBlend(NOW + 1000, NOW, NOW)).toBe(1);
+        expect(renderBlend(NOW, NOW, NOW)).toBe(1);
+    });
+
+    it('is 0 at the pair start and 1 at its end', () => {
+        expect(renderBlend(P, N, P)).toBe(0);
+        expect(renderBlend(P, N, N)).toBeCloseTo(1, 10);
+    });
+
+    it('interpolates linearly inside the window', () => {
+        expect(renderBlend(P, N, P + 90_000)).toBeCloseTo(0.25, 10);
+        expect(renderBlend(P, N, P + 270_000)).toBeCloseTo(0.75, 10);
+    });
+
+    it('dead-reckons linearly past the newest snapshot', () => {
+        // One extra interval past the end moves at the same rate.
+        expect(renderBlend(P, N, N + 180_000)).toBeCloseTo(1.5, 10);
+        expect(renderBlend(P, N, N + 360_000)).toBeCloseTo(2, 10);
+    });
+
+    it('caps extrapolation at 1 + DEAD_RECKON_CADENCES', () => {
+        expect(renderBlend(P, N, N + 999 * 360_000)).toBe(1 + DEAD_RECKON_CADENCES);
+    });
+
+    it('does not go negative for epochs before the pair start', () => {
+        expect(renderBlend(P, N, P - 1000)).toBe(0);
     });
 });
 

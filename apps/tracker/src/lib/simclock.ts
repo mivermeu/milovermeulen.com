@@ -103,8 +103,42 @@ export function stepSimClock(
  * simulated clock itself, stamps stay monotonic exactly while simulated time is
  * monotonic — a scrub deliberately breaks that, and the views detect it via
  * `epochAction` below.
+ */
+export function nextPropagateEpoch(simEpochMs: number, leadMs: number): number {
+    return Math.round(simEpochMs + leadMs);
+}
+
+/**
+ * How many snapshot intervals a view may dead-reckon past the newest snapshot
+ * before clamping. Worker responses arrive on a real-time cadence while the
+ * simulated clock runs unthrottled, so at high speeds the clock regularly
+ * spends a fraction of an interval waiting for the next response — holding
+ * still until it lands reads as stutter, while gliding along the pair's own
+ * velocity is visually exact (orbital tracks are near-straight across one
+ * interval). The cap keeps a stalled or dead worker from flinging dots along a
+ * tangent forever.
+ */
+export const DEAD_RECKON_CADENCES = 2;
+
+/**
+ * Per-frame blend factor for a snapshot pair at `simEpoch`. Returns 0 before
+ * the pair window, the linear blend inside it — and beyond the newest snapshot
+ * continues past 1 (dead reckoning along the pair's implied velocity), clamped
+ * at `1 + DEAD_RECKON_CADENCES`. Paired with `blendInto`, whose linear/angle
+ * interpolation is well-behaved for any factor.
+ */
+export function renderBlend(prevEpoch: number, nextEpoch: number, simEpoch: number): number {
+    const span = nextEpoch - prevEpoch;
+    if (!(span > 0)) return 1; // degenerate pair (fresh regime): hold the newest
+    const blend = (simEpoch - prevEpoch) / span;
+    if (blend <= 0) return 0;
+    const cap = 1 + DEAD_RECKON_CADENCES;
+    return blend > cap ? cap : blend;
+}
+
+/** What a view should do with an incoming snapshot.
  *
- * Views also key on the propagation service's *regime revision* (stamped onto
+ * Views key on the propagation service's *regime revision* (stamped onto
  * every request and echoed on responses): a paused clock stamps the same epoch
  * forever, so epoch equality alone can't tell "same data" from "new regime,
  * fresh data" — the revision can. The service raises it on catalog init and
@@ -112,13 +146,7 @@ export function stepSimClock(
  * flags scrubs (`simScrubSeq`), which the service promotes to revision bumps so
  * an actual scrub snaps instead of blending by magnitude.
  */
-export function nextPropagateEpoch(simEpochMs: number, leadMs: number): number {
-    return Math.round(simEpochMs + leadMs);
-}
-
-/** What a view should do with an incoming snapshot. */
 export type EpochAction = 'blend' | 'snap' | 'drop';
-
 /**
  * Floor above which a forward epoch gap is a clock jump (scrub) rather than
  * routine snapshot cadence — normal advances are ≤ cadence·speed (≤ 6 min here,

@@ -9,7 +9,7 @@ import { trackerState } from '$lib/state.svelte';
 import type { ParsedSatellite } from '$lib/satellites/types';
 import { propagation, blendInto, type WorkerResponse } from '$lib/propagation';
 import { eciDirectionToEcf, sunEciDirection, type Vec3 } from '$lib/sun';
-import { epochAction } from '$lib/simclock';
+import { epochAction, renderBlend } from '$lib/simclock';
 
 const EARTH_RADIUS_KM = 6371;
 export const GLOBE_RADIUS = 6.4;
@@ -23,10 +23,9 @@ const ORBIT_REBUILD_INTERVAL_MS = 5000;
 const ORBIT_PAUSE_DRIFT_MS = 60_000;
 const ORBIT_PAUSE_REBUILD_MS = 1000;
 const POINTER_THROTTLE_MS = 66;
-// The sun's apparent motion is ~15°/hour; an ephemeris refresh every minute
-// keeps the terminator well under a degree of drift at a per-frame cost of
-// one ECI→ECF rotation of a cached vector.
-const SUN_RECOMPUTE_INTERVAL_MS = 60_000;
+// The sun's motion is ~15°/hour in longitude, but the ephemeris + ring refill
+// is cheap enough to run per rendered frame, so the terminator tracks the
+// rendered clock exactly instead of stepping on a refresh cadence.
 const TERMINATOR_POINTS = 128;
 
 export interface GlobeSceneCallbacks {
@@ -59,7 +58,8 @@ export class GlobeScene {
     private readonly nightOverlay: THREE.Mesh;
     private readonly terminatorRing: THREE.LineLoop;
     private sunEci: Vec3 = sunEciDirection(0);
-    private lastSunComputeMs = 0;
+    private readonly termScratchA = new THREE.Vector3();
+    private readonly termScratchB = new THREE.Vector3();
     private readonly groundTrackMesh: THREE.LineSegments;
     private readonly groundTrackGeometry: THREE.BufferGeometry;
     private showGroundTrack = true;
@@ -384,10 +384,13 @@ export class GlobeScene {
 
     /** Refill the terminator ring's vertex buffer from the sun direction. */
     private updateTerminatorGeometry(sun: Vec3): void {
-        // Orthonormal basis ⊥ sun for the circle in that plane.
+        // Orthonormal basis ⊥ sun for the circle in that plane. Preallocated
+        // scratch — this runs every frame.
         const axis =
-            Math.abs(sun.z) > 0.99 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1);
-        const sunVec = new THREE.Vector3(sun.x, sun.y, sun.z).normalize();
+            Math.abs(sun.z) > 0.99
+                ? this.termScratchA.set(1, 0, 0)
+                : this.termScratchA.set(0, 0, 1);
+        const sunVec = this.termScratchB.set(sun.x, sun.y, sun.z).normalize();
         const u = new THREE.Vector3().crossVectors(axis, sunVec).normalize();
         const v = new THREE.Vector3().crossVectors(sunVec, u);
         const radius = GLOBE_RADIUS + 0.02;
@@ -412,18 +415,20 @@ export class GlobeScene {
      * vector would disagree with the night shading by the GMST angle. The 60 s
      * recompute cadence bounds the ring's own drift to ~0.25°.
      */
+    /**
+     * Sun bookkeeping — fully per frame: the low-precision ephemeris is a
+     * handful of trig calls and the ring refill writes 128 points, so running
+     * both on every rendered frame costs effectively nothing while keeping the
+     * terminator and the night shading exactly in step with the *rendered*
+     * simulated epoch — including through scrubs and high speeds, where the
+     * old 60 s-simulated recompute cadence made the ring lag the shader and
+     * then visibly snap into place. Both meshes live in the ECF frame, so the
+     * geometry is rebuilt from the same GMST-rotated vector the shader uses.
+     */
     private updateSun(gmst: number): void {
-        // The sun's position follows the shared simulated clock, not the wall:
-        // at real time the two are identical (real-time pins the epoch), but a
-        // scrubbed clock must carry the day/night lighting with it. The
-        // absolute difference keeps a reverse scrub from leaving the ring stale
-        // until the clock begs forward past another interval.
         const nowMs = trackerState.simEpochMs;
-        if (Math.abs(nowMs - this.lastSunComputeMs) >= SUN_RECOMPUTE_INTERVAL_MS) {
-            this.sunEci = sunEciDirection(nowMs);
-            this.updateTerminatorGeometry(eciDirectionToEcf(this.sunEci, gmst));
-            this.lastSunComputeMs = nowMs;
-        }
+        this.sunEci = sunEciDirection(nowMs);
+        this.updateTerminatorGeometry(eciDirectionToEcf(this.sunEci, gmst));
         const sunEcf = eciDirectionToEcf(this.sunEci, gmst);
         const mat = this.nightOverlay.material as THREE.ShaderMaterial;
         (mat.uniforms.uSunDirEcf.value as THREE.Vector3).set(sunEcf.x, sunEcf.y, sunEcf.z);
@@ -997,12 +1002,12 @@ export class GlobeScene {
 
     private updatePositions(): void {
         if (!this.nextPositions || !this.prevPositions) return;
-        const span = this.nextEpoch - this.prevEpoch;
         // Blend against the shared simulated clock — never a per-view wall time.
+        // Past the newest snapshot the factor keeps growing (dead reckoning
+        // along the pair's velocity, capped in renderBlend), so worker-arrival
+        // jitter at high speeds holds no stuttering pauses.
         const simEpoch = trackerState.simEpochMs;
-        let blend = span > 0 ? (simEpoch - this.prevEpoch) / span : 1;
-        if (blend < 0) blend = 0;
-        if (blend > 1) blend = 1;
+        const blend = renderBlend(this.prevEpoch, this.nextEpoch, simEpoch);
         blendInto(this.prevPositions, this.nextPositions, this.positionArray, blend, 3, []);
         this.pointsGeometry.attributes.position.needsUpdate = true;
     }

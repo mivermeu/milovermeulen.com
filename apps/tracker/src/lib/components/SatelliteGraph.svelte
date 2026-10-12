@@ -5,7 +5,7 @@
     import { categorize } from '$lib/tree';
     import { orbitalPeriodSeconds, trueAnomalyFromMean } from '$lib/orbit';
     import { blendInto, propagation } from '$lib/propagation';
-    import { epochAction } from '$lib/simclock';
+    import { epochAction, renderBlend } from '$lib/simclock';
     import Panel from './Panel.svelte';
     import OrbitModelModal from './OrbitModelModal.svelte';
     import {
@@ -503,13 +503,12 @@
     function frame(): void {
         rafId = requestAnimationFrame(frame);
         if (elCurrent.length === 0) return;
-        const span = elNextEpoch - elPrevEpoch;
         // Blend against the shared simulated clock — the exact same epoch the
         // globe renders from, so the two views always show the same instant.
+        // Past the newest snapshot the factor keeps growing (dead reckoning,
+        // capped via renderBlend), matching the globe's behavior at 600×.
         const simEpoch = trackerState.simEpochMs;
-        let blend = span > 0 ? (simEpoch - elPrevEpoch) / span : 1;
-        if (blend < 0) blend = 0;
-        else if (blend > 1) blend = 1;
+        const blend = renderBlend(elPrevEpoch, elNextEpoch, simEpoch);
         blendInto(elPrev, elNext, elCurrent, blend, 7, [3, 4, 5, 6]);
         updatePoints();
     }
