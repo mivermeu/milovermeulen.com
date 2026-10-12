@@ -22,7 +22,7 @@ const rawPlugin: BunPlugin = {
     name: 'vite ?raw loader',
     setup(build) {
         build.onResolve({ filter: /\?raw$/ }, (args) => ({ path: resolveRaw(args) }));
-        build.onLoad({ filter: /\?raw$/ }, async (args) => {
+        build.onLoad({ filter: /\.txt$/ }, async (args) => {
             const text = await Bun.file(args.path).text();
             return { contents: `export default ${JSON.stringify(text)};`, loader: 'js' };
         });

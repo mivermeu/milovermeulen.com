@@ -39,6 +39,10 @@ describe('clampSimEpoch', () => {
             NOW - SCRUB_RANGE_MS - DAY + SCRUB_RANGE_MS
         );
     });
+
+    it('falls back to real now for a non-finite epoch', () => {
+        expect(clampSimEpoch(NaN, NOW)).toBe(NOW);
+    });
 });
 
 describe('stepSimClock', () => {
@@ -74,6 +78,16 @@ describe('stepSimClock', () => {
         const later = parked + 5 * DAY;
         // …but the parked epoch stays inside the sliding window, so it advances.
         expect(stepSimClock(parked, 100, 10, later)).toBe(parked + 100 * 10);
+    });
+
+    it('treats negative elapsed as zero (the clock never runs backwards)', () => {
+        expect(stepSimClock(NOW, -100, 60, NOW - 100)).toBe(NOW);
+    });
+
+    it('falls back to real now for non-finite inputs', () => {
+        expect(stepSimClock(NaN, 100, 1, NOW + 100)).toBe(NOW + 100);
+        expect(stepSimClock(NOW, NaN, 1, NOW)).toBe(NOW);
+        expect(stepSimClock(NOW, 100, NaN, NOW + 100)).toBe(NOW + 100);
     });
 });
 
@@ -143,6 +157,19 @@ describe('epochAction', () => {
         // Max cadence (600 ms) × max speed (600×) = 6 min of simulated time.
         const maxAdvance = 600 * 600;
         expect(epochAction(1000, 1000 + maxAdvance, maxAdvance)).toBe('blend');
+    });
+
+    it('drops non-finite inputs instead of misclassifying them', () => {
+        expect(epochAction(NaN, 1000, LEAD)).toBe('drop');
+        expect(epochAction(1000, NaN, LEAD)).toBe('drop');
+        expect(epochAction(1000, 1600, NaN)).toBe('drop');
+        expect(epochAction(1000, 1000, NaN)).toBe('drop');
+    });
+
+    it('blends exactly at the snap threshold (snap is strictly beyond it)', () => {
+        expect(epochAction(0, 30_000, LEAD)).toBe('blend');
+        const interval = 120 * 600;
+        expect(epochAction(0, 6 * interval, interval)).toBe('blend');
     });
 });
 

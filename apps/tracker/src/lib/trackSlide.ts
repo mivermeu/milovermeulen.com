@@ -40,6 +40,7 @@ export function firstVertexAtOrAfter(
     target: number
 ): number {
     if (count <= 0 || offset + count > times.length) return -1;
+    if (!Number.isFinite(target)) return -1;
     let lo = offset;
     let hi = offset + count - 1;
     if (times[hi] < target) return -1;
@@ -99,6 +100,10 @@ export function writeWindowEdges(
         n++;
     };
 
+    if (!(periodMs > 0)) {
+        out.fill(0, outBase, outBase + maxEdges * 6);
+        return 0;
+    }
     const head = firstVertexAtOrAfter(times, vertexOffset, vertexCount, target);
     if (head < 0) {
         // The render epoch ran past the whole bake: nothing to draw this frame.

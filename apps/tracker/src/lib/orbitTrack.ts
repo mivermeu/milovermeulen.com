@@ -14,9 +14,10 @@
  * path contains no async request to lose or have superseded).
  */
 
-import { eciToEcf, gstime, propagate, type EciVec3, type SatRec } from 'satellite.js';
+import { eciToEcf, gstime, type EciVec3, type SatRec } from 'satellite.js';
+import { sgp4Position, type Sgp4Vec3 } from './sgp4pos';
 
-export type Vec3 = [number, number, number];
+export type Vec3 = Sgp4Vec3;
 
 const TAU = Math.PI * 2;
 
@@ -62,14 +63,9 @@ export interface OrbitChain {
  */
 export type ChainFrame = 'ecf' | 'eci';
 
-/** SGP4 position in ECI km at a unix ms instant (null on error/non-finite). */
-function sgp4Position(rec: SatRec, tMs: number): Vec3 | null {
-    const state = propagate(rec, new Date(tMs));
-    if (state.position === false || state.position === undefined) return null;
-    const p = state.position as EciVec3<number>;
-    if (!isFinite(p.x + p.y + p.z)) return null;
-    return [p.x, p.y, p.z];
-}
+// sgp4Position lives in $lib/sgp4pos, shared with the SGP4 worker so the two
+// implementations can't drift apart. NOTE: this module's Vec3 is a flat
+// [x,y,z] tuple — intentionally NOT $lib/sun's {x,y,z} Vec3 object.
 
 // Mean anomaly of an ECI position (NaN for e >= 1). J2-drifted elements add
 // <1° error — fine for sample placement (only decides where points cluster,
@@ -100,7 +96,8 @@ function meanAnomaly(rec: SatRec, p: Vec3): number {
  * elements (translunar-coast TLEs, no closed period) or every node failing
  * SGP4 (decayed/invalid entries).
  *
- * `maxPoints` bounds a satellite's refined vertex count (budgeted per bake).
+ * `maxPoints` is a per-run budget bounding one contiguous run's refined
+ * vertex count (checked per chord-split sweep output, not per satellite).
  */
 export function buildOrbitChain(options: {
     rec: SatRec;
@@ -188,10 +185,14 @@ export function buildOrbitChain(options: {
                 tArr = tArr.slice(first).concat(tArr.slice(0, first));
                 eArr = eArr.slice(first).concat(eArr.slice(0, first));
             }
+            // Rotating the node list can wrap times (tail nodes belong to the
+            // earlier period copy). Add whole periods until ascending again —
+            // the sliding writer requires monotone non-decreasing offsets.
             for (let s = 1; s < tArr.length; s++) {
-                if (tArr[s] < tArr[s - 1]) tArr[s] += periodMs;
+                while (tArr[s] < tArr[s - 1]) tArr[s] += periodMs;
             }
         } else {
+            // ECF keeps the good span; leading/trailing unknowns are trimmed.
             tArr = tArr.slice(first, last + 1);
             eArr = eArr.slice(first, last + 1);
         }
@@ -209,7 +210,16 @@ export function buildOrbitChain(options: {
             split = false;
             const oT: number[] = [T[0]];
             const oP: Vec3[] = [P[0]];
-            for (let j = 0; j + 1 < T.length && oP.length < maxPoints; j++) {
+            for (let j = 0; j + 1 < T.length; j++) {
+                if (oP.length >= maxPoints - 1) {
+                    // Budget hit: emit the rest verbatim (no more splitting)
+                    // so the run tail is preserved, then stop.
+                    for (let r = j + 1; r < T.length && oT.length < maxPoints; r++) {
+                        oT.push(T[r]);
+                        oP.push(P[r]);
+                    }
+                    break;
+                }
                 const a = P[j];
                 const b = P[j + 1];
                 const dx = a[0] - b[0];

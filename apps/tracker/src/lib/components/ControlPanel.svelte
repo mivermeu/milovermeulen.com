@@ -13,6 +13,7 @@
     import {
         SCRUB_SLIDER_STEPS,
         SIM_SPEEDS,
+        REALTIME_SNAP_MS,
         simAccuracy,
         scrubOffsetMsToSlider,
         scrubSliderToOffsetMs
@@ -24,7 +25,7 @@
     // directly to the central clock's own ticks.
     let wall = $state(Date.now());
     $effect(() => {
-        const id = setInterval(() => (wall = Date.now()), 500);
+        const id = setInterval(() => (wall = Date.now()), 100);
         return () => clearInterval(id);
     });
 
@@ -79,6 +80,7 @@
     let scrubbing = $state(false);
     let scrubWasPlaying = false;
     let scrubPos = $state(SCRUB_SLIDER_STEPS / 2);
+    let scrubStartOffset = 0;
 
     function displayedSliderPos(): number {
         return atNow ? SCRUB_SLIDER_STEPS / 2 : scrubOffsetMsToSlider(offsetMs);
@@ -87,6 +89,7 @@
     function beginScrub(event: Event): void {
         scrubbing = true;
         scrubPos = (event.target as HTMLInputElement).valueAsNumber;
+        scrubStartOffset = scrubSliderToOffsetMs(scrubPos);
         scrubWasPlaying = trackerState.simPlaying;
         pauseSimClock();
     }
@@ -97,10 +100,23 @@
             scrubbing = false;
             if (scrubWasPlaying) resumeSimClock();
         }
-        // Commit (fires for both pointer release and keyboard changes; sets the
-        // same offset the last `input` committed for pointer use). Offsets near
-        // zero snap to the live feed.
-        setSimOffsetMs(scrubSliderToOffsetMs(position));
+        // Commit only when the value actually changed (fires for both pointer
+        // release and keyboard changes; sets the same offset the last `input`
+        // committed for pointer use). Offsets near zero snap to the live feed.
+        // NOTE: keyboard-driven `change` events don't pass through beginScrub,
+        // so they commit without the pause-while-scrub treatment — wiring that
+        // would need focus/blur tracking; the commit itself is already correct.
+        const offset = scrubSliderToOffsetMs(position);
+        // A pointer drag runs paused, so the center snap (which needs a playing
+        // clock) can't engage mid-drag — and the change-only guard would then
+        // skip the post-resume commit that snaps. Force it when parked live.
+        const snappedLive =
+            scrubWasPlaying &&
+            trackerState.simPlaying &&
+            Math.abs(offset) <= REALTIME_SNAP_MS &&
+            !trackerState.simRealtime;
+        if (offset !== scrubStartOffset || snappedLive) setSimOffsetMs(offset);
+        scrubStartOffset = offset;
     }
 </script>
 
@@ -274,7 +290,9 @@
                 oninput={(event) => {
                     const position = (event.target as HTMLInputElement).valueAsNumber;
                     scrubPos = position;
-                    setSimOffsetMs(scrubSliderToOffsetMs(position));
+                    const offset = scrubSliderToOffsetMs(position);
+                    scrubStartOffset = offset;
+                    setSimOffsetMs(offset);
                 }}
                 class="mt-2 w-full accent-brand-primary"
                 aria-label="Time scrub — log scale, up to ±30 days around real time (1 step ≈ 0.2 s at the center)"

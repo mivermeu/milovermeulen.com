@@ -76,6 +76,7 @@ export function simAccuracy(offsetMs: number): 'live' | 'degrading' {
  * outside TLE credibility.
  */
 export function clampSimEpoch(simEpochMs: number, realNowMs: number): number {
+    if (!Number.isFinite(simEpochMs)) return realNowMs;
     if (simEpochMs < realNowMs - SCRUB_RANGE_MS) return realNowMs - SCRUB_RANGE_MS;
     if (simEpochMs > realNowMs + SCRUB_RANGE_MS) return realNowMs + SCRUB_RANGE_MS;
     return simEpochMs;
@@ -92,7 +93,8 @@ export function stepSimClock(
     speed: number,
     realNowMs: number
 ): number {
-    const advanced = simEpochMs + elapsedRealMs * speed;
+    const advanced = simEpochMs + Math.max(0, elapsedRealMs) * speed;
+    if (!Number.isFinite(advanced)) return realNowMs;
     return clampSimEpoch(advanced, realNowMs);
 }
 
@@ -105,19 +107,13 @@ export function stepSimClock(
  * `epochAction` below.
  */
 export function nextPropagateEpoch(simEpochMs: number, leadMs: number): number {
+    if (!Number.isFinite(simEpochMs) || !Number.isFinite(leadMs)) return Date.now();
     return Math.round(simEpochMs + leadMs);
 }
 
 /**
- * How far past the newest snapshot a view may dead-reckon, in snapshot
- * intervals. Worker responses arrive on a real-time cadence while the
- * simulated clock runs unthrottled, so at high speeds the clock can spend part
- * of an interval waiting for the next response — holding still until it lands
- * reads as stutter, while gliding along the pair's own velocity is visually
- * exact right past the pair end. The extra allowance is deliberately *small*
- * — half an interval: a satellite's track curves ~4.5° per interval, so far
- * extrapolation drifts quadratically off the arc and reads as a jump when the
- * next snapshot lands.
+ * Dead-reckon allowance past the newest snapshot, in snapshot intervals. Kept
+ * small (half an interval): far extrapolation drifts off the arc and lands as a jump.
  */
 export const DEAD_RECKON_EXTRA = 0.5;
 
@@ -129,6 +125,7 @@ export const DEAD_RECKON_EXTRA = 0.5;
  * interpolation is well-behaved for any factor.
  */
 export function renderBlend(prevEpoch: number, nextEpoch: number, simEpoch: number): number {
+    if (!Number.isFinite(simEpoch)) return 1; // non-finite clock: hold the newest
     const span = nextEpoch - prevEpoch;
     if (!(span > 0)) return 1; // degenerate pair (fresh regime): hold the newest
     const blend = (simEpoch - prevEpoch) / span;
@@ -137,16 +134,7 @@ export function renderBlend(prevEpoch: number, nextEpoch: number, simEpoch: numb
     return blend > cap ? cap : blend;
 }
 
-/** What a view should do with an incoming snapshot.
- *
- * Views key on the propagation service's *regime revision* (stamped onto
- * every request and echoed on responses): a paused clock stamps the same epoch
- * forever, so epoch equality alone can't tell "same data" from "new regime,
- * fresh data" — the revision can. The service raises it on catalog init and
- * element-mode switches, and the user-scrub entry point in state.svelte.ts
- * flags scrubs (`simScrubSeq`), which the service promotes to revision bumps so
- * an actual scrub snaps instead of blending by magnitude.
- */
+/** What a view should do with an incoming snapshot — keyed on regime revision, since epoch equality alone can't tell "same data" from "new regime". */
 export type EpochAction = 'blend' | 'snap' | 'drop';
 /**
  * Floor above which a forward epoch gap is a clock jump (scrub) rather than
@@ -164,20 +152,8 @@ const SNAP_FLOOR_MS = 30_000;
 const BLEND_TOLERANCE_MULTIPLE = 6;
 
 /**
- * Continuity guard comparing an incoming snapshot's epoch against the epoch of
- * the snapshot a view currently holds forward.
- *
- * - 'blend': routine forward advance — glide between the endpoints. Stretches
- *   from a slow worker (a few intervals) also blend: a fast catch-up glide
- *   across real, continuous motion beats a teleport.
- * - 'snap' : backwards or discontinuous simulated epoch — replace the pair
- *   outright, never interpolate across a time jump. User scrubs reach the views
- *   as explicit regime-revision bumps and take this path directly; the
- *   magnitude screen below stays as backstop for gaps no flag can see
- *   (reversed scrubs, hidden-tab throttling, stale in-flight responses).
- * - 'drop' : same simulated epoch as the held snapshot (paused clock) — data is
- *   identical unless the regime revision changed (checked before this guard in
- *   the views), so skip the work; the render stays static with span ≈ 0.
+ * Continuity guard on snapshot epochs: 'blend' routine forward advances,
+ * 'snap' backwards/discontinuous epochs, 'drop' same-epoch duplicates.
  */
 export function epochAction(
     nextEpoch: number,
@@ -185,6 +161,7 @@ export function epochAction(
     expectedAdvanceMs: number
 ): EpochAction {
     const delta = incomingEpoch - nextEpoch;
+    if (!Number.isFinite(delta) || !Number.isFinite(expectedAdvanceMs)) return 'drop';
     if (delta === 0) return 'drop';
     if (delta < 0) return 'snap';
     return delta > Math.max(expectedAdvanceMs * BLEND_TOLERANCE_MULTIPLE, SNAP_FLOOR_MS)

@@ -70,12 +70,15 @@ describe('writeWindowEdges', () => {
             0,
             4
         );
+        // Window [2, 6] ends exactly on v6: chain edges plus the exact-end
+        // tail segment (v5 → v6) — the tail is the unique final edge, not a duplicate.
         expect(n).toBe(4);
         // Edge 0 = (v2, v3) — the plain chain window start.
         expect(out[0]).toBeCloseTo(2, 6);
         expect(out[3]).toBeCloseTo(3, 6);
-        // Tail at exactly 6.
-        expect(out[out.length - 3]).toBeCloseTo(6, 6);
+        // Last edge ends exactly at v6; the slot is full so no zero-pad remains.
+        expect(out[3 * 6]).toBeCloseTo(5, 6);
+        expect(out[3 * 6 + 3]).toBeCloseTo(6, 6);
     });
 
     it('handles a target past the bake end by holding the chain tail', () => {
@@ -101,8 +104,6 @@ describe('writeWindowEdges', () => {
 
     it('zero-pads unused tail slots (degenerate pairs render as nothing)', () => {
         const cap = 8;
-        const out = new Float32Array(4 * 6 > cap ? cap * 6 : cap * 6);
-        void out;
         const padded = new Float32Array(cap * 6);
         writeWindowEdges(
             chain.positions,
@@ -138,5 +139,88 @@ describe('writeWindowEdges', () => {
         );
         expect(n).toBe(0);
         expect(out[0]).toBe(0); // zero-padded, not the stale fill(9)
+    });
+
+    it('pads the slot when the period is not positive', () => {
+        for (const period of [0, -4, NaN]) {
+            const out = new Float32Array(4 * 6);
+            out.fill(9);
+            const n = writeWindowEdges(
+                chain.positions,
+                chain.times,
+                0,
+                chain.vertexCount,
+                period,
+                null,
+                2,
+                out,
+                0,
+                4
+            );
+            expect(n).toBe(0);
+            for (let i = 0; i < 4 * 6; i++) expect(out[i]).toBe(0);
+        }
+    });
+
+    it('ends exactly on a vertex with the full final segment', () => {
+        const out = new Float32Array(4 * 6);
+        const n = writeWindowEdges(
+            chain.positions,
+            chain.times,
+            0,
+            chain.vertexCount,
+            chain.periodMs,
+            null,
+            2, // window [2, 6] ends exactly on v6
+            out,
+            0,
+            4
+        );
+        expect(n).toBe(4);
+        for (let e = 0; e < n; e++) {
+            // Every edge advances along the chain; none degenerate or repeated.
+            expect(out[e * 6 + 3]).toBeGreaterThan(out[e * 6]);
+        }
+        // Tail lands exactly on v6.
+        expect(out[3 * 6 + 3]).toBeCloseTo(6, 6);
+    });
+
+    it('erases the slot when the target runs past the whole bake (head < 0)', () => {
+        const out = new Float32Array(4 * 6);
+        out.fill(7);
+        const n = writeWindowEdges(
+            chain.positions,
+            chain.times,
+            0,
+            chain.vertexCount,
+            chain.periodMs,
+            null,
+            100,
+            out,
+            0,
+            4
+        );
+        expect(n).toBe(0);
+        for (let i = 0; i < 4 * 6; i++) expect(out[i]).toBe(0);
+    });
+
+    it('honors non-zero vertex offsets and output bases', () => {
+        // Two concatenated chains; slide the second (offset 9 vertices).
+        const positions = new Float32Array(18 * 3);
+        for (let k = 0; k < 18; k++) positions.set([k, 0, 0], k * 3);
+        const times = new Float32Array(18);
+        for (let k = 0; k < 18; k++) times[k] = k < 9 ? k : 100 + (k - 9);
+        const out = new Float32Array(2 * 4 * 6);
+        out.fill(-1);
+        const base = 4 * 6;
+        const n = writeWindowEdges(positions, times, 9, 9, 4, null, 102, out, base, 4);
+        // Slice-relative window [102, 106] → global vertices v11..v15.
+        expect(n).toBe(4);
+        expect(out[base]).toBeCloseTo(11, 6);
+        expect(out[base + 3]).toBeCloseTo(12, 6);
+        expect(out[base + 2 * 6 + 3]).toBeCloseTo(14, 6);
+        expect(out[base + 3 * 6 + 3]).toBeCloseTo(15, 6);
+        // Untouched region before the base keeps its fill.
+        expect(out[0]).toBe(-1);
     });
 });
