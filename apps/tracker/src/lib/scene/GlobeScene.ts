@@ -1506,7 +1506,13 @@ export class GlobeScene {
      * A null mask clears the brush and restores every slot on the next blend.
      */
     setBrushMask(mask: Uint8Array | null): void {
+        const changed = mask !== this.brushMask;
         this.brushMask = mask;
+        // Bake-culled slots (vertex count 0) revive only via re-bake. While
+        // playing the 5 s cadence covers it; while paused nothing is
+        // scheduled, so a mask change re-bakes immediately (user-action rate —
+        // snapshots don't reach this path with a new identity while paused).
+        if (changed && !trackerState.simPlaying && this.ready) this.requestOrbits();
     }
 
     private requestOrbits(): void {

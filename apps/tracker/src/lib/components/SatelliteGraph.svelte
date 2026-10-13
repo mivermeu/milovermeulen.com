@@ -135,8 +135,25 @@
     let pressActive = false;
     let brushActive = $state(false);
     let brushStart = { x: 0, y: 0 };
+    // Press origin (for the tap-vs-drag threshold) and the committed brush at
+    // press time (cancel rollback — a cancelled gesture must not keep its
+    // live preview commits).
+    let pressPoint = { x: 0, y: 0 };
+    let brushBeforeGesture: GraphBrush | null = null;
     // Canvas-local min/max rect while dragging (clamped to the plot).
     let brushLive = $state<ScreenRect | null>(null);
+    // Moving the committed selection: pointer went down inside its rect, so
+    // the drag translates it instead of drawing a new one.
+    let dragSelection = $state(false);
+    let dragGrab = { x: 0, y: 0 };
+    let dragSize = { w: 0, h: 0 };
+    // Resizing the committed selection from its bottom-right corner.
+    let resizeSelection = $state(false);
+    let resizeAnchor = { x: 0, y: 0 };
+    // Pointer hovers the committed rect (for the move cursor).
+    let overSelection = $state(false);
+    // Pointer hovers a resize corner (cursor direction, null when not).
+    let resizeCursor: 'nwse' | 'nesw' | null = $state(null);
     // True when the committed brush currently hides every visible point —
     // toggles only when the count crosses zero, never per frame.
     let brushEmpty = $state(false);
@@ -148,6 +165,7 @@
     let geometry: THREE.BufferGeometry | undefined;
     let raycaster: THREE.Raycaster | undefined;
     let lastMoveWall = 0;
+    let lastPreviewWall = 0;
 
     // Live orbital elements from the shared propagation service, 7 per satellite
     // (a, e, i, raan, argp, m, u), indexed by the filtered/active position. We
@@ -525,10 +543,44 @@
         // drag must not clobber the rect.
         if (pressActive || !event.isPrimary || !canvas) return;
         pressActive = true;
+        const p = canvasPoint(event);
+        pressPoint = p;
+        brushBeforeGesture = trackerState.graphBrush;
+        // Resizable corners first (any but the × one): the opposite corner
+        // stays anchored. Then the interior: drag translates. The × button
+        // intercepts its own clicks, so any canvas press here is a gesture.
+        const committed = brushOverlayRect;
+        const corner =
+            committed && !brushActive ? hitResizeCorner(p, committed, event.pointerType) : null;
+        if (committed && corner) {
+            resizeSelection = true;
+            resizeAnchor = resizeAnchorFor(corner, committed, p);
+            resizeCursor = corner;
+            // Seed the live rect so the square never blinks out between
+            // takeover (which hides the committed overlay) and first move.
+            brushLive = { ...committed };
+            hover = null;
+            trackerState.hoveredIndex = -1;
+            canvas.setPointerCapture(event.pointerId);
+            return;
+        }
+        // Down inside the committed selection → drag it (translate), never
+        // start a new rect there.
+        if (committed && !brushActive && pointInCommitted(p, committed, event.pointerType)) {
+            dragSelection = true;
+            dragGrab = { x: p.x - committed.x0, y: p.y - committed.y0 };
+            dragSize = { w: committed.x1 - committed.x0, h: committed.y1 - committed.y0 };
+            // Seed the live rect so the square never blinks out between
+            // takeover (which hides the committed overlay) and first move.
+            brushLive = { ...committed };
+            hover = null;
+            trackerState.hoveredIndex = -1;
+            canvas.setPointerCapture(event.pointerId);
+            return;
+        }
         // Clamp the start corner to the plot: a press in a canvas margin must
         // not inflate the dominant-axis extent (it would let the painted
         // margin distance commit a degenerate edge column).
-        const p = canvasPoint(event);
         const { l, t, w, h } = plot;
         brushStart = {
             x: Math.min(Math.max(p.x, l), l + w),
@@ -538,7 +590,91 @@
         canvas.setPointerCapture(event.pointerId);
     }
 
+    /**
+     * Resize-corner hit test: top-right, bottom-left, bottom-right. The
+     * top-left corner holds the × button, so it never resizes (null there).
+     * Returns the cursor direction for the hit corner.
+     */
+    function hitResizeCorner(
+        p: { x: number; y: number },
+        rect: ScreenRect,
+        pointerType: string
+    ): 'nwse' | 'nesw' | null {
+        const pad = pointerType === 'touch' ? 16 : 10;
+        const near = (x: number, y: number) =>
+            p.x >= x - pad && p.x <= x + pad && p.y >= y - pad && p.y <= y + pad;
+        if (near(rect.x0, rect.y0)) return null; // × corner
+        if (near(rect.x1, rect.y1)) return 'nwse';
+        if (near(rect.x1, rect.y0) || near(rect.x0, rect.y1)) return 'nesw';
+        return null;
+    }
+
+    /** Opposite corner (the resize anchor) for a grabbed corner. */
+    function resizeAnchorFor(
+        corner: 'nwse' | 'nesw',
+        rect: ScreenRect,
+        p: { x: number; y: number }
+    ): { x: number; y: number } {
+        // 'nwse' only serves bottom-right; 'nesw' serves two corners —
+        // disambiguate by proximity to the press point.
+        if (corner === 'nwse') return { x: rect.x0, y: rect.y0 };
+        const dTR = Math.abs(p.x - rect.x1) + Math.abs(p.y - rect.y0);
+        const dBL = Math.abs(p.x - rect.x0) + Math.abs(p.y - rect.y1);
+        return dTR <= dBL ? { x: rect.x0, y: rect.y1 } : { x: rect.x1, y: rect.y0 };
+    }
+    /** Hit-test the committed selection rect (wider catch radius for touch). */
+    function pointInCommitted(
+        p: { x: number; y: number },
+        rect: ScreenRect,
+        pointerType: string
+    ): boolean {
+        const pad = pointerType === 'touch' ? 10 : 4;
+        return (
+            p.x >= rect.x0 - pad &&
+            p.x <= rect.x1 + pad &&
+            p.y >= rect.y0 - pad &&
+            p.y <= rect.y1 + pad
+        );
+    }
+
+    /**
+     * Live preview: commit the current drag rect (throttled) so counts, globe
+     * culling, and the chip track the gesture. The mask path is render-time
+     * only — no worker re-init rides along. Focus clearing stays on release:
+     * unpinning mid-drag would fight the gesture.
+     */
+    function previewBrush(rect: ScreenRect): void {
+        const now = performance.now();
+        if (now - lastPreviewWall < 33) return;
+        lastPreviewWall = now;
+        const preview = brushFromCanvasRect(rect, { xKey, yKey, plot, xRange, yRange, xLog, yLog });
+        if (preview) trackerState.graphBrush = preview;
+    }
+
     function onPointerMove(event: PointerEvent): void {
+        if (resizeSelection) {
+            // Corner drag: the opposite corner stays anchored, the grabbed
+            // one follows the pointer (clamped to the plot). Shown live.
+            const p = canvasPoint(event);
+            const { l, t, w, h } = plot;
+            const x1 = Math.min(Math.max(p.x, l), l + w);
+            const y1 = Math.min(Math.max(p.y, t), t + h);
+            brushLive = normalizedRect(resizeAnchor.x, resizeAnchor.y, x1, y1);
+            previewBrush(brushLive);
+            return;
+        }
+        if (dragSelection) {
+            // Translate the committed rect with the pointer, clamped so it
+            // stays inside the plot. Shown through the live overlay.
+            const p = canvasPoint(event);
+            const { l, t, w, h } = plot;
+            const x0 = Math.min(Math.max(p.x - dragGrab.x, l), l + w - dragSize.w);
+            const y0 = Math.min(Math.max(p.y - dragGrab.y, t), t + h - dragSize.h);
+            brushLive = { x0, x1: x0 + dragSize.w, y0, y1: y0 + dragSize.h };
+            overSelection = true;
+            previewBrush(brushLive);
+            return;
+        }
         if (pressActive && !brushActive) {
             const p = canvasPoint(event);
             if (dragPassedThreshold(brushStart.x, brushStart.y, p.x, p.y)) {
@@ -551,11 +687,20 @@
         if (brushActive) {
             // Rect updates bypass the hover throttle so the overlay is fluid.
             brushLive = updateBrushRect(canvasPoint(event));
+            if (brushLive) previewBrush(brushLive);
             return;
         }
         const now = performance.now();
         if (now - lastMoveWall < 33) return;
         lastMoveWall = now;
+        // Move cursor over the committed selection (cheap boolean, no overlay churn).
+        const hov = brushOverlayRect;
+        const hp = hov ? canvasPoint(event) : null;
+        overSelection = hov !== null && hp !== null && pointInCommitted(hp, hov, event.pointerType);
+        resizeCursor =
+            hov !== null && hp !== null && !pressActive
+                ? hitResizeCorner(hp, hov, event.pointerType)
+                : null;
         const index = pick(event);
         if (index === null || !canvas) {
             hover = null;
@@ -588,14 +733,59 @@
         if (el.hasPointerCapture(event.pointerId)) el.releasePointerCapture(event.pointerId);
     }
 
+    /** Sub-threshold press → exactly the old click behavior (pin/unpin). */
+    function clickAt(event: PointerEvent): void {
+        pressActive = false;
+        const index = pick(event);
+        if (index !== null) trackerState.pinnedIndex = samples[index].index;
+        // Clicking empty space unpins, matching the globe's click behavior.
+        else trackerState.pinnedIndex = -1;
+    }
+
     function onPointerUp(event: PointerEvent): void {
         releaseBrushCapture(event);
+        if (resizeSelection || dragSelection) {
+            const wasResize = resizeSelection;
+            const rect = brushLive;
+            const up = canvasPoint(event);
+            resizeSelection = false;
+            dragSelection = false;
+            endBrushInteraction();
+            overSelection =
+                brushOverlayRect !== null &&
+                pointInCommitted(up, brushOverlayRect, event.pointerType);
+            resizeCursor = null;
+            // No real movement → plain click (dots inside the selection stay
+            // pinnable; empty taps still unpin).
+            if (!dragPassedThreshold(pressPoint.x, pressPoint.y, up.x, up.y)) {
+                clickAt(event);
+                return;
+            }
+            if (!rect) return;
+            const brush = brushFromCanvasRect(rect, {
+                xKey,
+                yKey,
+                plot,
+                xRange,
+                yRange,
+                xLog,
+                yLog
+            });
+            if (!brush) {
+                // Degenerate resize (corner dragged past the anchor into a
+                // hairline): keep the pre-gesture selection — resize is not a
+                // clear gesture.
+                if (wasResize && trackerState.graphBrush !== brushBeforeGesture) {
+                    trackerState.graphBrush = brushBeforeGesture;
+                }
+                return;
+            }
+            trackerState.graphBrush = brush;
+            if (brush) clearFocusOutsideBrush(brush);
+            return;
+        }
         if (!brushActive) {
-            // Sub-threshold press → exactly the old click behavior.
-            const index = pick(event);
-            if (index !== null) trackerState.pinnedIndex = samples[index].index;
-            // Clicking empty space unpins, matching the globe's click behavior.
-            else trackerState.pinnedIndex = -1;
+            clickAt(event);
             return;
         }
         // Released drag ≥ threshold → commit (or clear via a null brush from a
@@ -611,12 +801,20 @@
     function onPointerLeave(): void {
         hover = null;
         trackerState.hoveredIndex = -1;
+        overSelection = false;
+        resizeCursor = null;
     }
 
     function onPointerCancel(event: PointerEvent): void {
-        // Cancelled drag: abort without commit, keep today's state intact.
+        // Cancelled drag: abort without commit — roll back to the pre-gesture
+        // brush so live preview commits don't leak through the cancel.
         releaseBrushCapture(event);
+        resizeSelection = false;
+        dragSelection = false;
         endBrushInteraction();
+        if (trackerState.graphBrush !== brushBeforeGesture) {
+            trackerState.graphBrush = brushBeforeGesture;
+        }
     }
 
     function endBrushInteraction(): void {
@@ -1021,7 +1219,15 @@
                         bind:this={canvas}
                         role="img"
                         aria-label={`Orbital element scatter plot: ${xLabel} versus ${yLabel}, ${samples.length} satellites`}
-                        class="block h-full w-full cursor-crosshair touch-none"
+                        class="block h-full w-full touch-none"
+                        class:cursor-crosshair={(!overSelection || pressActive) &&
+                            !dragSelection &&
+                            !resizeSelection &&
+                            !resizeCursor}
+                        class:cursor-move={(overSelection && !resizeCursor && !pressActive) ||
+                            dragSelection}
+                        class:cursor-nwse-resize={resizeCursor === 'nwse'}
+                        class:cursor-nesw-resize={resizeCursor === 'nesw'}
                         onpointerdown={onPointerDown}
                         onpointermove={onPointerMove}
                         onpointerleave={onPointerLeave}
@@ -1139,7 +1345,7 @@
                         </div>
                     {/if}
 
-                    {#if brushOverlayRect && !brushActive}
+                    {#if brushOverlayRect && !brushActive && !dragSelection && !resizeSelection}
                         <div
                             class="pointer-events-none absolute z-10 border border-brand-text/70 bg-brand-text/10"
                             style:left="{brushOverlayRect.x0}px"
@@ -1151,7 +1357,7 @@
                                 type="button"
                                 aria-label="Clear selection"
                                 title="Clear selection"
-                                class="pointer-events-auto absolute -top-2 -right-2 flex h-4 w-4 items-center justify-center rounded-full border border-brand-text/50 bg-brand-bg text-[10px] leading-none text-brand-text/80 hover:bg-brand-secondary hover:text-brand-text"
+                                class="pointer-events-auto absolute -top-2 -left-2 flex h-4 w-4 items-center justify-center rounded-full border border-brand-text/50 bg-brand-bg text-[10px] leading-none text-brand-text/80 hover:bg-brand-secondary hover:text-brand-text"
                                 onclick={clearBrush}
                             >
                                 ✕

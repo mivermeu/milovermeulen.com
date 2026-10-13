@@ -78,8 +78,8 @@
 <Panel title="Filters">
     <div class="mb-2 text-[10px] text-brand-text">
         Showing <span class="font-mono text-brand-text-highlight">{visibleCount}</span>
-        of {trackerState.satellites.length}{#if selectionActive}{' '}
-            <span class="text-brand-text/60">in selection</span>{/if}
+        of {trackerState.satellites.length}{#if selectionActive}
+            <span class="text-brand-text/60">&nbsp;in selection</span>{/if}
     </div>
 
     <div class="relative mb-2">
