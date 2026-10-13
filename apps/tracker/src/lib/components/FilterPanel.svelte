@@ -11,6 +11,18 @@
 
     const MIN_CHARS = 2;
 
+    // Actually-visible count: the tree filter composed with the graph
+    // selection (brush mask), so the header tracks what both views show.
+    const visibleCount = $derived.by(() => {
+        const mask = trackerState.brushMask;
+        if (!mask) return trackerState.activeIndices.length;
+        const n = Math.min(mask.length, trackerState.activeIndices.length);
+        let count = 0;
+        for (let i = 0; i < n; i++) count += mask[i];
+        return count;
+    });
+    const selectionActive = $derived(trackerState.brushMask !== null);
+
     const visibleIds = $derived(
         trackerState.searchQuery.length >= MIN_CHARS && trackerState.tree
             ? findMatchingNodeIds(
@@ -65,10 +77,9 @@
 
 <Panel title="Filters">
     <div class="mb-2 text-[10px] text-brand-text">
-        Showing <span class="font-mono text-brand-text-highlight"
-            >{trackerState.activeIndices.length}</span
-        >
-        of {trackerState.satellites.length}
+        Showing <span class="font-mono text-brand-text-highlight">{visibleCount}</span>
+        of {trackerState.satellites.length}{#if selectionActive}
+            <span class="text-brand-text/60">&nbsp;in selection</span>{/if}
     </div>
 
     <div class="relative mb-2">

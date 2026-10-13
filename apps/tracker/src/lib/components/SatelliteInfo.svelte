@@ -13,13 +13,14 @@
     import { noradId } from '$lib/url-state';
     import Panel from './Panel.svelte';
     import { isFavorite, toggleFavorite } from '$lib/favorites';
+    import { SvelteMap } from 'svelte/reactivity';
 
     const DEG = 180 / Math.PI;
 
     // twoline2satrec cache per pinned satellite (TLE parse is pure for a given
     // line pair — no need to redo it every RAF tick). Keyed by TLE identity so
     // catalog reloads can't serve a stale record for a reused index.
-    const satrecCache = new Map<string, SatRec>();
+    const satrecCache = new SvelteMap<string, SatRec>();
     function cachedSatrec(sat: { line1: string; line2: string }): SatRec {
         const key = `${sat.line1}\n${sat.line2}`;
         let rec = satrecCache.get(key);
