@@ -48,6 +48,12 @@ type BuildOrbitsMessage = {
      * zero chain so per-sat metadata stays index-aligned.
      */
     onlyIndex: number | null;
+    /**
+     * Graph-selection cull flags indexed by worker slot (1 = visible). Culled
+     * satellites bake zero chains with no SGP4 cost; per-sat metadata stays
+     * index-aligned and the scene's per-frame cull covers membership glide.
+     */
+    cullMask?: Uint8Array | null;
 };
 type ModeMessage = { type: 'mode'; mode: ElementMode };
 type PassesMessage = {
@@ -152,7 +158,7 @@ function colorFor(rec: SatRec): number[] {
 async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
     const buildId = ++orbitBuildId;
     const bakeGeneration = catalogVersion;
-    const { requestId, epoch, frame, onlyIndex } = message;
+    const { requestId, epoch, frame, onlyIndex, cullMask } = message;
     // One flat vertex chain per satellite (two ν-continuous periods, refined
     // where chords get long) via the shared per-satellite chain builder in
     // $lib/orbitTrack — the same builder the scene uses for the highlight,
@@ -172,6 +178,14 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
 
     for (let i = 0; i < n; i++) {
         const sat = sats[i];
+        // Culled by the graph selection: zero chain, no SGP4 cost. The
+        // scene's per-frame cull covers membership glide between bakes.
+        if (cullMask && i < cullMask.length && !cullMask[i]) {
+            vertexCounts.push(0);
+            periods.push(0);
+            runs.push(0);
+            continue;
+        }
         // Focus-only bake: every other entry reports a zero chain so per-sat
         // metadata stays index-aligned with the full catalog.
         if (onlyIndex !== null && onlyIndex !== undefined && i !== onlyIndex) {
