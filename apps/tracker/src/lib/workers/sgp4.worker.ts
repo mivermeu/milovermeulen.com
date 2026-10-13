@@ -1,7 +1,12 @@
 import { twoline2satrec, propagate, eciToEcf, gstime } from 'satellite.js';
 import type { EciVec3, SatRec } from 'satellite.js';
 import type { ParsedSatellite } from '$lib/satellites/types';
-import { elementsFor, type ElementMode, type OrbitalElements } from '$lib/orbit';
+import {
+    elementsFor,
+    type ElementMode,
+    type OrbitalElements,
+    type PlottedElements
+} from '$lib/orbit';
 import { EARTH_MEAN_RADIUS_KM, semiMajorAxisKm, tleEpochMs } from '$lib/astro';
 import {
     capCandidates,
@@ -13,7 +18,7 @@ import {
     type PassVisibilityGate
 } from '$lib/passes';
 import { isSunlit, sunEciDirection } from '$lib/sun';
-import { buildOrbitChain } from '$lib/orbitTrack';
+import { buildOrbitChain, type OrbitChain } from '$lib/orbitTrack';
 import { sgp4Position } from '$lib/sgp4pos';
 
 const RAD2DEG = 180 / Math.PI;
@@ -182,7 +187,7 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
             continue; // catalog re-initialized mid-build (belt/braces)
         }
         const rec = sat.rec;
-        let chain = null;
+        let chain: OrbitChain | null;
         try {
             chain = buildOrbitChain({
                 rec,
@@ -481,7 +486,7 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
                 positions[i * 3 + 1] = ecf.y * scale;
                 positions[i * 3 + 2] = ecf.z * scale;
                 // Elements screen their own finiteness, so `null` rows stay NaN.
-                let el = null;
+                let el: PlottedElements | null;
                 try {
                     el = elementsFor(
                         elementMode,
