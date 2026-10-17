@@ -56,8 +56,8 @@ jobs:
         name: Test
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-            - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+            - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
               with:
                   bun-version: latest
 
@@ -67,7 +67,7 @@ jobs:
             # turbo's `test` task depends on `build`, and webneut's build compiles
             # oscillator-rs, so the Rust toolchain is needed even to run tests.
             - name: Cache Rust tools
-              uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+              uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
               with:
                   path: |
                       ~/.cargo/bin
@@ -82,7 +82,7 @@ jobs:
             - name: Workspace tests
               run: bun run test
 
-            - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+            - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
               with:
                   python-version: '3.12'
             - name: Backend tests
@@ -97,7 +97,7 @@ jobs:
             matrix: ${{ steps.plan.outputs.matrix }}
             has_apps: ${{ steps.plan.outputs.has_apps }}
         steps:
-            - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   fetch-depth: 0
             - id: plan
@@ -182,8 +182,8 @@ jobs:
             fail-fast: false
             matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
         steps:
-            - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-            - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+            - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
               with:
                   bun-version: latest
 
@@ -192,7 +192,7 @@ jobs:
 
             - name: Cache Rust tools
               if: matrix.wasm == 'true'
-              uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+              uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
               with:
                   path: |
                       ~/.cargo/bin
@@ -214,7 +214,7 @@ jobs:
               run: bun run build
 
             - name: Upload build artifact
-              uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
               with:
                   name: build-${{ matrix.app }}
                   path: apps/${{ matrix.app }}/build
@@ -252,7 +252,7 @@ jobs:
                   sudo apt-get update
                   sudo apt-get install -y --no-install-recommends lftp
 
-            - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+            - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
               with:
                   name: build-${{ matrix.app }}
                   path: build
