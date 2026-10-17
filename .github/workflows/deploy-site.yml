@@ -54,7 +54,7 @@ concurrency:
 jobs:
     test:
         name: Test
-        runs-on: ubuntu-latest
+        runs-on: ubuntu-26.04
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
             - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
@@ -92,7 +92,7 @@ jobs:
 
     plan:
         name: Plan
-        runs-on: ubuntu-latest
+        runs-on: ubuntu-26.04
         outputs:
             matrix: ${{ steps.plan.outputs.matrix }}
             has_apps: ${{ steps.plan.outputs.has_apps }}
@@ -177,7 +177,7 @@ jobs:
         name: Build ${{ matrix.app }}
         needs: [plan, test]
         if: ${{ needs.plan.outputs.has_apps == 'true' }}
-        runs-on: ubuntu-latest
+        runs-on: ubuntu-26.04
         strategy:
             fail-fast: false
             matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
@@ -224,7 +224,7 @@ jobs:
         name: Deploy ${{ matrix.app }}
         needs: [plan, build]
         if: ${{ needs.plan.outputs.has_apps == 'true' }}
-        runs-on: ubuntu-latest
+        runs-on: ubuntu-26.04
         environment: production
         strategy:
             fail-fast: false
