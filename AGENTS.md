@@ -151,6 +151,11 @@ correctness is asserted by `cargo test --lib` and the WASM smoke test (probabili
   slider (±30 days), orbit toggle, stats.
 - `src/lib/satellites/data/sample-tles.txt`: Bundled sample catalog (~90 satellites including
   Molniya and polar orbits).
+- `src/lib/passes.ts`: Pure pass finder (plane screen → period-scaled coarse stepping →
+  bisection/golden-section refine) exposed in the worker via the `findPasses` generator; the
+  `PassVisibilityGate` hook is reserved for the sun-model feature.
+- `src/lib/observer.svelte.ts`: Observer location state (geolocation on explicit user action, manual
+  lat/lon entry validated in `geo.ts`, localStorage persistence) feeding `PassesPanel`.
 
 Key design decisions:
 

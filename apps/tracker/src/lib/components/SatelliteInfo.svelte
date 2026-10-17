@@ -5,15 +5,34 @@
         gstime,
         eciToGeodetic,
         degreesLat,
-        degreesLong
+        degreesLong,
+        type SatRec
     } from 'satellite.js';
-    import { trackerState } from '$lib/state.svelte';
+    import { trackerState, renderEpochMs } from '$lib/state.svelte';
     import { epochAgeDays } from '$lib/satellites/tle';
     import { noradId } from '$lib/url-state';
     import Panel from './Panel.svelte';
     import { isFavorite, toggleFavorite } from '$lib/favorites';
+    import { SvelteMap } from 'svelte/reactivity';
 
     const DEG = 180 / Math.PI;
+
+    // twoline2satrec cache per pinned satellite (TLE parse is pure for a given
+    // line pair — no need to redo it every RAF tick). Keyed by TLE identity so
+    // catalog reloads can't serve a stale record for a reused index.
+    const satrecCache = new SvelteMap<string, SatRec>();
+    function cachedSatrec(sat: { line1: string; line2: string }): SatRec {
+        const key = `${sat.line1}\n${sat.line2}`;
+        let rec = satrecCache.get(key);
+        if (!rec) {
+            rec = twoline2satrec(sat.line1, sat.line2);
+            // Bound the cache: one live entry is the hot path; keep a small
+            // ring so pin-hopping doesn't grow it without bound.
+            if (satrecCache.size > 16) satrecCache.clear();
+            satrecCache.set(key, rec);
+        }
+        return rec;
+    }
 
     let pinnedIndex = $derived(trackerState.pinnedIndex);
     let hovered = $derived(trackerState.hovered);
@@ -30,9 +49,13 @@
     let now = $state(Date.now());
 
     $effect(() => {
+        // No pinned satellite → no per-frame work (the RAF loop stays parked).
+        if (pinnedIndex < 0) return;
         let raf: number;
         const tick = () => {
-            now = Date.now();
+            // The info panel renders the pinned satellite at the shared
+            // simulated epoch — the same instant the globe and graph show.
+            now = renderEpochMs();
             raf = requestAnimationFrame(tick);
         };
         raf = requestAnimationFrame(tick);
@@ -43,10 +66,11 @@
         if (!sat) return null;
         const _t = now;
         try {
-            const satrec = twoline2satrec(sat.line1, sat.line2);
+            const satrec = cachedSatrec(sat);
             const date = new Date(_t);
             const pv = propagate(satrec, date);
             if (!pv.position || typeof pv.position === 'boolean') return null;
+            if (!isFinite(pv.position.x + pv.position.y + pv.position.z)) return null;
 
             const gmst = gstime(date);
             const geo = eciToGeodetic(pv.position, gmst);
@@ -61,7 +85,10 @@
                 alt: geo.height,
                 speed:
                     pv.velocity && typeof pv.velocity !== 'boolean'
-                        ? Math.hypot(pv.velocity.x, pv.velocity.y, pv.velocity.z)
+                        ? (() => {
+                              const s = Math.hypot(pv.velocity.x, pv.velocity.y, pv.velocity.z);
+                              return Number.isFinite(s) ? s : null;
+                          })()
                         : null,
                 epochAgeDays: epochAgeDays(sat.line1, _t),
                 eccentricity: satrec.ecco,
@@ -118,7 +145,7 @@
                     {#if norad !== null}
                         <button
                             type="button"
-                            class="-mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded p-0 text-sm transition-opacity hover:opacity-80"
+                            class="-mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded border-0 p-0 text-sm transition-opacity hover:opacity-80"
                             class:text-amber-400={satFavorited}
                             class:text-brand-text={!satFavorited}
                             class:opacity-40={!satFavorited}
@@ -132,7 +159,7 @@
                     {/if}
                     <button
                         type="button"
-                        class="-mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded p-0 text-xs text-brand-text opacity-60 transition-opacity hover:opacity-100"
+                        class="-mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded border-0 p-0 text-xs text-brand-text opacity-60 transition-opacity hover:opacity-100"
                         onclick={() => (trackerState.pinnedIndex = -1)}
                         aria-label="Close"
                     >
@@ -248,6 +275,32 @@
                             : '—'}
                     </dd>
                 </div>
+            </dl>
+        </Panel>
+    </div>
+{:else if sat}
+    <!-- Propagation failed (decayed/invalid TLE): still identify the satellite
+        instead of hiding the panel entirely. -->
+    <div class="pointer-events-auto absolute top-1.5 left-1.5 z-30 w-64 md:top-4 md:left-4 md:w-72">
+        <Panel title={sat.name}>
+            {#snippet actions()}
+                <button
+                    type="button"
+                    class="-mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded border-0 p-0 text-xs text-brand-text opacity-60 transition-opacity hover:opacity-100"
+                    onclick={() => (trackerState.pinnedIndex = -1)}
+                    aria-label="Close"
+                >
+                    ✕
+                </button>
+            {/snippet}
+            <dl class="space-y-1.5 text-xs">
+                <div class="flex justify-between">
+                    <dt class="text-brand-text">NORAD ID</dt>
+                    <dd class="font-mono text-brand-text-highlight">
+                        {sat.noradId ?? '—'}
+                    </dd>
+                </div>
+                <p class="text-brand-text/70">Propagation unavailable for this object.</p>
             </dl>
         </Panel>
     </div>

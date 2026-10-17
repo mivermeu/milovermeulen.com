@@ -12,6 +12,16 @@
         "sourceMap": true,
         "strict": true,
         "types": ["bun"],
-        "moduleResolution": "bundler"
+        "moduleResolution": "bundler",
+        // Test-only: lets `bun test` resolve SvelteKit's `$app/environment`
+        // (Bun plugin hooks never fire for it — tsconfig-paths resolution
+        // preempts them). The `$lib/*` entry preserves the alias Bun already
+        // resolves (an explicit `paths` map replaces default handling).
+        // Real builds/tests via Vite/SvelteKit are unaffected: kit's own
+        // alias wins there, and the shim's type matches ambient.
+        "paths": {
+            "$app/environment": ["./tests/shims/app-environment.ts"],
+            "$lib/*": ["./src/lib/*"]
+        }
     }
 }

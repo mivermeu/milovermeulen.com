@@ -1,6 +1,7 @@
 <script lang="ts">
     import ControlPanel from '$lib/components/ControlPanel.svelte';
     import FilterPanel from '$lib/components/FilterPanel.svelte';
+    import PassesPanel from '$lib/components/PassesPanel.svelte';
     import SatelliteGraph from '$lib/components/SatelliteGraph.svelte';
     import SatelliteInfo from '$lib/components/SatelliteInfo.svelte';
     import SatelliteViewer from '$lib/components/SatelliteViewer.svelte';
@@ -9,12 +10,8 @@
     import { trackerState } from '$lib/state.svelte';
     import { initTrackerUrlSync } from '$lib/url-sync.svelte';
 
-    // Shareable URL state + favorites: applying the deep-link params needs the
-    // catalog AND the filter tree, so the sync waits for both. The returned
-    // effect-root dispose tears the whole feature down with the page.
     $effect(() => initTrackerUrlSync());
 
-    // Phones treat the drawer as a modal (backdrop, ✕ close, Escape, inert toggle).
     let isMobile = $state(false);
 
     $effect(() => {
@@ -25,19 +22,16 @@
         return () => mq.removeEventListener('change', update);
     });
 
+    let drawerOpen = $state({ filters: true, controls: true, passes: true });
+
     let wasOpen = false;
 
-    // Focus management for the mobile modal drawer: land on its close button
-    // when it OPENS (not on later breakpoint flips with the drawer already
-    // open); on close, return focus to the toggle (if focus dropped). Focus is
-    // deferred past the slide-in transition AND told not to scroll — focusing
-    // the off-screen drawer mid-slide otherwise scrolls the whole map
-    // container (visible as an entire-screen shift).
+    // Mobile modal focus: land on the toggle on open (deferred past the transition, no scroll), return on close.
     $effect(() => {
         if (typeof document === 'undefined') return;
         if (trackerState.panelsOpen && isMobile && !wasOpen) {
             const timer = setTimeout(() => {
-                document.getElementById('panels-close')?.focus({ preventScroll: true });
+                document.getElementById('panels-toggle')?.focus({ preventScroll: true });
             }, 350);
             return () => clearTimeout(timer);
         }
@@ -49,7 +43,6 @@
 
     function onKeydown(event: KeyboardEvent): void {
         if (event.key !== 'Escape' || !trackerState.panelsOpen) return;
-        // Don't steal Escape from the explorer modal or form fields.
         if (document.querySelector('[role="dialog"]')) return;
         const target = event.target as HTMLElement | null;
         if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
@@ -93,7 +86,6 @@
         </div>
         <SatelliteGraph />
         {#if trackerState.panelsOpen}
-            <!-- Mobile: the drawer is a modal overlay — tap anywhere outside to close. -->
             <button
                 type="button"
                 aria-label="Hide panels"
@@ -105,18 +97,19 @@
         <button
             type="button"
             id="panels-toggle"
-            inert={isMobile && trackerState.panelsOpen}
-            class="pointer-events-auto absolute top-1.5 z-30 flex aspect-square h-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-brand-secondary bg-brand-secondary/85 p-1 shadow-lg backdrop-blur-sm transition-all duration-300 hover:bg-white/15 md:top-3 {trackerState.panelsOpen
-                ? 'max-md:right-1.5 max-md:opacity-0 md:right-[calc(20rem+1.25rem)]'
-                : 'right-1.5 md:right-3'}"
+            aria-label={trackerState.panelsOpen ? 'Hide panels' : 'Show panels'}
             onclick={() => (trackerState.panelsOpen = !trackerState.panelsOpen)}
-            aria-label={trackerState.panelsOpen ? 'Minimize panels' : 'Show panels'}
+            class="pointer-events-auto absolute top-1.5 right-1.5 z-30 flex aspect-square h-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-brand-secondary bg-brand-secondary/85 p-1 text-brand-text shadow-lg outline-hidden backdrop-blur-sm transition-all duration-300 hover:bg-white/15 focus-visible:bg-white/15 md:top-3 {trackerState.panelsOpen
+                ? 'md:right-[calc(20rem+0.75rem)]'
+                : 'md:right-3'}"
         >
             <svg
-                class="h-full w-full text-brand-text transition-transform duration-300"
-                class:rotate-180={!trackerState.panelsOpen}
+                class="h-full w-full transition-transform duration-300 {trackerState.panelsOpen
+                    ? ''
+                    : 'rotate-180'}"
                 viewBox="0 0 20 20"
                 fill="currentColor"
+                aria-hidden="true"
             >
                 <path
                     fill-rule="evenodd"
@@ -128,15 +121,31 @@
 
         <div
             inert={!trackerState.panelsOpen}
-            class="pointer-events-none absolute top-1.5 right-1.5 bottom-1.5 z-20 flex w-80 flex-col gap-1.5 transition-transform duration-300 md:top-3 md:right-3 md:bottom-3 md:gap-3 {trackerState.panelsOpen
+            class="absolute top-0 right-0 bottom-0 z-20 flex w-80 flex-col border-l border-brand-secondary bg-brand-bg transition-transform duration-300 max-md:overflow-y-auto {trackerState.panelsOpen
                 ? 'translate-x-0'
-                : 'max-md:translate-x-[calc(100%+0.375rem)] md:translate-x-[calc(100%+0.75rem)]'}"
+                : 'translate-x-full'}"
         >
-            <div class="shrink-0">
-                <ControlPanel />
-            </div>
-            <div class="flex min-h-0 flex-col">
-                <FilterPanel />
+            <div
+                class="flex min-h-0 flex-1 flex-col divide-y divide-brand-secondary md:overflow-hidden"
+            >
+                <div class="shrink-0">
+                    <ControlPanel
+                        open={drawerOpen.controls}
+                        onToggle={() => (drawerOpen.controls = !drawerOpen.controls)}
+                    />
+                </div>
+                <div class="flex min-h-0 shrink-0 flex-col {drawerOpen.filters ? 'md:flex-1' : ''}">
+                    <FilterPanel
+                        open={drawerOpen.filters}
+                        onToggle={() => (drawerOpen.filters = !drawerOpen.filters)}
+                    />
+                </div>
+                <div class="flex min-h-0 shrink-0 flex-col {drawerOpen.passes ? 'md:flex-1' : ''}">
+                    <PassesPanel
+                        open={drawerOpen.passes}
+                        onToggle={() => (drawerOpen.passes = !drawerOpen.passes)}
+                    />
+                </div>
             </div>
         </div>
     </div>

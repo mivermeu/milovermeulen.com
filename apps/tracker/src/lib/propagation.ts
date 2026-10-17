@@ -1,7 +1,31 @@
 import type { ParsedSatellite } from '$lib/satellites/types';
+import { nextPropagateEpoch } from './simclock';
+import { trackerState } from './state.svelte';
 import type { ElementMode } from './orbit';
+import type { ObserverLocation, PassRow } from './passes';
 
 export type { ElementMode };
+
+/** Pass search over the worker's currently loaded (tree-filtered) set. */
+export interface PassesRequest {
+    requestId: number;
+    observer: ObserverLocation;
+    startMs: number;
+    endMs: number;
+    minElDeg?: number;
+    maxPasses?: number;
+    /** When the active set is larger, only this many satellites (shortest period first) are searched. */
+    maxSats?: number;
+    /** Original-catalog index per satellite in last-`init` order, for result mapping. */
+    originalIndices: number[];
+}
+
+/** Result cap bookkeeping surfaced as a "limited to N" note. */
+export interface PassCapInfo {
+    active: number;
+    searched: number;
+    capped: boolean;
+}
 
 export interface WorkerResponse {
     type: string;
@@ -10,20 +34,25 @@ export interface WorkerResponse {
     epoch?: number;
     /** Worker-side catalog version; bumped on every init so views can drop stale snapshots. */
     generation?: number;
+    /** Data-regime version (init/mode switch); an older revision must snap, not blend. */
+    revision?: number;
     colors?: Float32Array;
     positions?: Float32Array;
     elements?: Float32Array;
     message?: string;
     ranges?: number[];
+    passes?: PassRow[];
+    partial?: boolean;
+    capInfo?: PassCapInfo;
+    periodMs?: number;
+    vertexTimes?: Float32Array;
+    periods?: number[];
+    vertexCounts?: number[];
+    /** Flat SGP4-failure run layout per satellite: [nRuns, vertsRun1, …]. */
+    runs?: Int32Array;
 }
 
-/**
- * Blend the `prev -> next` snapshots into `current` (`stride` floats per item).
- * Channels named in `angleOffsets` are degrees wrapped to [0, 360), so they
- * blend along the shortest arc — a 359°→0° wrap never drags a point halfway
- * across the chart. A NaN endpoint means "unknown" (a failed propagation) and
- * is replaced by the other endpoint rather than poisoning the blend.
- */
+/** Blend `prev -> next` into `current`; angle channels wrap to the shortest arc, NaN yields to the other endpoint. */
 export function blendInto(
     prev: Float32Array,
     next: Float32Array,
@@ -49,30 +78,26 @@ export function blendInto(
 
 type Listener = (message: WorkerResponse) => void;
 
-// Position refresh scales with the propagated count: small filters stay snappy,
-// while large catalogs slow the interval to leave the worker headroom. Budget
-// ~100k propagated satellites/sec, clamped to a sane range.
+// Position refresh scales with propagated count (~100k sats/sec), clamped to a sane range.
 const MIN_CADENCE_MS = 120;
 const MAX_CADENCE_MS = 600;
 const THROUGHPUT_PER_MS = 100;
 const TICK_MS = 30;
 
-/**
- * A single shared SGP4 worker, driven by this service. It propagates the catalog
- * on a count-scaled cadence, emitting ECF positions (globe) and the argument of
- * latitude (graph) from one pass — so no view propagates on the main thread and
- * the service is independent of any component's lifecycle. The worker lives for
- * the app's lifetime; components subscribe to its messages.
- */
+/** Shared SGP4 worker: propagates on a count-scaled cadence so no view works the main thread. Lives for the app lifetime. */
 class PropagationService {
     private worker: Worker | undefined;
     private readonly listeners = new Set<Listener>();
     private count = 0;
-    private cadenceMs = MIN_CADENCE_MS;
+    /** Current snapshot cadence (wall ms); feeds the simclock advance math at call sites. */
+    cadenceMs = MIN_CADENCE_MS;
     private timer: ReturnType<typeof setInterval> | undefined;
     private pending = false;
     private lastRequestWall = 0;
     private requestSeq = 0;
+    /** Regime counter; a user scrub is a regime change that must snap, not blend. */
+    private revision = 0;
+    private lastSeenScrubSeq = 0;
 
     private ensure(): Worker | undefined {
         if (typeof Worker === 'undefined') return undefined;
@@ -80,8 +105,6 @@ class PropagationService {
             this.worker = new Worker(new URL('./workers/sgp4.worker.ts', import.meta.url), {
                 type: 'module'
             });
-            // Hook visibility only after a worker actually exists (constructor
-            // can throw) so retries never stack listeners.
             document.addEventListener('visibilitychange', this.onVisibility);
             this.worker.onmessage = (event: MessageEvent<WorkerResponse>) =>
                 this.handle(event.data);
@@ -106,6 +129,8 @@ class PropagationService {
             else this.stopLoop();
         } else if (message.type === 'positions' && message.positions && message.elements) {
             this.pending = false;
+            // Anchor cadence on receipt so the worker stays single-flight; the watchdog only covers a lost response.
+            this.lastRequestWall = performance.now();
         }
         this.emit(message);
     }
@@ -139,21 +164,27 @@ class PropagationService {
             this.lastRequestWall = now;
             this.pending = true;
             this.requestSeq++;
+            if (trackerState.simScrubSeq !== this.lastSeenScrubSeq) {
+                this.lastSeenScrubSeq = trackerState.simScrubSeq;
+                this.revision++;
+            }
             this.worker?.postMessage({
                 type: 'propagate',
-                epoch: Math.round(Date.now() + this.cadenceMs),
-                requestId: this.requestSeq
+                epoch: nextPropagateEpoch(
+                    trackerState.simEpochMs,
+                    this.cadenceMs * trackerState.simSpeed
+                ),
+                requestId: this.requestSeq,
+                revision: this.revision
             });
         }
     }
 
     subscribe(listener: Listener): () => void {
         this.listeners.add(listener);
-        // Wake the propagation loop back up for the first (re)subscriber.
         if (this.listeners.size === 1 && this.count > 0) this.startLoop();
         return () => {
             this.listeners.delete(listener);
-            // No viewers — let the worker idle until someone listens again.
             if (this.listeners.size === 0) {
                 this.pending = false;
                 this.stopLoop();
@@ -162,6 +193,7 @@ class PropagationService {
     }
 
     init(satellites: ParsedSatellite[], scale: number, mode: ElementMode): void {
+        this.revision++;
         this.ensure()?.postMessage({
             type: 'init',
             satellites: satellites.map(({ name, line1, line2 }) => ({ name, line1, line2 })),
@@ -172,16 +204,40 @@ class PropagationService {
 
     /** Switch which orbital-element set the worker emits. */
     setMode(mode: ElementMode): void {
+        this.revision++;
         this.ensure()?.postMessage({ type: 'mode', mode });
     }
 
-    buildOrbits(epoch: number, requestId: number, frame: 'ecf' | 'eci'): void {
-        this.ensure()?.postMessage({ type: 'buildOrbits', epoch, requestId, frame });
+    buildOrbits(
+        epoch: number,
+        requestId: number,
+        frame: 'ecf' | 'eci',
+        onlyIndex: number | null,
+        cullMask: Uint8Array | null = null
+    ): void {
+        this.ensure()?.postMessage({
+            type: 'buildOrbits',
+            epoch,
+            requestId,
+            frame,
+            onlyIndex,
+            cullMask
+        });
     }
 
     /** Nadir subpoint polyline for one satellite (worker index), one period into the future. */
     buildGroundTrack(epoch: number, requestId: number, index: number): void {
         this.ensure()?.postMessage({ type: 'buildGroundTrack', epoch, requestId, index });
+    }
+
+    /** Search passes over the worker's loaded catalog; results arrive as `type: 'passes'`. */
+    findPasses(request: PassesRequest): void {
+        this.ensure()?.postMessage({
+            type: 'passes',
+            ...request,
+            // Snapshot the live `$state` proxy: structured-clone rejects proxies with DataCloneError.
+            originalIndices: [...request.originalIndices]
+        });
     }
 }
 

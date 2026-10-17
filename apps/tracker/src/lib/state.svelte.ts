@@ -11,9 +11,34 @@ import {
     revealLeafNode,
     activateLeafNode
 } from '$lib/tree';
+import type { GraphBrush } from '$lib/graphBrush';
 import type { ParamKey } from '$lib/graph-params';
+import {
+    type SimSpeed,
+    clampSimEpoch,
+    DEFAULT_SIM_SPEED,
+    REALTIME_SNAP_MS,
+    stepSimClock
+} from '$lib/simclock';
 
 export type { TreeNode, TriState } from '$lib/tree';
+
+const SIM_CLOCK_TICK_MS = 50;
+
+// Render anchor for per-frame interpolation between ticks; re-anchored on every epoch assign.
+let renderAnchor: { epoch: number; wall: number } = { epoch: Date.now(), wall: Date.now() };
+
+function assignSimEpoch(epochMs: number, wallMs: number = Date.now()): void {
+    trackerState.simEpochMs = epochMs;
+    renderAnchor = { epoch: epochMs, wall: wallMs };
+}
+
+/** Per-frame display epoch: ticked epoch extrapolated by wall time × speed (capped at two ticks). */
+export function renderEpochMs(): number {
+    if (!trackerState.simPlaying) return trackerState.simEpochMs;
+    const elapsed = Math.max(0, Math.min(Date.now() - renderAnchor.wall, 2 * SIM_CLOCK_TICK_MS));
+    return renderAnchor.epoch + elapsed * trackerState.simSpeed;
+}
 
 export interface HoverInfo {
     originalIndex: number;
@@ -22,12 +47,7 @@ export interface HoverInfo {
     screenY: number;
 }
 
-/**
- * Initial values for the URL-mirrored state fields — the single source of
- * truth for both `trackerState`'s defaults and the URL encoder's defaults
- * (`url-state.ts` types its DEFAULT_URL_PARAMS against these `as const`
- * literals, so a change here breaks compilation there instead of drifting).
- */
+/** Defaults for URL-mirrored fields (`url-state.ts` types against these, so changes break compilation there). */
 export const INITIAL_URL_PARAMS = {
     mode: 'smoothed',
     frame: 'ecf',
@@ -41,31 +61,33 @@ export const trackerState = $state({
     satellites: [] as ParsedSatellite[],
     showOrbits: true,
     showEquatorial: false,
-    // Pinned satellite's nadir ground track polyline (one orbital period into the future, ECF).
     showGroundTrack: true,
     dataSource: 'loading' as DataSource,
     staleHidden: 0,
     error: '',
-    // Casts widen the literal initial values from INITIAL_URL_PARAMS to the
-    // full unions these fields hold at runtime.
     referenceFrame: INITIAL_URL_PARAMS.frame as 'ecf' | 'eci',
-    // Which orbital-element set the graph plots and the explorer draws.
     elementMode: INITIAL_URL_PARAMS.mode as 'epoch' | 'smoothed' | 'instantaneous',
+    // One shared epoch drives globe, graph, and info panel. `simScrubSeq` counts
+    // clock jumps so propagation can snap views onto post-jump snapshots.
+    simEpochMs: Date.now(),
+    simPlaying: true,
+    simSpeed: DEFAULT_SIM_SPEED,
+    // Mode, not derived arithmetic, so the UI never flickers.
+    simRealtime: true,
+    simScrubSeq: 0,
     hovered: null as HoverInfo | null,
-    // Satellite under the pointer in either view (globe or graph), or -1.
     hoveredIndex: -1,
     pinnedIndex: -1,
-    // Graph axis keys — component-local before, but shared state so URL deep
-    // links (`gx`/`gy`) can seed and mirror them.
     graphXKey: INITIAL_URL_PARAMS.graphXKey as ParamKey,
     graphYKey: INITIAL_URL_PARAMS.graphYKey as ParamKey,
-    // Favorited satellites by NORAD catalog number (persisted to localStorage).
     favorites: [] as number[],
-    // Right-hand panels drawer; open by default on desktop-sized viewports.
     panelsOpen: typeof matchMedia !== 'undefined' && matchMedia('(min-width: 768px)').matches,
     tree: null as TreeNode | null,
     activeIndices: [] as number[],
-    searchQuery: ''
+    searchQuery: '',
+    graphBrush: null as GraphBrush | null,
+    // Flags over the worker's TREE-filtered index space (1 = in brush), in filtered slot order.
+    brushMask: null as Uint8Array | null
 });
 
 export function toggleNode(id: string): void {
@@ -92,12 +114,7 @@ export function initTree(satellites: ParsedSatellite[]): void {
     trackerState.activeIndices = active;
 }
 
-/**
- * Pin a satellite by catalog index and, through the filter tree (still the
- * source of truth for visibility — no rows are injected), activate it if the
- * filter had it hidden, then reveal its row. Used by favorites and URL `sat`
- * deep links. Returns true if the satellite exists.
- */
+/** Pin by catalog index, activating/revealing its filter-tree row. Returns true if it exists. */
 export function pinSatellite(index: number): boolean {
     if (!trackerState.satellites[index]) return false;
     trackerState.pinnedIndex = index;
@@ -112,7 +129,81 @@ export function pinSatellite(index: number): boolean {
     return true;
 }
 
+/** Reset to exactly real time: offset 0, playing, 1×. */
+export function resetSimClock(): void {
+    const now = Date.now();
+    assignSimEpoch(now, now);
+    trackerState.simRealtime = true;
+    trackerState.simPlaying = true;
+    trackerState.simSpeed = DEFAULT_SIM_SPEED;
+    // NOW is a clock jump too — bump the revision so views snap instead of blending.
+    trackerState.simScrubSeq++;
+}
+
+/** Pause freezes the epoch; paused-at-now leaves real-time mode since the live feed marches on. */
+export function pauseSimClock(): void {
+    trackerState.simRealtime = false;
+    trackerState.simPlaying = false;
+}
+
+/** Resume from the frozen epoch, re-joining real time when within REALTIME_SNAP_MS of now. */
+export function resumeSimClock(): void {
+    const now = Date.now();
+    const drift = now - trackerState.simEpochMs;
+    if (Math.abs(drift) <= REALTIME_SNAP_MS) {
+        assignSimEpoch(now, now);
+        trackerState.simRealtime = true;
+        trackerState.simSpeed = DEFAULT_SIM_SPEED;
+    } else {
+        assignSimEpoch(trackerState.simEpochMs, now);
+        trackerState.simRealtime = false;
+    }
+    trackerState.simScrubSeq++;
+    trackerState.simPlaying = true;
+}
+
+/** Set sim speed; an unchanged 1× selection is a no-op so it can't kick a live clock out of real time. */
+export function setSimSpeed(speed: SimSpeed): void {
+    if (trackerState.simSpeed === speed) return;
+    // Re-anchor at the displayed instant so elapsed wall time isn't re-priced at the new speed.
+    assignSimEpoch(renderEpochMs(), Date.now());
+    trackerState.simRealtime = false;
+    trackerState.simSpeed = speed;
+}
+
+/** Jump the clock via the scrub slider; near-zero offsets re-engage the live feed. Bumps simScrubSeq so views snap. */
+export function setSimOffsetMs(offsetMs: number): void {
+    if (!Number.isFinite(offsetMs)) return;
+    const now = Date.now();
+    if (Math.abs(offsetMs) <= REALTIME_SNAP_MS && trackerState.simPlaying) {
+        assignSimEpoch(now, now);
+        trackerState.simRealtime = true;
+        trackerState.simSpeed = DEFAULT_SIM_SPEED;
+    } else {
+        assignSimEpoch(clampSimEpoch(now + offsetMs, now), now);
+        trackerState.simRealtime = false;
+    }
+    trackerState.simScrubSeq++;
+}
+
 if (browser) {
+    // Central simulated clock: one interval advances the shared epoch; real-time mode pins it to the wall clock.
+    let lastTickWall = Date.now();
+    setInterval(() => {
+        const now = Date.now();
+        const elapsedRealMs = Math.max(0, Math.min(now - lastTickWall, 2 * SIM_CLOCK_TICK_MS));
+        lastTickWall = now;
+        if (!trackerState.simPlaying) return;
+        if (trackerState.simRealtime) {
+            assignSimEpoch(now, now);
+            return;
+        }
+        assignSimEpoch(
+            stepSimClock(trackerState.simEpochMs, elapsedRealMs, trackerState.simSpeed, now),
+            now
+        );
+    }, SIM_CLOCK_TICK_MS);
+
     loadCatalog().then(({ satellites, source, error, staleHidden }) => {
         trackerState.satellites = satellites;
         trackerState.dataSource = source;

@@ -1,13 +1,28 @@
 import { twoline2satrec, propagate, eciToEcf, gstime } from 'satellite.js';
 import type { EciVec3, SatRec } from 'satellite.js';
 import type { ParsedSatellite } from '$lib/satellites/types';
-import { elementsFor, type ElementMode, type OrbitalElements } from '$lib/orbit';
+import {
+    elementsFor,
+    type ElementMode,
+    type OrbitalElements,
+    type PlottedElements
+} from '$lib/orbit';
+import { EARTH_MEAN_RADIUS_KM, semiMajorAxisKm, tleEpochMs } from '$lib/astro';
+import {
+    capCandidates,
+    exceedsPassAltitude,
+    findPasses,
+    planeScreensOut,
+    PASS_SEARCH_MAX_SATS,
+    type PassCandidate,
+    type PassSearchResult,
+    type PassVisibilityGate
+} from '$lib/passes';
 import { isSunlit, sunEciDirection } from '$lib/sun';
+import { buildOrbitChain, type OrbitChain } from '$lib/orbitTrack';
+import { sgp4Position } from '$lib/sgp4pos';
 
-const EARTH_RADIUS_KM = 6371;
-const MU_KM3_S2 = 398600.4418;
 const RAD2DEG = 180 / Math.PI;
-const JULIAN_UNIX_EPOCH = 2440587.5;
 
 type Frame = 'ecf' | 'eci';
 type InitMessage = {
@@ -16,14 +31,36 @@ type InitMessage = {
     scale: number;
     mode: ElementMode;
 };
-type PropagateMessage = { type: 'propagate'; epoch: number; requestId: number };
+type PropagateMessage = {
+    type: 'propagate';
+    epoch: number;
+    requestId: number;
+    /** Echoed on the positions response so views can detect regime changes. */
+    revision?: number;
+};
 type BuildOrbitsMessage = {
     type: 'buildOrbits';
     epoch: number;
     requestId: number;
     frame: Frame;
+    /** When set, bake only this satellite; others report zero chains so metadata stays index-aligned. */
+    onlyIndex: number | null;
+    /** Graph-selection cull flags per worker slot (1 = visible); culled sats bake zero chains. */
+    cullMask?: Uint8Array | null;
 };
 type ModeMessage = { type: 'mode'; mode: ElementMode };
+type PassesMessage = {
+    type: 'passes';
+    requestId: number;
+    observer: { latDeg: number; lonDeg: number };
+    startMs: number;
+    endMs: number;
+    minElDeg?: number;
+    maxPasses?: number;
+    maxSats?: number;
+    /** Original-catalog index per satellite in last-`init` order (maps via `srcIndex`). */
+    originalIndices: number[];
+};
 type BuildGroundTrackMessage = {
     type: 'buildGroundTrack';
     epoch: number;
@@ -32,48 +69,23 @@ type BuildGroundTrackMessage = {
 };
 
 type WorkerMessage =
-    InitMessage | PropagateMessage | BuildOrbitsMessage | BuildGroundTrackMessage | ModeMessage;
+    | InitMessage
+    | PropagateMessage
+    | BuildOrbitsMessage
+    | BuildGroundTrackMessage
+    | ModeMessage
+    | PassesMessage;
 
 interface PreparedSatellite {
     rec: SatRec;
     epochEl: OrbitalElements;
     nRadPerSec: number;
     epochMs: number;
+    name: string;
+    srcIndex: number;
 }
 
 const TAU = Math.PI * 2;
-// Per-sat adaptive sampling; uniform-in-nu clusters near perigee.
-const BASE_POINTS = 64;
-const ECC_CUBIC_POINTS = 640;
-const MAX_GRID_POINTS = 600;
-const MAX_PTS_PER_SAT = 16384;
-const MAX_SUBDIVIDE_SWEEPS = 20;
-const MAX_CHORD_ECI = 1.0;
-const MAX_CHORD_ECF = 0.4;
-
-type Vec3 = [number, number, number];
-
-// Mean anomaly of an ECI position (NaN for e >= 1). J2-drifted elements add
-// <1° error — fine for sample placement (only decides where points cluster,
-// not their values).
-function meanAnomaly(rec: SatRec, p: Vec3): number {
-    const e = rec.ecco;
-    if (!(e < 1)) return NaN;
-    const cO = Math.cos(rec.nodeo);
-    const sO = Math.sin(rec.nodeo);
-    const ci = Math.cos(rec.inclo);
-    const si = Math.sin(rec.inclo);
-    const cw = Math.cos(rec.argpo);
-    const sw = Math.sin(rec.argpo);
-    const nu = Math.atan2(
-        p[0] * (-cO * sw - sO * cw * ci) + p[1] * (-sO * sw + cO * cw * ci) + p[2] * (cw * si),
-        p[0] * (cO * cw - sO * sw * ci) + p[1] * (sO * cw + cO * sw * ci) + p[2] * (sw * si)
-    );
-    const f = Math.sqrt((1 - e) / (1 + e));
-    let E = 2 * Math.atan(f * Math.tan(nu / 2));
-    if (nu < 0) E += TAU;
-    return E - e * Math.sin(E);
-}
 
 const LEO_COLOR = [0.50588, 0.54902, 0.97255]; // #818cf8
 const MEO_COLOR = [1.0, 0.41176, 0.0]; // #ff6900
@@ -87,20 +99,20 @@ let orbitBuildId = 0;
 // Bumped on every init; stamped onto responses so views can drop stale snapshots.
 let catalogVersion = 0;
 let elementMode: ElementMode = 'smoothed';
-// Per-sat base class colors (LEO/MEO/GEO/ECC); the ready colors buffer is
-// transferred away, so keep a copy to re-scale per propagate tick.
+// Base colors kept (the ready buffer is transferred away) to re-scale per tick.
 let baseColors = new Float32Array(0);
-// Last announced sunlit status per satellite: colors ride the positions
-// message only when an eclipse boundary is crossed, not every tick.
+// Last sunlit status per sat; colors ride positions only on eclipse-boundary crossings.
 let lastSunlit: Uint8Array | null = null;
-// Multiplicative dimming of eclipsed dots — darker but hue-preserving so the
-// altitude color coding stays readable.
 const ECLIPSE_DIM = 0.35;
 
+// HOOK POINT (feat/sunlight-globe): assign a PassVisibilityGate here to restrict passes to optically visible ones.
+const passVisibilityGate: PassVisibilityGate | undefined = undefined;
+
+// Search slicing: each generator heartbeat (~400 coarse samples) yields so live ticks keep flowing.
+const PASS_SEARCH_BUDGET_MS = 4000;
+
 function altitudeKm(rec: SatRec): number {
-    const meanMotionRadPerSec = rec.no / 60;
-    const semiMajorAxis = Math.cbrt(MU_KM3_S2 / (meanMotionRadPerSec * meanMotionRadPerSec));
-    return semiMajorAxis - EARTH_RADIUS_KM;
+    return semiMajorAxisKm(rec) - EARTH_MEAN_RADIUS_KM;
 }
 
 function colorFor(rec: SatRec): number[] {
@@ -111,238 +123,220 @@ function colorFor(rec: SatRec): number[] {
     return GEO_COLOR;
 }
 
-// SGP4 position in ECI km at a unix ms instant (null on error/non-finite).
-function sgp4Position(rec: SatRec, tMs: number): Vec3 | null {
-    const state = propagate(rec, new Date(tMs));
-    if (state.position === false || state.position === undefined) return null;
-    const p = state.position as EciVec3<number>;
-    if (!isFinite(p.x + p.y + p.z)) return null;
-    return [p.x, p.y, p.z];
-}
-
-// The 7 plotted quantities now come from `$lib/orbit`'s `elementsFor` — the
-// finiteness screen there covers every element mode, so NaN rows never leave
-// the worker.
-
 async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
     const buildId = ++orbitBuildId;
-    const { requestId, epoch, frame } = message;
-    const total = satellites.length;
-    const inertial = frame === 'eci';
-    const chordLimit2 = (inertial ? MAX_CHORD_ECI : MAX_CHORD_ECF) ** 2;
-    const out: number[] = [];
-    const ranges: number[] = [];
-    const CHUNK = 100;
+    const bakeGeneration = catalogVersion;
+    const { requestId, epoch, frame, onlyIndex, cullMask } = message;
+    // One flat chain per satellite via the shared builder ($lib/orbitTrack, also used by the scene highlight).
+    const allVerts: number[] = [];
+    const allTimes: number[] = [];
+    const periods: number[] = [];
+    const vertexCounts: number[] = [];
+    const runs: number[] = [];
+    const CHUNK = 20;
     const epochMs = epoch;
+    // Snapshot up front: a mid-build re-init replaces `satellites`, so keep arrays index-aligned.
+    const sats = satellites;
+    const n = sats.length;
 
-    // For ECI orbits: compute in ECI, then rotate all points by a single
-    // -GMST(epoch) to align with ECF satellite dots without runtime rotation.
-    const cosR = inertial ? Math.cos(-gstime(new Date(epochMs))) : 0;
-    const sinR = inertial ? Math.sin(-gstime(new Date(epochMs))) : 0;
-
-    const project = (p: Vec3, t: number): Vec3 => {
-        if (frame === 'ecf') {
-            const ecf = eciToEcf(
-                { x: p[0], y: p[1], z: p[2] } as EciVec3<number>,
-                gstime(new Date(t))
-            );
-            return [ecf.x * scale, ecf.y * scale, ecf.z * scale];
-        }
-        const x = p[0] * scale;
-        const y = p[1] * scale;
-        return [x * cosR - y * sinR, x * sinR + y * cosR, p[2] * scale];
-    };
-    const sgp4At = (rec: SatRec, t: number): Vec3 | null => sgp4Position(rec, t);
-    // Split long chords at SGP4 mid-times until a full sweep splits nothing.
-    const refine = (rec: SatRec, t: number[], p: Vec3[], maxPts: number): [number[], Vec3[]] => {
-        let sweep = 0;
-        let split = true;
-        let T = t;
-        let P = p;
-        while (split && sweep < MAX_SUBDIVIDE_SWEEPS && T.length < maxPts) {
-            sweep++;
-            split = false;
-            const oT: number[] = [T[0]];
-            const oP: Vec3[] = [P[0]];
-            for (let j = 0; j + 1 < T.length && oT.length < maxPts; j++) {
-                const a = P[j];
-                const b = P[j + 1];
-                const dx = a[0] - b[0];
-                const dy = a[1] - b[1];
-                const dz = a[2] - b[2];
-                const tm = (T[j] + T[j + 1]) / 2;
-                if (dx * dx + dy * dy + dz * dz > chordLimit2) {
-                    const se = sgp4At(rec, tm);
-                    if (se) {
-                        oT.push(tm);
-                        oP.push(project(se, tm));
-                        split = true;
-                    }
-                }
-                oT.push(T[j + 1]);
-                oP.push(P[j + 1]);
-            }
-            T = oT;
-            P = oP;
-        }
-        return [T, P];
-    };
-
-    for (let i = 0; i < total; i++) {
-        const rec = satellites[i].rec;
-        const rangeStart = out.length;
-        const ecc = rec.ecco;
-        // Hyperbolic/parabolic elements (e.g. translunar coast TLEs) have no
-        // closed period to sample — skip orbit drawing rather than garbage.
-        if (!(ecc < 1)) {
-            ranges.push(rangeStart, rangeStart);
+    for (let i = 0; i < n; i++) {
+        const sat = sats[i];
+        if (cullMask && i < cullMask.length && !cullMask[i]) {
+            vertexCounts.push(0);
+            periods.push(0);
+            runs.push(0);
             continue;
         }
-        const count = Math.min(
-            MAX_GRID_POINTS,
-            BASE_POINTS + Math.round(ECC_CUBIC_POINTS * ecc ** 3)
-        );
-        const meanMotionRadPerMs = rec.no / 60000;
-        if (!(meanMotionRadPerMs > 0)) {
-            ranges.push(rangeStart, rangeStart);
+        if (onlyIndex !== null && onlyIndex !== undefined && i !== onlyIndex) {
+            vertexCounts.push(0);
+            periods.push(0);
+            runs.push(0);
             continue;
         }
-        const periodMs = TAU / meanMotionRadPerMs;
-        const eFactor = Math.sqrt((1 - ecc) / (1 + ecc));
-        // Live phase: solve the current mean anomaly from SGP4 at epoch.
-        // rec.mo is stale (TLE epoch, days old) and would rotate the whole
-        // density pattern away from the true perigee on eccentric orbits.
-        const nowPos = sgp4At(rec, epochMs);
-        const m0 = nowPos ? meanAnomaly(rec, nowPos) : rec.mo;
-        // Uniform-in-nu grid over one period, rotated so node 0 is exactly
-        // the satellite's current position (arcs must start at the sat).
-        const dts: number[] = new Array(count);
-        for (let k = 0; k < count; k++) {
-            const nu = (k / count) * TAU;
-            const eAnom = 2 * Math.atan(eFactor * Math.tan(nu / 2)) + (k * 2 > count ? TAU : 0);
-            const m = eAnom - ecc * Math.sin(eAnom);
-            dts[k] = ((((m - m0) % TAU) + TAU) % TAU) / meanMotionRadPerMs;
+        if (!sat) {
+            vertexCounts.push(0);
+            periods.push(0);
+            runs.push(0);
+            continue;
         }
-        let kMin = 0;
-        for (let k = 1; k < count; k++) if (dts[k] < dts[kMin]) kMin = k;
-        dts[kMin] = 0;
-
-        // Pass 1: SGP4 grid in ECI km (null where SGP4 errors).
-        let tArr: number[] = new Array(count);
-        let eArr: Array<Vec3 | null> = new Array(count);
-        for (let s = 0; s < count; s++) {
-            const t = epochMs + dts[(kMin + s) % count];
-            tArr[s] = t;
-            eArr[s] = s === 0 ? nowPos : sgp4At(rec, t);
+        const rec = sat.rec;
+        let chain: OrbitChain | null;
+        try {
+            chain = buildOrbitChain({
+                rec,
+                anchorEpochMs: epochMs,
+                referenceFrame: frame,
+                worldPerKm: scale,
+                maxPoints: 16384
+            });
+        } catch {
+            chain = null;
         }
-        // Re-anchor on the first good node (inertial) or trim unknowns
-        // (ECF). Runs of SGP4 failures stay open (honest gaps) — loops are
-        // never closed, so no chord is ever drawn across unknown spans.
-        {
-            let first = -1;
-            let last = -1;
-            for (let s = 0; s < count; s++) {
-                if (eArr[s]) {
-                    if (first < 0) first = s;
-                    last = s;
-                }
-            }
-            if (first < 0) {
-                ranges.push(rangeStart, rangeStart);
-                continue;
-            }
-            if (inertial) {
-                if (first > 0) {
-                    tArr = tArr.slice(first).concat(tArr.slice(0, first));
-                    eArr = eArr.slice(first).concat(eArr.slice(0, first));
-                }
-                for (let s = 1; s < tArr.length; s++) {
-                    if (tArr[s] < tArr[s - 1]) tArr[s] += periodMs;
-                }
-            } else {
-                tArr = tArr.slice(first, last + 1);
-                eArr = eArr.slice(first, last + 1);
-            }
+        if (chain) {
+            for (const p of chain.positions) allVerts.push(p);
+            for (const t of chain.times) allTimes.push(t);
+            vertexCounts.push(chain.vertexCount);
+            periods.push(chain.periodMs);
+            runs.push(chain.runLens.length);
+            for (const len of chain.runLens) runs.push(len);
+        } else {
+            vertexCounts.push(0);
+            periods.push(0);
+            runs.push(0);
         }
-
-        // Emit per good run; split long chords at mid-times (SGP4 only —
-        // a failed midpoint keeps the whole chord, never an invented point).
-        let totalPts = 0;
-        let runStart = 0;
-        while (runStart < eArr.length) {
-            while (runStart < eArr.length && !eArr[runStart]) runStart++;
-            if (runStart >= eArr.length) break;
-            let runEnd = runStart;
-            while (runEnd + 1 < eArr.length && eArr[runEnd + 1]) runEnd++;
-            let rT = tArr.slice(runStart, runEnd + 1);
-            let rP: Vec3[] = [];
-            for (let s = runStart; s <= runEnd; s++) rP.push(project(eArr[s] as Vec3, tArr[s]));
-            [rT, rP] = refine(rec, rT, rP, MAX_PTS_PER_SAT - totalPts);
-            for (let j = 0; j + 1 < rP.length; j++) {
-                const a = rP[j];
-                const b = rP[j + 1];
-                out.push(a[0], a[1], a[2], b[0], b[1], b[2]);
-            }
-            totalPts += rT.length;
-            runStart = runEnd + 1;
-        }
-        ranges.push(rangeStart, out.length);
-
         if ((i + 1) % CHUNK === 0) {
             if (buildId !== orbitBuildId) return;
+            if (bakeGeneration !== catalogVersion) return;
             await new Promise((resolve) => setTimeout(resolve, 0));
         }
     }
 
     if (buildId !== orbitBuildId) return;
-    const positions = new Float32Array(out);
-    postMessage({ type: 'orbits', requestId, positions, ranges }, [positions.buffer]);
+    if (bakeGeneration !== catalogVersion) return;
+    const positions = new Float32Array(allVerts);
+    const vertexTimes = new Float32Array(allTimes);
+    postMessage(
+        {
+            type: 'orbits',
+            requestId,
+            // Views must slide against the held bake's epoch, not a newer request's.
+            epoch,
+            generation: bakeGeneration,
+            positions,
+            vertexTimes,
+            periods,
+            vertexCounts,
+            runs: new Int32Array(runs)
+        },
+        [positions.buffer, vertexTimes.buffer]
+    );
 }
 
-/**
- * Nadir ground track for ONE satellite: sample SGP4 forward exactly one
- * orbital period (future only — the orbit lines and the ground track share the
- * same window) and project each ECI position through its own GMST onto the
- * globe surface as an ECF subpoint. Unlike ECI orbit lines there is no shared
- * -GMST(epoch) bake — every sample carries the GMST at its own time, so the
- * result is always earth-fixed regardless of the reference-frame toggle.
- * Emitted as line segments with honest gaps where SGP4 fails.
- */
+/** Nadir ground track for one satellite: 128 steps/period over two periods (one drawn + sliding headroom), always earth-fixed. */
 function buildGroundTrack(message: BuildGroundTrackMessage): void {
     const { requestId, epoch, index } = message;
+    // Undrawable tracks still answer empty so the scene backs off instead of re-requesting forever.
+    const empty = () =>
+        postMessage({
+            type: 'groundTrack',
+            requestId,
+            generation: catalogVersion,
+            epoch,
+            periodMs: 0,
+            positions: new Float32Array(0),
+            vertexTimes: new Float32Array(0)
+        });
     const sat = satellites[index];
-    if (!sat) return;
+    if (!sat) {
+        empty();
+        return;
+    }
     const rec = sat.rec;
     const meanMotionRadPerMs = rec.no / 60000;
     const ecc = rec.ecco;
-    // No closed period → no track (matches the orbit-drawing guard).
-    if (!(ecc < 1) || !(meanMotionRadPerMs > 0)) return;
+    if (!(ecc < 1) || !(meanMotionRadPerMs > 0)) {
+        empty();
+        return;
+    }
     const periodMs = TAU / meanMotionRadPerMs;
-    const surfaceRadius = scale * EARTH_RADIUS_KM;
-    const out: number[] = [];
+    const surfaceRadius = scale * EARTH_MEAN_RADIUS_KM;
     const POINTS = 128;
-    let prev: Vec3 | null = null;
-    for (let k = 0; k <= POINTS; k++) {
+    const positions: number[] = [];
+    const times: number[] = [];
+    for (let k = 0; k <= 2 * POINTS; k++) {
         const t = epoch + (k / POINTS) * periodMs;
         const p = sgp4Position(rec, t);
-        if (!p) {
-            prev = null;
-            continue;
-        }
+        if (!p) continue;
         const ecf = eciToEcf({ x: p[0], y: p[1], z: p[2] } as EciVec3<number>, gstime(new Date(t)));
         const r = Math.hypot(ecf.x, ecf.y, ecf.z) || 1;
-        const point: Vec3 = [
+        positions.push(
             (ecf.x / r) * surfaceRadius,
             (ecf.y / r) * surfaceRadius,
             (ecf.z / r) * surfaceRadius
-        ];
-        if (prev) out.push(prev[0], prev[1], prev[2], point[0], point[1], point[2]);
-        prev = point;
+        );
+        times.push(t - epoch);
     }
-    const positions = new Float32Array(out);
-    postMessage({ type: 'groundTrack', requestId, generation: catalogVersion, positions }, [
-        positions.buffer
-    ]);
+    if (positions.length < 6) {
+        empty();
+        return;
+    }
+    const baked = new Float32Array(positions);
+    const bakedTimes = new Float32Array(times);
+    postMessage(
+        {
+            type: 'groundTrack',
+            requestId,
+            generation: catalogVersion,
+            epoch,
+            periodMs,
+            positions: baked,
+            vertexTimes: bakedTimes
+        },
+        [baked.buffer, bakedTimes.buffer]
+    );
+}
+
+/** Drive the pass-search generator with macrotask yields; null when superseded (never posts stale results). */
+async function drivePassSearch(
+    iter: Generator<undefined, PassSearchResult, void>,
+    generation: number,
+    token: number
+): Promise<PassSearchResult | null> {
+    for (;;) {
+        const step = iter.next();
+        if (token !== passSearchToken || generation !== catalogVersion) {
+            iter.return({ passes: [], partial: true });
+            return null;
+        }
+        if (step.done) return step.value;
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+}
+
+/** Latest pass-search token — each new request retires the previous. */
+let passSearchToken = 0;
+
+async function runPassSearch(message: PassesMessage): Promise<void> {
+    const requestId = message.requestId;
+    const generation = catalogVersion;
+    const token = ++passSearchToken;
+    const minElDeg = message.minElDeg ?? 10;
+    // Plane-cone screen costs no SGP4 calls — apply to the full pool before the count cap.
+    const screened: PassCandidate[] = [];
+    for (const sat of satellites) {
+        if (exceedsPassAltitude(sat.rec)) continue;
+        if (planeScreensOut(sat.rec, message.observer.latDeg, minElDeg)) continue;
+        screened.push({
+            name: sat.name,
+            rec: sat.rec,
+            index: message.originalIndices[sat.srcIndex] ?? sat.srcIndex
+        });
+    }
+    const cap = capCandidates(screened, message.maxSats ?? PASS_SEARCH_MAX_SATS);
+    const iter = findPasses({
+        candidates: cap.capped,
+        observer: message.observer,
+        startMs: message.startMs,
+        endMs: message.endMs,
+        minElDeg: message.minElDeg,
+        maxPasses: message.maxPasses,
+        gate: passVisibilityGate,
+        wallBudgetMs: PASS_SEARCH_BUDGET_MS
+    });
+    const result = await drivePassSearch(iter, generation, token);
+    if (!result || token !== passSearchToken || generation !== catalogVersion) return;
+    postMessage({
+        type: 'passes',
+        requestId,
+        generation,
+        passes: result.passes,
+        partial: result.partial,
+        capInfo: {
+            active: cap.active,
+            searched: cap.searched,
+            capped: cap.active > cap.searched
+        }
+    });
 }
 
 function handleMessage(event: MessageEvent<WorkerMessage>): void {
@@ -352,13 +346,14 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
             satellites = [];
             scale = message.scale;
             elementMode = message.mode;
-            for (const sat of message.satellites) {
+            for (let srcIndex = 0; srcIndex < message.satellites.length; srcIndex++) {
+                const sat = message.satellites[srcIndex];
                 try {
                     const rec = twoline2satrec(sat.line1, sat.line2);
                     if (rec.error !== 0) continue;
                     const nRadPerSec = rec.no / 60;
                     if (!(nRadPerSec > 0)) continue;
-                    const a = Math.cbrt(MU_KM3_S2 / (nRadPerSec * nRadPerSec));
+                    const a = semiMajorAxisKm(rec);
                     const epochEl: OrbitalElements = {
                         a,
                         e: rec.ecco,
@@ -371,8 +366,9 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
                         rec,
                         epochEl,
                         nRadPerSec,
-                        // satellite.js stores the full Julian date in jdsatepoch.
-                        epochMs: (rec.jdsatepoch - JULIAN_UNIX_EPOCH) * 86400000
+                        epochMs: tleEpochMs(rec),
+                        name: sat.name,
+                        srcIndex
                     });
                 } catch {
                     // skip malformed TLE entries
@@ -402,35 +398,46 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
             const date = new Date(epoch);
             const gmst = gstime(date);
             const count = satellites.length;
-            const positions = new Float32Array(count * 3);
-            // NaN = "unknown" for a satellite whose propagation failed — views
-            // skip NaN rows instead of plotting fake zeros at the origin.
+            const positions = new Float32Array(count * 3).fill(NaN);
             const elements = new Float32Array(count * 7).fill(NaN);
             const sunUnit = sunEciDirection(epoch);
             const sunlit = new Uint8Array(count);
             for (let i = 0; i < count; i++) {
                 const sat = satellites[i];
-                const state = propagate(sat.rec, date);
-                if (state.position === false || state.position === undefined) {
-                    // Unknown propagation → keep the previous eclipse status.
+                let state;
+                try {
+                    state = propagate(sat.rec, date);
+                } catch {
+                    sunlit[i] = lastSunlit ? (lastSunlit[i] ?? 1) : 1;
+                    continue;
+                }
+                if (!state || state.position === false || state.position === undefined) {
                     sunlit[i] = lastSunlit ? (lastSunlit[i] ?? 1) : 1;
                     continue;
                 }
                 const eci = state.position as EciVec3<number>;
+                if (!isFinite(eci.x + eci.y + eci.z)) {
+                    sunlit[i] = lastSunlit ? (lastSunlit[i] ?? 1) : 1;
+                    continue;
+                }
                 sunlit[i] = isSunlit(eci, sunUnit) ? 1 : 0;
                 const ecf = eciToEcf(eci, gmst);
                 positions[i * 3] = ecf.x * scale;
                 positions[i * 3 + 1] = ecf.y * scale;
                 positions[i * 3 + 2] = ecf.z * scale;
-                // Elements screen their own finiteness, so `null` rows stay NaN.
-                const el = elementsFor(
-                    elementMode,
-                    sat.epochEl,
-                    sat.nRadPerSec,
-                    (epoch - sat.epochMs) / 1000,
-                    eci,
-                    state.velocity
-                );
+                let el: PlottedElements | null;
+                try {
+                    el = elementsFor(
+                        elementMode,
+                        sat.epochEl,
+                        sat.nRadPerSec,
+                        (epoch - sat.epochMs) / 1000,
+                        eci,
+                        state.velocity
+                    );
+                } catch {
+                    el = null;
+                }
                 if (!el) continue;
                 elements[i * 7] = el.a;
                 elements[i * 7 + 1] = el.e;
@@ -440,8 +447,7 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
                 elements[i * 7 + 5] = el.m;
                 elements[i * 7 + 6] = el.u;
             }
-            // Only re-send the color buffer when some satellite crossed an
-            // eclipse boundary — the query is cheap, the transfer is not.
+            // Only re-send colors on an eclipse-boundary crossing; the query is cheap, the transfer is not.
             let eclipseChanged = !lastSunlit || lastSunlit.length !== count;
             if (!eclipseChanged) {
                 for (let i = 0; i < count; i++) {
@@ -471,6 +477,7 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
                     epoch,
                     count,
                     generation: catalogVersion,
+                    revision: message.revision,
                     positions,
                     elements,
                     colors
@@ -486,6 +493,11 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
         case 'buildOrbits': {
             if (!initialized) break;
             void buildOrbits(message);
+            break;
+        }
+        case 'passes': {
+            if (!initialized) break;
+            void runPassSearch(message);
             break;
         }
         case 'buildGroundTrack': {

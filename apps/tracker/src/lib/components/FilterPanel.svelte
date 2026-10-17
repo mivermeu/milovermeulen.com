@@ -1,4 +1,6 @@
 <script lang="ts">
+    let { open = true, onToggle }: { open?: boolean; onToggle?: () => void } = $props();
+
     import { trackerState } from '$lib/state.svelte';
     import { findMatchingNodeIds, findNode, saveExpanded, restoreExpanded } from '$lib/tree';
     import Panel from './Panel.svelte';
@@ -10,6 +12,17 @@
     let searchInput: HTMLInputElement | undefined = $state();
 
     const MIN_CHARS = 2;
+
+    // Tree filter composed with the graph selection (brush mask).
+    const visibleCount = $derived.by(() => {
+        const mask = trackerState.brushMask;
+        if (!mask) return trackerState.activeIndices.length;
+        const n = Math.min(mask.length, trackerState.activeIndices.length);
+        let count = 0;
+        for (let i = 0; i < n; i++) count += mask[i];
+        return count;
+    });
+    const selectionActive = $derived(trackerState.brushMask !== null);
 
     const visibleIds = $derived(
         trackerState.searchQuery.length >= MIN_CHARS && trackerState.tree
@@ -63,12 +76,14 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<Panel title="Filters">
+<Panel title="Filters" {open} {onToggle} bare>
+    {#snippet summary()}
+        {visibleCount} of {trackerState.satellites.length}{#if selectionActive}&nbsp;selection{/if}
+    {/snippet}
     <div class="mb-2 text-[10px] text-brand-text">
-        Showing <span class="font-mono text-brand-text-highlight"
-            >{trackerState.activeIndices.length}</span
-        >
-        of {trackerState.satellites.length}
+        Showing <span class="font-mono text-brand-text-highlight">{visibleCount}</span>
+        of {trackerState.satellites.length}{#if selectionActive}
+            <span class="text-brand-text/60">&nbsp;in selection</span>{/if}
     </div>
 
     <div class="relative mb-2">
@@ -87,7 +102,7 @@
         </span>
     </div>
 
-    <div class="min-h-0 flex-1 overflow-y-auto">
+    <div class="min-h-0 flex-1 overflow-y-auto max-md:min-h-72">
         {#if trackerState.tree}
             <div role="tree">
                 <TreeNode node={trackerState.tree} {visibleIds} />
