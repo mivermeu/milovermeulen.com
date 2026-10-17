@@ -135,12 +135,12 @@
 
         <div
             inert={!trackerState.panelsOpen}
-            class="absolute top-0 right-0 bottom-0 z-20 flex w-80 flex-col border-l border-brand-secondary bg-brand-bg transition-transform duration-300 {trackerState.panelsOpen
+            class="absolute top-0 right-0 bottom-0 z-20 flex w-80 flex-col border-l border-brand-secondary bg-brand-bg transition-transform duration-300 max-md:overflow-y-auto {trackerState.panelsOpen
                 ? 'translate-x-0'
                 : 'translate-x-full'}"
         >
             <div
-                class="flex min-h-0 flex-1 flex-col divide-y divide-brand-secondary overflow-hidden"
+                class="flex min-h-0 flex-1 flex-col divide-y divide-brand-secondary md:overflow-hidden"
             >
                 <div class="shrink-0">
                     <ControlPanel
@@ -148,13 +148,13 @@
                         onToggle={() => (drawerOpen.controls = !drawerOpen.controls)}
                     />
                 </div>
-                <div class="flex min-h-0 flex-col {drawerOpen.filters ? 'flex-1' : 'shrink-0'}">
+                <div class="flex min-h-0 shrink-0 flex-col {drawerOpen.filters ? 'md:flex-1' : ''}">
                     <FilterPanel
                         open={drawerOpen.filters}
                         onToggle={() => (drawerOpen.filters = !drawerOpen.filters)}
                     />
                 </div>
-                <div class="flex min-h-0 flex-col {drawerOpen.passes ? 'flex-1' : 'shrink-0'}">
+                <div class="flex min-h-0 shrink-0 flex-col {drawerOpen.passes ? 'md:flex-1' : ''}">
                     <PassesPanel
                         open={drawerOpen.passes}
                         onToggle={() => (drawerOpen.passes = !drawerOpen.passes)}

@@ -314,7 +314,7 @@
             </span>
         </div>
 
-        <div class="min-h-0 flex-1 overflow-y-auto">
+        <div class="min-h-0 flex-1 overflow-y-auto max-md:min-h-72">
             {#if searching}
                 <p aria-live="polite" class="py-3 text-center text-[10px] text-brand-text">
                     Searching next {WINDOW_DAYS} days…
