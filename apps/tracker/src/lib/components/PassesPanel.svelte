@@ -1,7 +1,7 @@
 <script lang="ts">
     let { open = true, onToggle }: { open?: boolean; onToggle?: () => void } = $props();
 
-    import { trackerState } from '$lib/state.svelte';
+    import { pinSatellite, trackerState } from '$lib/state.svelte';
     import { parseLatitude, parseLongitude } from '$lib/geo';
     import {
         clearLocation,
@@ -15,13 +15,9 @@
     import Panel from './Panel.svelte';
     import InfoTip from './InfoTip.svelte';
 
-    // Search configuration: horizon, window length, list size. The satellite
-    // cap lives with the worker (passes.ts's PASS_SEARCH_MAX_SATS) and is
-    // surfaced through the response's capInfo.
+    // Search horizon/window/list size; the satellite cap lives in the worker (PASS_SEARCH_MAX_SATS).
     const MIN_EL_DEG = PASS_MIN_EL_DEG;
-    // Search window: LEO objects pass several times a day, so the top-20
-    // fills within hours — a multi-day window only burns worker time and
-    // trips the search budget. 48 hours covers "tonight and tomorrow".
+    // 48h covers "tonight and tomorrow"; longer windows only burn worker time against the search budget.
     const WINDOW_DAYS = 2;
     const MAX_PASSES = 20;
 
@@ -35,8 +31,7 @@
     let partial = $state(false);
     let searching = $state(false);
 
-    // Worker request bookkeeping: seq identifies the in-flight request;
-    // generation tracks the worker catalog so stale responses are dropped.
+    // In-flight request id + worker catalog generation so stale responses drop.
     let seq = 0;
     let generation = $state(-1);
     let hasCatalog = $state(false);
@@ -47,8 +42,6 @@
             hasCatalog = (message.count ?? 0) > 0;
             return;
         }
-        // A worker-level error means no 'passes' response is coming; clear the
-        // spinner so the panel doesn't promise a search forever.
         if (message.type === 'error') {
             searching = false;
             return;
@@ -77,50 +70,8 @@
             (observerState.status === 'set' || observerState.status === 'locating')
     );
 
-    /**
-     * Re-search when the location, the tree-filtered set, or the worker
-     * catalog changes. Debounced — filter trees fire several updates per
-     * interaction while the worker re-inits its own catalog.
-     */
-    $effect(() => {
-        const lat = observerState.lat;
-        const lon = observerState.lon;
-        const indices = trackerState.activeIndices;
-        // `generation` is read for its dependency: a fresh worker catalog means
-        // the request fires only after the re-init settled.
-        if (
-            generation < 0 ||
-            !locationSet ||
-            lat === null ||
-            lon === null ||
-            indices.length === 0 ||
-            !hasCatalog
-        ) {
-            searching = false;
-            return;
-        }
-        const timer = setTimeout(() => {
-            searching = true;
-            seq++;
-            propagation.findPasses({
-                requestId: seq,
-                observer: { latDeg: lat, lonDeg: lon },
-                startMs: Date.now(),
-                endMs: Date.now() + WINDOW_DAYS * 86_400_000,
-                minElDeg: MIN_EL_DEG,
-                maxPasses: MAX_PASSES,
-                originalIndices: indices
-            });
-        }, 600);
-        return () => clearTimeout(timer);
-    });
-
-    /** Immediate re-search (drawer refresh button). */
-    function refresh(): void {
-        const lat = observerState.lat;
-        const lon = observerState.lon;
-        const indices = trackerState.activeIndices;
-        if (lat === null || lon === null || indices.length === 0 || !hasCatalog) return;
+    /** Issue one pass search against the current location and filter set. */
+    function searchPasses(lat: number, lon: number, indices: number[]): void {
         searching = true;
         seq++;
         propagation.findPasses({
@@ -132,6 +83,34 @@
             maxPasses: MAX_PASSES,
             originalIndices: indices
         });
+    }
+
+    /** Re-search on location/filter/catalog change (debounced — filter trees fire several updates per interaction). */
+    $effect(() => {
+        const lat = observerState.lat;
+        const lon = observerState.lon;
+        const indices = trackerState.activeIndices;
+        if (
+            generation < 0 ||
+            !locationSet ||
+            lat === null ||
+            lon === null ||
+            indices.length === 0 ||
+            !hasCatalog
+        ) {
+            searching = false;
+            return;
+        }
+        const timer = setTimeout(() => searchPasses(lat, lon, indices), 600);
+        return () => clearTimeout(timer);
+    });
+
+    function refresh(): void {
+        const lat = observerState.lat;
+        const lon = observerState.lon;
+        const indices = trackerState.activeIndices;
+        if (lat === null || lon === null || indices.length === 0 || !hasCatalog) return;
+        searchPasses(lat, lon, indices);
     }
 
     function submitManual(event: SubmitEvent): void {
@@ -149,10 +128,10 @@
     }
 
     function togglePin(row: PassRow): void {
-        trackerState.pinnedIndex = trackerState.pinnedIndex === row.index ? -1 : row.index;
+        if (trackerState.pinnedIndex === row.index) trackerState.pinnedIndex = -1;
+        else pinSatellite(row.index);
     }
 
-    // Rows are filtered live so passes disappear once they are over.
     const visiblePasses = $derived(passes.filter((p) => p.endMs > nowMs));
 
     function formatDeg(value: number, pos: string, neg: string): string {
@@ -164,7 +143,7 @@
         return String(Math.floor(Math.abs(n))).padStart(2, '0');
     }
 
-    /** Live countdown until rise (spec: mm:ss when inside the hour). */
+    /** Countdown until rise (mm:ss inside the hour). */
     function countdown(msUntilStart: number): string {
         if (msUntilStart <= 0) return 'now';
         const totalSec = Math.floor(msUntilStart / 1000);

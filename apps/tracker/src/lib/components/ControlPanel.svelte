@@ -22,9 +22,6 @@
     } from '$lib/simclock';
     import Panel from './Panel.svelte';
 
-    // Real-time anchor for the scrub slider's offset value; refreshed a couple
-    // of times a second — the simulated UTC readout below instead reacts
-    // directly to the central clock's own ticks.
     let wall = $state(Date.now());
     $effect(() => {
         const id = setInterval(() => (wall = Date.now()), 100);
@@ -32,11 +29,7 @@
     });
 
     const favoriteEntries = $derived.by(() => {
-        // Track the ids and the catalog reference; scan the TLE lines untracked
-        // (deep proxy reads must not become dependencies — a tracked deep read
-        // re-fires on any catalog object mutation). The NORAD index itself is
-        // cached by array reference in catalogByNorad, so repeated favorites
-        // changes don't rescan the catalog.
+        // Scan untracked: deep proxy reads must not become effect dependencies.
         const ids = trackerState.favorites;
         const sats = trackerState.satellites;
         if (ids.length === 0 || sats.length === 0) return [];
@@ -49,16 +42,13 @@
     });
 
     const offsetMs = $derived(trackerState.simEpochMs - wall);
-    // Real-time is a clock *mode*, not an offset comparison: while in it, the
-    // central tick pins the epoch to the wall clock, so the offset is 0 by
-    // construction and the state never flickers between "now" and "±0 s".
     const atNow = $derived(trackerState.simRealtime);
     const accuracy = $derived(simAccuracy(atNow ? 0 : offsetMs));
     const simUtc = $derived(
         new Date(trackerState.simEpochMs).toISOString().replace('T', ' ').slice(0, 19) + ' UTC'
     );
 
-    /** Compact signed offset: largest single unit — −30.2 d, +4 h, +12 m, +45 s. */
+    /** Compact signed offset (largest single unit). */
     function formatOffset(ms: number): string {
         if (Math.abs(ms) < 100) return 'now';
         const sign = ms < 0 ? '−' : '+';
@@ -69,16 +59,7 @@
         return `${sign}${Math.round(abs / 1000)} s`;
     }
 
-    // The slider fights a playing clock (its value attribute re-centers the
-    // thumb every render), so a drag runs against a paused clock: pointerdown
-    // pauses, pointerup/change commits the final offset and restores play.
-    // `input` still commits mid-drag so the views glide while dragging, and the
-    // rendered position freezes for the drag's duration — the offset-vs-wall
-    // arithmetic otherwise nudges the thumb under the pointer.
-    //
-    // The slider is symmetric-log: `0..SCRUB_SLIDER_STEPS` maps exponentially
-    // to the ±30-day offset range, giving ~0.2 s of resolution at the center
-    // for LEO-scale nudges and full ±30 days at the ends.
+    // A drag runs against a paused clock (the slider fights a playing one); symmetric-log ±30d mapping.
     let scrubbing = $state(false);
     let scrubWasPlaying = false;
     let scrubPos = $state(SCRUB_SLIDER_STEPS / 2);
@@ -102,16 +83,7 @@
             scrubbing = false;
             if (scrubWasPlaying) resumeSimClock();
         }
-        // Commit only when the value actually changed (fires for both pointer
-        // release and keyboard changes; sets the same offset the last `input`
-        // committed for pointer use). Offsets near zero snap to the live feed.
-        // NOTE: keyboard-driven `change` events don't pass through beginScrub,
-        // so they commit without the pause-while-scrub treatment — wiring that
-        // would need focus/blur tracking; the commit itself is already correct.
         const offset = scrubSliderToOffsetMs(position);
-        // A pointer drag runs paused, so the center snap (which needs a playing
-        // clock) can't engage mid-drag — and the change-only guard would then
-        // skip the post-resume commit that snaps. Force it when parked live.
         const snappedLive =
             scrubWasPlaying &&
             trackerState.simPlaying &&

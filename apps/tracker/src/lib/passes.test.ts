@@ -741,3 +741,51 @@ describe('maxCentralAngleDeg — visibility footprint', () => {
         expect(maxCentralAngleDeg(6000, 10)).toBe(180);
     });
 });
+
+describe('findPasses — eccentric Molniya orbit', () => {
+    // e=0.7 with a southern-hemisphere observer under the perigee arc: the
+    // fast ~25-min perigee passes fit several times over inside one
+    // apogee-sized (~64-min) coarse step, with flanks far below threshold —
+    // the old apogee/mean-motion sizing missed every one of them (and
+    // reported completion). Northern observers only ever see the slow apogee
+    // lobes, which both sizings find.
+    const rec = makeCandidate({
+        name: 'MOLNIYA',
+        index: 9,
+        satnum: 400,
+        epochYear: 26,
+        epochDay: 1,
+        inclinationDeg: 63.4,
+        raanDeg: 300,
+        ecc7: 7000000,
+        argpDeg: 270,
+        meanAnomalyDeg: 10,
+        meanMotionRevPerDay: 2.0059
+    }).rec;
+    const LAT = -50;
+    const LON = 0;
+    const start = EPOCH_MS + 12 * 3600_000;
+    const end = start + 4 * 86_400_000;
+
+    it('finds every fast perigee pass the brute force sees', () => {
+        const iter = findPasses({
+            candidates: [{ name: 'MOLNIYA', rec, index: 9 }],
+            observer: { latDeg: LAT, lonDeg: LON },
+            startMs: start,
+            endMs: end,
+            minElDeg: 10,
+            maxPasses: 50
+        });
+        let result = iter.next();
+        while (!result.done) result = iter.next();
+        const reference = brutePasses(rec, LAT, LON, start, end);
+        expect(reference.length).toBeGreaterThan(0);
+        expect(reference.some((r) => r.endMs - r.startMs < 45 * 60_000)).toBe(true);
+        const found = result.value.passes;
+        expect(found.length).toBe(reference.length);
+        for (let i = 0; i < found.length; i++) {
+            expect(Math.abs(found[i].startMs - reference[i].startMs)).toBeLessThanOrEqual(3000);
+            expect(Math.abs(found[i].endMs - reference[i].endMs)).toBeLessThanOrEqual(3000);
+        }
+    });
+});

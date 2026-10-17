@@ -1,36 +1,13 @@
-/**
- * Pure simulated-time primitives for the tracker. Everything here is a pure
- * function of explicit arguments so the clock math and the snapshot-continuity
- * decisions are unit-testable without DOM, RAF intervals, or the propagation
- * service.
- *
- * One shared simulated clock (`trackerState.simEpochMs`) drives both the globe
- * and the orbital-parameter graph — never let a view keep its own notion of
- * "now".
- */
+/** Pure simulated-time primitives. One shared clock drives both globe and graph. */
 
 /** Scrub domain: ±30 days around real time. */
 export const SCRUB_RANGE_MS = 30 * 24 * 60 * 60 * 1000;
-/**
- * Scrub slider granularity: integer steps across the full sweep. Combined with
- * the symmetric-log mapping below this puts sub-second resolution at the
- * slider's center and ±30 days at its ends.
- */
+/** Slider steps across the full sweep; symmetric-log mapping gives sub-second center resolution. */
 export const SCRUB_SLIDER_STEPS = 2000;
-/**
- * Steepness of the symmetric-log scrub mapping. Higher K concentrates more of
- * the slider travel near the center: at K=12 a single step moves the clock
- * ~0.2 s, a full LEO period (~95 min) sits about a quarter sweep out, and the
- * ends still reach ±30 days.
- */
+/** Scrub mapping steepness: more travel near center (~0.2 s/step, LEO period ~quarter sweep). */
 export const SCRUB_LOG_K = 12;
 
-/**
- * Map a scrub-slider position (`0..SCRUB_SLIDER_STEPS`) to a clock offset from
- * real time. Symmetric-exponential around the center so fine control lands at
- * small offsets (LEO orbital dynamics evolve over minutes) while the whole
- * ±30-day window stays one sweep away.
- */
+/** Slider position (0..SCRUB_SLIDER_STEPS) → clock offset from real time. */
 export function scrubSliderToOffsetMs(position: number): number {
     const u = Math.min(1, Math.max(0, position / SCRUB_SLIDER_STEPS)) * 2 - 1; // [−1, 1]
     const a = Math.abs(u);
@@ -49,32 +26,20 @@ export function scrubOffsetMsToSlider(offsetMs: number): number {
     return ((u + 1) / 2) * SCRUB_SLIDER_STEPS;
 }
 
-/**
- * Offsets within half a second of real time count as "on the live feed": the
- * scrub-to-center snap and a pause/play round-trip at Now re-engage real time
- * instead of leaving a useless ±0.3 s simulated offset behind.
- */
+/** Offsets within 0.5 s of now count as live: snap re-engages real time. */
 export const REALTIME_SNAP_MS = 500;
-/**
- * TLEs are published near-epoch; beyond ~2 days of extrapolation SGP4 accuracy
- * degrades quickly, so the UI flags the readout past this offset.
- */
+/** Past ~2 days SGP4 accuracy degrades, so the UI flags the readout. */
 export const ACCURACY_SOFT_LIMIT_MS = 2 * 24 * 60 * 60 * 1000;
 
 export const SIM_SPEEDS = [1, 10, 60, 600] as const;
 export type SimSpeed = (typeof SIM_SPEEDS)[number];
 export const DEFAULT_SIM_SPEED: SimSpeed = 1;
 
-/** Simulated epochs in the "degrading accuracy" band. */
 export function simAccuracy(offsetMs: number): 'live' | 'degrading' {
     return Math.abs(offsetMs) > ACCURACY_SOFT_LIMIT_MS ? 'degrading' : 'live';
 }
 
-/**
- * Clamp a simulated epoch into the ±30d scrub window around `realNowMs`.
- * Applies to scrubbing, stepping, and resets so sim time can never wander
- * outside TLE credibility.
- */
+/** Clamp a simulated epoch into the ±30d window so sim time never leaves TLE credibility. */
 export function clampSimEpoch(simEpochMs: number, realNowMs: number): number {
     if (!Number.isFinite(simEpochMs)) return realNowMs;
     if (simEpochMs < realNowMs - SCRUB_RANGE_MS) return realNowMs - SCRUB_RANGE_MS;
@@ -82,11 +47,7 @@ export function clampSimEpoch(simEpochMs: number, realNowMs: number): number {
     return simEpochMs;
 }
 
-/**
- * One clock tick: advance the simulated epoch by `elapsedRealMs` of real time
- * at `speed`×, clamped to the scrub window around `realNowMs`. While paused the
- * caller simply does not call this — nothing else changes.
- */
+/** Advance the epoch by elapsed real time × speed, clamped to the scrub window. */
 export function stepSimClock(
     simEpochMs: number,
     elapsedRealMs: number,
@@ -98,63 +59,34 @@ export function stepSimClock(
     return clampSimEpoch(advanced, realNowMs);
 }
 
-/**
- * The propagation stamp for the next `propagate` request: simulated now plus
- * the future-of-cadence lead, so the newest snapshot sits ahead of the clock
- * and both views blend into a fresh endpoint. Because the lead tracks the
- * simulated clock itself, stamps stay monotonic exactly while simulated time is
- * monotonic — a scrub deliberately breaks that, and the views detect it via
- * `epochAction` below.
- */
+/** Next `propagate` stamp: sim now + lead. Stamps stay monotonic while sim time is; scrubs break it (see `epochAction`). */
 export function nextPropagateEpoch(simEpochMs: number, leadMs: number): number {
     if (!Number.isFinite(simEpochMs) || !Number.isFinite(leadMs)) return Date.now();
     return Math.round(simEpochMs + leadMs);
 }
 
-/**
- * Dead-reckon allowance past the newest snapshot, in snapshot intervals. Kept
- * small (half an interval): far extrapolation drifts off the arc and lands as a jump.
- */
+/** Dead-reckon allowance past the newest snapshot, in snapshot intervals. */
 export const DEAD_RECKON_EXTRA = 0.5;
 
-/**
- * Per-frame blend factor for a snapshot pair at `simEpoch`. Returns 0 before
- * the pair window, the linear blend inside it — and beyond the newest snapshot
- * continues past 1 (dead reckoning along the pair's implied velocity), clamped
- * at `1 + DEAD_RECKON_EXTRA`. Paired with `blendInto`, whose linear/angle
- * interpolation is well-behaved for any factor.
- */
+/** Blend factor for a snapshot pair at `simEpoch`; past the newest snapshot it dead-reckons up to 1 + DEAD_RECKON_EXTRA. */
 export function renderBlend(prevEpoch: number, nextEpoch: number, simEpoch: number): number {
-    if (!Number.isFinite(simEpoch)) return 1; // non-finite clock: hold the newest
+    if (!Number.isFinite(simEpoch)) return 1;
     const span = nextEpoch - prevEpoch;
-    if (!(span > 0)) return 1; // degenerate pair (fresh regime): hold the newest
+    if (!(span > 0)) return 1;
     const blend = (simEpoch - prevEpoch) / span;
     if (blend <= 0) return 0;
     const cap = 1 + DEAD_RECKON_EXTRA;
     return blend > cap ? cap : blend;
 }
 
-/** What a view should do with an incoming snapshot — keyed on regime revision, since epoch equality alone can't tell "same data" from "new regime". */
+/** Snapshot decision keyed on regime revision (epoch equality alone can't tell "same data" from "new regime"). */
 export type EpochAction = 'blend' | 'snap' | 'drop';
-/**
- * Floor above which a forward epoch gap is a clock jump (scrub) rather than
- * routine snapshot cadence — normal advances are ≤ cadence·speed (≤ 6 min here,
- * but a hidden-tab throttle can legitimately produce seconds).
- */
+/** Forward gap above this floor is a clock jump (scrub), not routine cadence. */
 const SNAP_FLOOR_MS = 30_000;
-/**
- * Forward gaps between the routine advance and a genuine clock jump snap only
- * beyond this multiple of the expected advance. Everything below it — including
- * a response stretched by a worker stall of several intervals — glides across,
- * because the gap is still real, continuous motion along the same track and a
- * catch-up glide looks far better than a teleport.
- */
+/** Gaps below this multiple of the expected advance glide across (covers worker stalls). */
 const BLEND_TOLERANCE_MULTIPLE = 6;
 
-/**
- * Continuity guard on snapshot epochs: 'blend' routine forward advances,
- * 'snap' backwards/discontinuous epochs, 'drop' same-epoch duplicates.
- */
+/** Continuity guard: blend routine advances, snap backwards/jumps, drop duplicates. */
 export function epochAction(
     nextEpoch: number,
     incomingEpoch: number,

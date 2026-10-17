@@ -1,19 +1,4 @@
-/**
- * Baked orbit chains — the single data shape every orbit-line consumer shares.
- *
- * A chain is one satellite's trajectory sampled over TWO ν-continuous periods
- * (the visible window is one period starting at the live dot; between cadence
- * rebuilds at high time accelerations the window's start drifts into the
- * second period, so the extra revolution is the sliding headroom). The chain
- * runs ν-continuously across the seam — it contains no fabricated long chords.
- *
- * Used by the SGP4 worker (building every satellite's chain per bake, in
- * formatting for the shared merged buffer) and by the scene (the focused
- * satellite's highlight is built synchronously ON THE MAIN THREAD when the
- * focus changes, so hovering is instant and can never wedge: the highlight
- * path contains no async request to lose or have superseded).
- */
-
+/** Baked orbit chains: one satellite's trajectory sampled over two ν-continuous periods. */
 import { eciToEcf, gstime, type EciVec3, type SatRec } from 'satellite.js';
 import { sgp4Position, type Sgp4Vec3 } from './sgp4pos';
 
@@ -21,13 +6,9 @@ export type Vec3 = Sgp4Vec3;
 
 const TAU = Math.PI * 2;
 
-// ν-node density of a chain's per-period grid: e-cubed scaling on the base
-// density fixes chord quality on eccentric orbits.
 const BASE_POINTS = 64;
 const ECC_CUBIC_POINTS = 640;
 const MAX_GRID_POINTS = 600;
-// Long chords are split at SGP4 mid-times until a sweep splits nothing; the
-// budget bounds a satellite's refined vertex count.
 const MAX_SUBDIVIDE_SWEEPS = 20;
 const MAX_CHORD_ECF = 0.4; // world units
 const MAX_CHORD_ECI = 1.0; // world units
@@ -41,10 +22,7 @@ export interface OrbitChain {
     anchorEpoch: number;
     /** Orbital period (ms). */
     periodMs: number;
-    /**
-     * GMST (rad) at `anchorEpoch` — the ECI bake's rotation basis (the
-     * consuming mesh applies bakeGmst − renderGmst per frame in ECI mode).
-     */
+    /** GMST (rad) at `anchorEpoch` — the ECI bake's rotation basis. */
     bakeGmst: number;
     /** Chain vertex counts per contiguous run (length = run count). */
     runLens: number[];
@@ -52,24 +30,10 @@ export interface OrbitChain {
     referenceFrame: ChainFrame;
 }
 
-/**
- * Reference-frame semantics of a chain's projection:
- * - 'ecf': each vertex is the satellite's position rotated into the
- *   earth-fixed frame by its OWN timestamp's GMST (never runtime-rotated).
- * - 'eci': all vertices are rotated by a single −GMST(anchorEpoch) after
- *   being computed in inertial space; the consuming mesh applies the
- *   build-vs-render GMST delta per frame (so the orbit stays inertial while
- *   the earth rotates beneath it).
- */
+/** Chain projection frame: 'ecf' vertices are per-timestamp GMST-rotated; 'eci' uses one −GMST(anchorEpoch) rotation. */
 export type ChainFrame = 'ecf' | 'eci';
 
-// sgp4Position lives in $lib/sgp4pos, shared with the SGP4 worker so the two
-// implementations can't drift apart. NOTE: this module's Vec3 is a flat
-// [x,y,z] tuple — intentionally NOT $lib/sun's {x,y,z} Vec3 object.
-
-// Mean anomaly of an ECI position (NaN for e >= 1). J2-drifted elements add
-// <1° error — fine for sample placement (only decides where points cluster,
-// not their values).
+// Mean anomaly of an ECI position (NaN for e >= 1); J2 drift adds <1° error, fine for sample placement.
 function meanAnomaly(rec: SatRec, p: Vec3): number {
     const e = rec.ecco;
     if (!(e < 1)) return NaN;
@@ -89,16 +53,7 @@ function meanAnomaly(rec: SatRec, p: Vec3): number {
     return E - e * Math.sin(E);
 }
 
-/**
- * Build one satellite's orbit chain anchored at `anchorEpochMs`.
- *
- * Returns null when the satellite cannot be drawn at all: hyperbolic/parabolic
- * elements (translunar-coast TLEs, no closed period) or every node failing
- * SGP4 (decayed/invalid entries).
- *
- * `maxPoints` is a per-run budget bounding one contiguous run's refined
- * vertex count (checked per chord-split sweep output, not per satellite).
- */
+/** Build one satellite's orbit chain anchored at `anchorEpochMs`; null when undrawable (e ≥ 1 or all SGP4 nodes fail). */
 export function buildOrbitChain(options: {
     rec: SatRec;
     anchorEpochMs: number;
@@ -112,8 +67,6 @@ export function buildOrbitChain(options: {
     const inertial = referenceFrame === 'eci';
     const chordLimit2 = (inertial ? MAX_CHORD_ECI : MAX_CHORD_ECF) ** 2;
 
-    // For ECI chains: compute in ECI and rotate every vertex by one single
-    // −GMST(anchorEpoch) so the chain spans the same frame its consumers see.
     const bakeGmst = gstime(new Date(epochMs));
     const cosR = inertial ? Math.cos(-bakeGmst) : 0;
     const sinR = inertial ? Math.sin(-bakeGmst) : 0;
@@ -131,12 +84,10 @@ export function buildOrbitChain(options: {
         return [x * cosR - y * sinR, x * sinR + y * cosR, p[2] * worldPerKm];
     };
 
-    // Live phase: solve the current mean anomaly from SGP4 at the anchor; the
-    // TLE's stored mo is stale (days old) and would rotate the whole grid's
-    // density pattern away from the true perigee on eccentric orbits.
+    // TLE mean anomaly is stale; solve live phase from SGP4 at the anchor.
     const nowPos = sgp4Position(rec, epochMs);
     const ecc = rec.ecco;
-    if (!(ecc < 1)) return null; // hyperbolic/parabolic: no closed orbit
+    if (!(ecc < 1)) return null;
     const meanMotionRadPerMs = rec.no / 60000;
     if (!(meanMotionRadPerMs > 0)) return null;
     const periodMs = TAU / meanMotionRadPerMs;
@@ -144,8 +95,7 @@ export function buildOrbitChain(options: {
     const eFactor = Math.sqrt((1 - ecc) / (1 + ecc));
     const m0 = nowPos ? meanAnomaly(rec, nowPos) : rec.mo;
 
-    // Uniform-in-nu grid over one period, rotated so node 0 is exactly the
-    // satellite's position at the anchor (arcs must start at the sat).
+    // Uniform-in-ν grid over one period, rotated so node 0 is the anchor position.
     const dts: number[] = new Array(count);
     for (let k = 0; k < count; k++) {
         const nu = (k / count) * TAU;
@@ -157,7 +107,6 @@ export function buildOrbitChain(options: {
     for (let k = 1; k < count; k++) if (dts[k] < dts[kMin]) kMin = k;
     dts[kMin] = 0;
 
-    // Doubled chain: two periods of ν nodes.
     const chainCount = 2 * count;
     let tArr: number[] = new Array(chainCount);
     let eArr: Array<Vec3 | null> = new Array(chainCount);
@@ -166,10 +115,7 @@ export function buildOrbitChain(options: {
         tArr[s] = epochMs + dts[k] + Math.floor(s / count) * periodMs;
         eArr[s] = s === 0 ? nowPos : sgp4Position(rec, tArr[s]);
     }
-    // Re-anchor on the first good node (inertial: rotate the node list there
-    // then make times strictly ascending) or trim unknowns (ECF: keep the
-    // good span). Runs of SGP4 failures stay open (honest gaps) — no chord
-    // is ever drawn across an unknown span.
+    // Re-anchor on the first good node; failure runs stay open (no chord across unknowns).
     {
         let first = -1;
         let last = -1;
@@ -185,21 +131,17 @@ export function buildOrbitChain(options: {
                 tArr = tArr.slice(first).concat(tArr.slice(0, first));
                 eArr = eArr.slice(first).concat(eArr.slice(0, first));
             }
-            // Rotating the node list can wrap times (tail nodes belong to the
-            // earlier period copy). Add whole periods until ascending again —
-            // the sliding writer requires monotone non-decreasing offsets.
+            // Rotation can wrap times; add whole periods until ascending (sliding writer needs monotone offsets).
             for (let s = 1; s < tArr.length; s++) {
                 while (tArr[s] < tArr[s - 1]) tArr[s] += periodMs;
             }
         } else {
-            // ECF keeps the good span; leading/trailing unknowns are trimmed.
             tArr = tArr.slice(first, last + 1);
             eArr = eArr.slice(first, last + 1);
         }
     }
 
-    // Emit per good run; split long chords at mid-times (SGP4 only — a failed
-    // midpoint keeps the whole chord, never an invented point).
+    // Split long chords at SGP4 mid-times (failed midpoint keeps the chord, never an invented point).
     const splitLongChord = (t: number[], p: Vec3[]): [number[], Vec3[]] => {
         let sweep = 0;
         let split = true;
@@ -212,8 +154,6 @@ export function buildOrbitChain(options: {
             const oP: Vec3[] = [P[0]];
             for (let j = 0; j + 1 < T.length; j++) {
                 if (oP.length >= maxPoints - 1) {
-                    // Budget hit: emit the rest verbatim (no more splitting)
-                    // so the run tail is preserved, then stop.
                     for (let r = j + 1; r < T.length && oT.length < maxPoints; r++) {
                         oT.push(T[r]);
                         oP.push(P[r]);

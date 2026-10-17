@@ -1,6 +1,5 @@
 import { propagate, type EciVec3, type SatRec } from 'satellite.js';
 
-/** Flat 3-tuple position vector (ECI km or world units). */
 export type Sgp4Vec3 = [number, number, number];
 
 /** SGP4 position in ECI km at a unix ms instant (null on error/non-finite). */

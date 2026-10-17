@@ -43,17 +43,9 @@ type BuildOrbitsMessage = {
     epoch: number;
     requestId: number;
     frame: Frame;
-    /**
-     * When set, bake ONLY this satellite's chain (a focus-only bake for
-     * big catalogs whose orbits are off) — every other entry reports a
-     * zero chain so per-sat metadata stays index-aligned.
-     */
+    /** When set, bake only this satellite; others report zero chains so metadata stays index-aligned. */
     onlyIndex: number | null;
-    /**
-     * Graph-selection cull flags indexed by worker slot (1 = visible). Culled
-     * satellites bake zero chains with no SGP4 cost; per-sat metadata stays
-     * index-aligned and the scene's per-frame cull covers membership glide.
-     */
+    /** Graph-selection cull flags per worker slot (1 = visible); culled sats bake zero chains. */
     cullMask?: Uint8Array | null;
 };
 type ModeMessage = { type: 'mode'; mode: ElementMode };
@@ -65,12 +57,8 @@ type PassesMessage = {
     endMs: number;
     minElDeg?: number;
     maxPasses?: number;
-    /** Search-cap override (default: passes.ts's PASS_SEARCH_MAX_SATS). */
     maxSats?: number;
-    /**
-     * Original-catalog index of every satellite in the last `init` — same
-     * order, so worker satellites map through their `srcIndex` to it.
-     */
+    /** Original-catalog index per satellite in last-`init` order (maps via `srcIndex`). */
     originalIndices: number[];
 };
 type BuildGroundTrackMessage = {
@@ -93,18 +81,11 @@ interface PreparedSatellite {
     epochEl: OrbitalElements;
     nRadPerSec: number;
     epochMs: number;
-    /** Name from the init message, for pass rows. */
     name: string;
-    /** Index of this satellite in the last init's input array, for index mapping. */
     srcIndex: number;
 }
 
 const TAU = Math.PI * 2;
-// Per-sat adaptive sampling; uniform-in-nu clusters near perigee.
-
-// sgp4Position is shared via $lib/sgp4pos (same builder the scene uses).
-
-// The 7 plotted quantities now come from `$lib/orbit`'s `elementsFor` — the
 
 const LEO_COLOR = [0.50588, 0.54902, 0.97255]; // #818cf8
 const MEO_COLOR = [1.0, 0.41176, 0.0]; // #ff6900
@@ -118,26 +99,16 @@ let orbitBuildId = 0;
 // Bumped on every init; stamped onto responses so views can drop stale snapshots.
 let catalogVersion = 0;
 let elementMode: ElementMode = 'smoothed';
-// Per-sat base class colors (LEO/MEO/GEO/ECC); the ready colors buffer is
-// transferred away, so keep a copy to re-scale per propagate tick.
+// Base colors kept (the ready buffer is transferred away) to re-scale per tick.
 let baseColors = new Float32Array(0);
-// Last announced sunlit status per satellite: colors ride the positions
-// message only when an eclipse boundary is crossed, not every tick.
+// Last sunlit status per sat; colors ride positions only on eclipse-boundary crossings.
 let lastSunlit: Uint8Array | null = null;
-// Multiplicative dimming of eclipsed dots — darker but hue-preserving so the
-// altitude color coding stays readable.
 const ECLIPSE_DIM = 0.35;
 
-// HOOK POINT (feat/sunlight-globe): assign a PassVisibilityGate here once the
-// sun model lands (e.g. "satellite sunlit AND observer local darkness") to
-// restrict pass results to optically visible passes. Requests pick it up
-// automatically; `undefined` (today) returns every geometric pass above the
-// minimum elevation.
+// HOOK POINT (feat/sunlight-globe): assign a PassVisibilityGate here to restrict passes to optically visible ones.
 const passVisibilityGate: PassVisibilityGate | undefined = undefined;
 
-// Search slicing: each generator heartbeat ≈ 400 coarse samples (~1ms of
-// compute) is followed by a macrotask yield, so live position ticks keep
-// flowing while a pass search runs.
+// Search slicing: each generator heartbeat (~400 coarse samples) yields so live ticks keep flowing.
 const PASS_SEARCH_BUDGET_MS = 4000;
 
 function altitudeKm(rec: SatRec): number {
@@ -152,18 +123,11 @@ function colorFor(rec: SatRec): number[] {
     return GEO_COLOR;
 }
 
-// The 7 plotted quantities now come from `$lib/orbit`'s `elementsFor` — the
-// finiteness screen there covers every element mode, so NaN rows never leave
-// the worker.
-
 async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
     const buildId = ++orbitBuildId;
     const bakeGeneration = catalogVersion;
     const { requestId, epoch, frame, onlyIndex, cullMask } = message;
-    // One flat vertex chain per satellite (two ν-continuous periods, refined
-    // where chords get long) via the shared per-satellite chain builder in
-    // $lib/orbitTrack — the same builder the scene uses for the highlight,
-    // so the two implementations can't drift apart.
+    // One flat chain per satellite via the shared builder ($lib/orbitTrack, also used by the scene highlight).
     const allVerts: number[] = [];
     const allTimes: number[] = [];
     const periods: number[] = [];
@@ -171,24 +135,18 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
     const runs: number[] = [];
     const CHUNK = 20;
     const epochMs = epoch;
-    // Snapshot up front: a re-init mid-build replaces `satellites`, so iterate
-    // the snapshot and always push per-sat metadata to keep every array
-    // index-aligned with the catalog the bake started from.
+    // Snapshot up front: a mid-build re-init replaces `satellites`, so keep arrays index-aligned.
     const sats = satellites;
     const n = sats.length;
 
     for (let i = 0; i < n; i++) {
         const sat = sats[i];
-        // Culled by the graph selection: zero chain, no SGP4 cost. The
-        // scene's per-frame cull covers membership glide between bakes.
         if (cullMask && i < cullMask.length && !cullMask[i]) {
             vertexCounts.push(0);
             periods.push(0);
             runs.push(0);
             continue;
         }
-        // Focus-only bake: every other entry reports a zero chain so per-sat
-        // metadata stays index-aligned with the full catalog.
         if (onlyIndex !== null && onlyIndex !== undefined && i !== onlyIndex) {
             vertexCounts.push(0);
             periods.push(0);
@@ -199,7 +157,7 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
             vertexCounts.push(0);
             periods.push(0);
             runs.push(0);
-            continue; // catalog re-initialized mid-build (belt/braces)
+            continue;
         }
         const rec = sat.rec;
         let chain: OrbitChain | null;
@@ -228,8 +186,6 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
         }
         if ((i + 1) % CHUNK === 0) {
             if (buildId !== orbitBuildId) return;
-            // A re-initialization mid-build invalidates our satellite list —
-            // bail instead of mixing chains from two catalogs.
             if (bakeGeneration !== catalogVersion) return;
             await new Promise((resolve) => setTimeout(resolve, 0));
         }
@@ -243,8 +199,7 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
         {
             type: 'orbits',
             requestId,
-            // Echo the bake epoch: views must slide against the epoch of the
-            // bake they actually hold, not against a newer request's epoch.
+            // Views must slide against the held bake's epoch, not a newer request's.
             epoch,
             generation: bakeGeneration,
             positions,
@@ -257,22 +212,10 @@ async function buildOrbits(message: BuildOrbitsMessage): Promise<void> {
     );
 }
 
-/**
- * Nadir ground track for ONE satellite: 128 uniform-time steps per period over
- * TWO periods (the drawn window is one; between cadence rebuilds at high time
- * accelerations the window's start drifts into the second, so the extra
- * revolution is the sliding headroom). Each sample is projected through its
- * OWN timestamp's GMST onto the globe surface, so the result is always
- * earth-fixed regardless of the reference-frame toggle. Emitted as a vertex
- * chain with per-vertex time offsets (BakedChain shape) — SGP4 gaps are
- * concatenated, not segmented, so the chain may chord across short unknown
- * spans; the scene slides it with the same writer the orbit chains use.
- */
+/** Nadir ground track for one satellite: 128 steps/period over two periods (one drawn + sliding headroom), always earth-fixed. */
 function buildGroundTrack(message: BuildGroundTrackMessage): void {
     const { requestId, epoch, index } = message;
-    // Undrawable (bad index, hyperbolic elements, total SGP4 failure) still
-    // answers with an empty track so the scene can back off instead of
-    // re-requesting every cadence forever.
+    // Undrawable tracks still answer empty so the scene backs off instead of re-requesting forever.
     const empty = () =>
         postMessage({
             type: 'groundTrack',
@@ -291,7 +234,6 @@ function buildGroundTrack(message: BuildGroundTrackMessage): void {
     const rec = sat.rec;
     const meanMotionRadPerMs = rec.no / 60000;
     const ecc = rec.ecco;
-    // No closed period → no track (matches the orbit-drawing guard).
     if (!(ecc < 1) || !(meanMotionRadPerMs > 0)) {
         empty();
         return;
@@ -334,45 +276,32 @@ function buildGroundTrack(message: BuildGroundTrackMessage): void {
     );
 }
 
-/**
- * Run a pass search for one 'passes' request. The search is a generator
- * (see $lib/passes) sliced with macrotask yields so position ticks keep
- * flowing; a fresh request or init supersedes the previous search's token.
- * Responses are stamped with the catalog generation captured at request time,
- * so the UI can drop results from a stale catalog.
- */
-/**
- * Drive the pass-search generator with macrotask yields so live propagation
- * keeps flowing. Returns null when the search was superseded by a catalog
- * re-init (stale — discard).
- */
+/** Drive the pass-search generator with macrotask yields; null when superseded (never posts stale results). */
 async function drivePassSearch(
     iter: Generator<undefined, PassSearchResult, void>,
-    generation: number
+    generation: number,
+    token: number
 ): Promise<PassSearchResult | null> {
     for (;;) {
         const step = iter.next();
-        if (generation !== catalogVersion) {
-            // The catalog was re-inited mid-search — the result is stale.
+        if (token !== passSearchToken || generation !== catalogVersion) {
             iter.return({ passes: [], partial: true });
             return null;
         }
         if (step.done) return step.value;
-        // Macrotask yield: interleaves live propagation and catalog changes.
         await new Promise((resolve) => setTimeout(resolve, 0));
     }
 }
 
+/** Latest pass-search token — each new request retires the previous. */
+let passSearchToken = 0;
+
 async function runPassSearch(message: PassesMessage): Promise<void> {
     const requestId = message.requestId;
     const generation = catalogVersion;
-    // Worker-catalog satellites map through their srcIndex to the original
-    // catalog indices provided with the request.
+    const token = ++passSearchToken;
     const minElDeg = message.minElDeg ?? 10;
-    // The plane-cone screen costs no SGP4 calls — apply it to the FULL pool
-    // before the count cap, so a satellite that can pass but would be capped
-    // out by 2000 cheaper low-orbit neighbors is still searched when it is
-    // such a case. (findPasses re-applies the screen internally; harmless.)
+    // Plane-cone screen costs no SGP4 calls — apply to the full pool before the count cap.
     const screened: PassCandidate[] = [];
     for (const sat of satellites) {
         if (exceedsPassAltitude(sat.rec)) continue;
@@ -394,8 +323,8 @@ async function runPassSearch(message: PassesMessage): Promise<void> {
         gate: passVisibilityGate,
         wallBudgetMs: PASS_SEARCH_BUDGET_MS
     });
-    const result = await drivePassSearch(iter, generation);
-    if (!result || generation !== catalogVersion) return;
+    const result = await drivePassSearch(iter, generation, token);
+    if (!result || token !== passSearchToken || generation !== catalogVersion) return;
     postMessage({
         type: 'passes',
         requestId,
@@ -417,8 +346,6 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
             satellites = [];
             scale = message.scale;
             elementMode = message.mode;
-            // `srcIndex` preserves the input position so pass results can map
-            // worker satellites back to original catalog indices.
             for (let srcIndex = 0; srcIndex < message.satellites.length; srcIndex++) {
                 const sat = message.satellites[srcIndex];
                 try {
@@ -472,8 +399,6 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
             const gmst = gstime(date);
             const count = satellites.length;
             const positions = new Float32Array(count * 3).fill(NaN);
-            // NaN = "unknown" for a satellite whose propagation failed — views
-            // skip NaN rows instead of plotting fake zeros at the origin.
             const elements = new Float32Array(count * 7).fill(NaN);
             const sunUnit = sunEciDirection(epoch);
             const sunlit = new Uint8Array(count);
@@ -487,7 +412,6 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
                     continue;
                 }
                 if (!state || state.position === false || state.position === undefined) {
-                    // Unknown propagation → keep the previous eclipse status.
                     sunlit[i] = lastSunlit ? (lastSunlit[i] ?? 1) : 1;
                     continue;
                 }
@@ -501,7 +425,6 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
                 positions[i * 3] = ecf.x * scale;
                 positions[i * 3 + 1] = ecf.y * scale;
                 positions[i * 3 + 2] = ecf.z * scale;
-                // Elements screen their own finiteness, so `null` rows stay NaN.
                 let el: PlottedElements | null;
                 try {
                     el = elementsFor(
@@ -524,8 +447,7 @@ function handleMessage(event: MessageEvent<WorkerMessage>): void {
                 elements[i * 7 + 5] = el.m;
                 elements[i * 7 + 6] = el.u;
             }
-            // Only re-send the color buffer when some satellite crossed an
-            // eclipse boundary — the query is cheap, the transfer is not.
+            // Only re-send colors on an eclipse-boundary crossing; the query is cheap, the transfer is not.
             let eclipseChanged = !lastSunlit || lastSunlit.length !== count;
             if (!eclipseChanged) {
                 for (let i = 0; i < count; i++) {

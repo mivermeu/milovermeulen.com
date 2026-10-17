@@ -10,12 +10,8 @@
     import { trackerState } from '$lib/state.svelte';
     import { initTrackerUrlSync } from '$lib/url-sync.svelte';
 
-    // Shareable URL state + favorites: applying the deep-link params needs the
-    // catalog AND the filter tree, so the sync waits for both. The returned
-    // effect-root dispose tears the whole feature down with the page.
     $effect(() => initTrackerUrlSync());
 
-    // Phones treat the drawer as a modal (backdrop, ✕ close, Escape, inert toggle).
     let isMobile = $state(false);
 
     $effect(() => {
@@ -26,19 +22,11 @@
         return () => mq.removeEventListener('change', update);
     });
 
-    // Right utility bar: one flush unit (Controls, Filters, Passes), every
-    // section collapsible independently so the passes list can take the full
-    // bar when needed. Filters stays open on launch. Session-only.
     let drawerOpen = $state({ filters: true, controls: true, passes: true });
 
     let wasOpen = false;
 
-    // Focus management for the mobile modal bar: land on the toggle when it
-    // OPENS (not on later breakpoint flips with the bar already open); on
-    // close, return focus to the toggle (if focus dropped). Focus is deferred
-    // past the slide-in transition AND told not to scroll — focusing the
-    // off-screen bar mid-slide otherwise scrolls the whole map container
-    // (visible as an entire-screen shift).
+    // Mobile modal focus: land on the toggle on open (deferred past the transition, no scroll), return on close.
     $effect(() => {
         if (typeof document === 'undefined') return;
         if (trackerState.panelsOpen && isMobile && !wasOpen) {
@@ -55,7 +43,6 @@
 
     function onKeydown(event: KeyboardEvent): void {
         if (event.key !== 'Escape' || !trackerState.panelsOpen) return;
-        // Don't steal Escape from the explorer modal or form fields.
         if (document.querySelector('[role="dialog"]')) return;
         const target = event.target as HTMLElement | null;
         if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
@@ -99,7 +86,6 @@
         </div>
         <SatelliteGraph />
         {#if trackerState.panelsOpen}
-            <!-- Mobile: the drawer is a modal overlay — tap anywhere outside to close. -->
             <button
                 type="button"
                 aria-label="Hide panels"

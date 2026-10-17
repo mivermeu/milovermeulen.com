@@ -13,8 +13,7 @@
 
     const MIN_CHARS = 2;
 
-    // Actually-visible count: the tree filter composed with the graph
-    // selection (brush mask), so the header tracks what both views show.
+    // Tree filter composed with the graph selection (brush mask).
     const visibleCount = $derived.by(() => {
         const mask = trackerState.brushMask;
         if (!mask) return trackerState.activeIndices.length;

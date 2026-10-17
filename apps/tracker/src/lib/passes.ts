@@ -15,43 +15,10 @@ import {
     semiMajorAxisKm
 } from './astro';
 
-/**
- * Location-centric pass finding: "which of these satellites will pass above
- * observer X in the next N days, and how high?"
- *
- * The algorithm is a standard three-stage detector:
- *
- *  1. A static orbit-plane screen discards satellites whose orbit plane can
- *     never come within the elevation's horizon cone of the observer (zero
- *     SGP4 calls for them).
- *  2. Coarse SGP4 position stepping per satellite, at that satellite's own
- *     cadence: the step is bounded by how long the satellite can possibly
- *     stay above the elevation threshold within one pass (derived from its
- *     period and max radius), so every pass renders at least ~3 coarse
- *     samples and is never skipped whole.
- *  3. Above-threshold runs are refined with true SGP4 look angles — rise/set
- *     crossings bisection'd to the exact `minElDeg` boundary, and the maximum
- *     elevation located by golden-section search.
- *
- * Refinement runs in global chronological order (a min-heap over the
- * satellites' next coarse sample times), so the search stops as soon as the
- * top-N-by-start list can no longer be beaten by a later-discovered pass.
- * Large sets therefore cost a handful of coarse samples per satellite instead
- * of a full 7-day sweep; tiny sets cost one inexpensive sweep per satellite.
- *
- * Known tolerance: a tangential graze whose flanking coarse samples sit more
- * than GRAZE_MARGIN_DEG below the threshold would still slip between samples
- * — by continuity that requires an impossibly fast excursion for the orbital
- * classes with real passes, so graze scans close the practical hole (the
- * below→below gaps with elevated flanks plus each satellite's final tail gap
- * are re-scanned at ≤ 30 s cadence).
- */
-
+/** Location-centric pass finding: plane screen → per-satellite coarse stepping → bisection/golden-section refine, merged chronologically to top-N. */
 const RAD2DEG = 180 / Math.PI;
 const DEG2RAD = Math.PI / 180;
-// Earth's sidereal rotation rate (rad/s). Always added to the satellite's
-// inertial rate when bounding how fast the observer-to-satellite geometry can
-// change — correct for prograde, conservative for retrograde.
+// Sidereal rate added to the inertial rate when bounding geometry change.
 const OMEGA_EARTH = 7.2921159553e-5;
 
 /** Higher-altitude bodies (GEO) coarse-step at most every hour. */
@@ -60,35 +27,18 @@ const MAX_STEP_MS = 3_600_000;
 export const PASS_MIN_EL_DEG = 10;
 /** Single definition site for the search-candidate cap (worker + UI note surface). */
 export const PASS_SEARCH_MAX_SATS = 2000;
-/**
- * Generous visibility cap: only satellites whose perigee is at most this high
- * are searched. Everything the naked eye (or binoculars) can catch is LEO —
- * GEO/MEO objects are permanently too distant — and the cap doubles as an
- * ordering fix: always-above-horizon high objects otherwise squat the first
- * chronological top-N slots. Perigee, not mean altitude, so eccentric orbits
- * with a low, visible arc (Molniya-type) still qualify. Matches the app's
- * LEO color split (< 2000 km).
- */
+/** Perigee cap: only satellites with perigee ≤ this (km) are searched ( eccentric low-arc orbits still qualify). */
 export const PASS_MAX_PERIGEE_KM = 2000;
 /** Bisection convergence for rise/set times (milliseconds). */
 const BISECT_TOL_MS = 20;
 const BISECT_MAX_ITERS = 30;
 /** Golden-section cap for the maximum-elevation search. */
 const MAX_EL_MAX_ITERS = 60;
-/** Heartbeat cadence: coarse samples evaluated per generator yield (macrotask slicing). */
+/** Coarse samples evaluated per generator yield (macrotask slicing). */
 const YIELD_EVERY = 400;
-/**
- * Graze-scan margin (degrees below the threshold): gaps between two
- * below-threshold coarse samples are re-scanned finely only when both
- * flanking elevations are within this margin — the by-continuity signature of
- * a tangential graze that fits inside the step.
- */
+/** Below→below gaps re-scan finely only when both flanks sit within this margin of the threshold. */
 const GRAZE_MARGIN_DEG = 5;
-/**
- * Finalization-phase wall budget (ms): the stranded-tail loop (open runs +
- * capped graze strands) mirrors the search fuse so it can never freeze the
- * worker; if it trips, remaining finals are undisclosed → `partial`.
- */
+/** Finalization-phase wall budget (ms); tripping it reports `partial`. */
 const FINALIZE_BUDGET_MS = 500;
 
 export interface ObserverLocation {
@@ -98,16 +48,7 @@ export interface ObserverLocation {
     lonDeg: number;
 }
 
-/**
- * HOOK POINT for pass visibility gating (owned by the sunlight/terminator
- * feature): supply e.g. "satellite sunlit AND observer local darkness" to
- * restrict the search to optically visible passes. Return false for a sample
- * that must not count; the search then treats that sample as below-horizon,
- * so-gated spans are excluded from detection and refinement alike.
- *
- * Callables cannot cross postMessage, so the Web Worker wires this up itself
- * rather than receiving it in a request message (see sgp4.worker.ts).
- */
+/** Visibility gate hook (sunlight feature): false counts the sample as below-horizon. */
 export type PassVisibilityGate = (visibility: {
     /** Absolute sample time (ms). */
     tMs: number;
@@ -117,7 +58,7 @@ export type PassVisibilityGate = (visibility: {
     look: LookAngles;
 }) => boolean;
 
-/** One satellite the search evaluates: its record plus app-level identity. */
+/** One satellite the search evaluates. */
 export interface PassCandidate {
     /** Display name, e.g. "ISS (ZARYA)". */
     name: string;
@@ -160,11 +101,7 @@ export interface PassSearchParams {
     maxPasses?: number;
     /** Optional visibility gate — see {@link PassVisibilityGate}. */
     gate?: PassVisibilityGate;
-    /**
-     * Optional wall-clock budget (ms) for the whole search. Past it the search
-     * finalizes the runs it has and reports `partial: true`. Undefined means
-     * unlimited (tests, or when the caller enforces its own budget).
-     */
+    /** Optional wall-clock budget (ms); past it the search reports `partial: true`. */
     wallBudgetMs?: number;
 }
 
@@ -178,17 +115,12 @@ export interface PassSearchResult {
     partial: boolean;
 }
 
-/**
- * Preselect the satellite list for the search: keep propagable records, sort
- * by orbital period ascending (shortest period = lowest orbit first) and cap
- * the count. Returns counts the UI can surface as a "limited to N" note.
- */
+/** Preselect satellites: keep propagable records, lowest orbit first, capped. */
 export function capCandidates(
     candidates: PassCandidate[],
     maxSats: number
 ): { capped: PassCandidate[]; active: number; searched: number } {
     const usable = candidates.filter((c) => c.rec.no > 0);
-    // Mean motion ascending = shortest period = lowest orbit first.
     const sorted = [...usable].sort((a, b) => b.rec.no - a.rec.no || a.index - b.index);
     const capped = sorted.slice(0, Math.max(0, maxSats));
     return { capped, active: candidates.length, searched: capped.length };
@@ -200,7 +132,6 @@ interface ObserverGd {
     height: number;
 }
 
-/** Look angles of `rec` from `observerGd` at `tMs`; null when SGP4 fails. */
 function lookAnglesAt(
     rec: SatRec,
     tMs: number,
@@ -214,12 +145,7 @@ function lookAnglesAt(
     return { look, visible: gate ? gate({ tMs, ecf, look }) : true };
 }
 
-/**
- * Effective elevation (degrees): the true geometric elevation when the sample
- * is usable, and −90 when SGP4 failed or the visibility gate rejects it.
- * Pass detection runs entirely on this function, so gating always splits a
- * pass exactly where the gate toggles.
- */
+/** Effective elevation (degrees); −90 when SGP4 fails or the gate rejects it. */
 function effectiveElevationDeg(
     rec: SatRec,
     tMs: number,
@@ -231,7 +157,6 @@ function effectiveElevationDeg(
     return la.look.elevation * RAD2DEG;
 }
 
-/** Az/el in degrees at an exact time; used only on propagable states. */
 function lookDegAt(rec: SatRec, tMs: number, observerGd: ObserverGd): { az: number; el: number } {
     const la = lookAnglesAt(rec, tMs, observerGd, undefined);
     if (!la) return { az: NaN, el: NaN };
@@ -239,35 +164,25 @@ function lookDegAt(rec: SatRec, tMs: number, observerGd: ObserverGd): { az: numb
     return { az, el: la.look.elevation * RAD2DEG };
 }
 
-/**
- * Largest geocentric angle ψ (degrees), for any surface observer, at which a
- * satellite at radius `radiusKm` is at or above `minElDeg` elevation.
- * From `tan e = (r·cos ψ − R) / (r·sin ψ)`:  ψ = arccos((R/r)·cos e) − e.
- *
- * Exported for the globe's visibility footprint: the ground region seeing
- * the satellite above `minElDeg` is the spherical cap of radius ψ around
- * the subsatellite point.
- */
+/** Largest geocentric angle ψ (deg) at which radius `radiusKm` reaches `minElDeg`. From tan e = (r·cos ψ − R)/(r·sin ψ): ψ = arccos((R/r)·cos e) − e. */
 export function maxCentralAngleDeg(radiusKm: number, minElDeg: number): number {
     const e = Math.min(minElDeg, 89.999) * DEG2RAD;
     const arg = (EARTH_EQUATORIAL_RADIUS_KM / radiusKm) * Math.cos(e);
-    if (arg >= 1) return 180; // degenerate small radius: treat as always-in-cone
+    if (arg >= 1) return 180;
     return Math.max(0, (Math.acos(Math.min(1, arg)) - e) * RAD2DEG);
 }
 
-/**
- * Upper bound (seconds) on the duration of one above-threshold pass: the
- * sub-point traverses at most 2ψ of the horizon cone, at a relative angular
- * rate no smaller than orbital rate + Earth rotation. Sized at the satellite's
- * apogee radius (largest ψ) as a conservative bound.
- */
+/** Upper bound (s) on one above-threshold pass. Sized at perigee radius/rate so fast perigee arcs can't hide between samples. */
 function maxAboveThresholdSec(rec: SatRec, minElDeg: number): number {
     const n = meanMotionRadPerSec(rec);
     if (!(n > 0)) return 0;
-    const rMax = semiMajorAxisKm(rec) * (1 + Math.min(rec.ecco, 0.99));
-    const psiDeg = maxCentralAngleDeg(rMax, minElDeg);
+    const e = Math.min(rec.ecco, 0.99);
+    const rMin = semiMajorAxisKm(rec) * (1 - e);
+    const psiDeg = maxCentralAngleDeg(rMin, minElDeg);
     if (!(psiDeg > 0)) return 0;
-    return (2 * psiDeg * DEG2RAD) / (n + OMEGA_EARTH);
+    const eRate = Math.min(rec.ecco, 0.9);
+    const ratePeri = (n * Math.sqrt(1 + eRate)) / (1 - eRate) ** 1.5;
+    return (2 * psiDeg * DEG2RAD) / (ratePeri + OMEGA_EARTH);
 }
 
 interface ResolvedParams {
@@ -290,45 +205,13 @@ function resolveParams(params: PassSearchParams): ResolvedParams {
     };
 }
 
-/**
- * Stage-1 static screen (exported): can this satellite's orbit plane ever
- * come close enough for a pass at the given observer latitude? The satellite
- * always lies on the orbit's great circle, so the best a satellite can ever
- * do equals the observer's angular distance to the orbit plane.
- *
- * That distance is `d(t) = |sinI·cosφ·sin(Ω−θ) + cosI·sinφ|` (φ = satellite.js
- * geodetic latitude, used as geocentric here — the ≤ 0.2° substitution error
- * is inside the 1° pad; θ = local sidereal longitude; Ω = ascending node
- * right ascension). The phase (Ω−θ) advances one full cycle per sidereal day,
- * so for any window of a day or more the minimum is exactly
- * `asin(max(0, |cosI·sinφ| − sinI·cosφ))`.
- *
- * Both directions are already safe, where barriers matter:
- * - Skip direction: the true window minimum can only be LARGER than the
- *   full-cycle envelope (the phase has not yet saturated on sub-day windows,
- *   and RAAN drift merely re-plays the same envelope with shifted phase), so
- *   skipping on the envelope never excludes a satellite that can pass.
- * - Keep direction: plane distance is a lower bound for orbit-point distance,
- *   so keep decisions never miss a pass either.
- * The 1° pad is therefore slack for the small φ-substitution and
- * radius-convention errors only.
- *
- * (This analytic bound replaced a fixed-interval phase sweep: sampling
- * (Ω−θ) at ~2 samples/day aliases against the once-daily cycle and can skip
- * every daily trough, which used to wrongly screen out whole orbital
- * classes — sun-sync (~98°) at mid-latitudes failed brute-force checks.)
- */
-/**
- * Altitude pre-screen (exported): true when the satellite can never be an
- * interesting pass target — its perigee sits above PASS_MAX_PERIGEE_KM, so
- * even its closest approach is beyond naked-eye/binocular range. Zero SGP4
- * calls for them, and they stop occupying the chronological top-N slots.
- */
+/** True when perigee sits above PASS_MAX_PERIGEE_KM (beyond visible range). */
 export function exceedsPassAltitude(rec: SatRec): boolean {
     const perigeeKm = semiMajorAxisKm(rec) * (1 - Math.min(rec.ecco, 0.99)) - EARTH_MEAN_RADIUS_KM;
     return !(perigeeKm <= PASS_MAX_PERIGEE_KM);
 }
 
+/** Stage-1 plane screen: observer-to-plane floor distance `asin(max(0, |cosI·sinφ| − sinI·cosφ))` must reach the horizon cone (1° pad covers φ/radius error). */
 export function planeScreensOut(rec: SatRec, observerLatDeg: number, minElDeg = 10): boolean {
     const n = meanMotionRadPerSec(rec);
     if (!(n > 0)) return true;
@@ -342,16 +225,10 @@ export function planeScreensOut(rec: SatRec, observerLatDeg: number, minElDeg = 
     const cosI = Math.cos(rec.inclo);
     const reach = Math.abs(cosI * Math.sin(lat)) - sinI * Math.cos(lat);
     const distDeg = Math.asin(Math.min(1, Math.max(0, reach))) * RAD2DEG;
-    // Never reachable: the observer's floor distance to the plane stays more
-    // than a pad (≥ 1°) beyond the largest horizon-cone angle.
     return distDeg - 1 >= psiDeg;
 }
 
-/**
- * Locate the threshold crossing between two samples of opposite sign.
- * Returns [lastBelow, firstAbove]. Works for rise (below → above) and set
- * (above → below) alike: bisection keeps the bracket straddling the crossing.
- */
+/** Threshold crossing between opposite-sign samples; returns [lastBelow, firstAbove]. */
 function bisectCrossing(
     rec: SatRec,
     aT: number,
@@ -365,7 +242,7 @@ function bisectCrossing(
     if (!(hi > lo)) return [lo, hi];
     const loAbove = effectiveElevationDeg(rec, lo, observerGd, gate) >= minElDeg;
     const hiAbove = effectiveElevationDeg(rec, hi, observerGd, gate) >= minElDeg;
-    if (loAbove === hiAbove) return [lo, hi]; // caller error guard: no crossing
+    if (loAbove === hiAbove) return [lo, hi];
     for (let i = 0; i < BISECT_MAX_ITERS && hi - lo > BISECT_TOL_MS; i++) {
         const mid = (lo + hi) / 2;
         const midAbove = effectiveElevationDeg(rec, mid, observerGd, gate) >= minElDeg;
@@ -375,8 +252,6 @@ function bisectCrossing(
             hi = mid;
         }
     }
-    // The bracket near the crossing: (lo, hi) with `lo` on one side, `hi` on
-    // the other — return in [below, above] time order.
     return loAbove ? [hi, lo] : [lo, hi];
 }
 
@@ -413,13 +288,7 @@ function goldenMaxElevation(
     return [tMid, la ? la.look.elevation * RAD2DEG : -90];
 }
 
-/**
- * Global-ish maximum of the true elevation on [riseT, setT]: golden-section
- * assumes a unimodal elevation curve, which holds over one pass but not over
- * a multi-day clipped run (e.g. a GEO belt satellite). Densify the span first
- * at ~maxDuration/8 spacing, take the best bracket, and golden-section that —
- * the dense grid bounds what a local max can miss.
- */
+/** Global-ish elevation max on [riseT, setT]: densify multi-day spans, then golden-section the best bracket. */
 function maxElevation(
     rec: SatRec,
     riseT: number,
@@ -441,8 +310,7 @@ function maxElevation(
                 bestT = t;
             }
         }
-        // The true max is trusted to lie within one max-duration bracket of
-        // the dense-scan best (a pass above threshold lasts ≤ maxDur).
+        // The true max lies within one max-duration bracket of the dense-scan best.
         return goldenMaxElevation(
             rec,
             Math.max(riseT, bestT - maxDurMs),
@@ -453,16 +321,7 @@ function maxElevation(
     return goldenMaxElevation(rec, riseT, setT, observerGd);
 }
 
-/**
- * Refine one coarse window [lo, hi] (both ends sampled below-threshold, or
- * window edges for clipped runs): re-sample the interior, split it into
- * contiguous above-threshold stretches and bisect each stretch's rise/set to
- * exact times. Every qualifying stretch is returned — a budget-cut or
- * window-tail window can span many passes, and returning only the first one
- * would drop the rest. `innerStepMs` overrides the default re-sample cadence
- * (maxDuration/8) — used by the graze scans, which must resolve gaps between
- * coarse samples far finer than one pass duration.
- */
+/** Split a coarse window into above-threshold stretches; bisect each rise/set to exact times. */
 function refineRun(
     rec: SatRec,
     name: string,
@@ -494,14 +353,11 @@ function refineRun(
         }
         let j = i;
         while (j + 1 < times.length && aboves[j + 1]) j++;
-        // The stretch starts above first at times[i] and ends above last at
-        // times[j]; neighbours (window edges excepted) sample below.
         const clippedRise = i === 0;
         const clippedSet = j === times.length - 1;
 
         let startMs = lo;
         if (!clippedRise) {
-            // Rise: [lastBelow, firstAbove] between the neighbour below-sample and here.
             startMs = bisectCrossing(
                 rec,
                 times[i - 1],
@@ -524,7 +380,6 @@ function refineRun(
         }
         i = j + 1;
 
-        // Threshold graze that ends between samples — drop.
         if (!(endMs > startMs + 5)) continue;
         const [maxElAtMs, maxElDeg] = maxElevation(
             rec,
@@ -562,7 +417,6 @@ function refineRun(
     return rows;
 }
 
-/** Minimal binary min-heap over (key, value) pairs with numeric keys. */
 class MinHeap {
     private keys: number[] = [];
     private vals: number[] = [];
@@ -615,9 +469,7 @@ class MinHeap {
 /** Per-satellite search state (parallel array over survivors of the screen). */
 interface CandidateSearchState {
     candidate: PassCandidate;
-    /** Time of the next coarse sample (ms). */
     nextT: number;
-    /** Time of the most recent coarse sample (ms). */
     prevT: number;
     /** Effective elevation at `prevT` (degrees, −90 when gated/failed). */
     prevEffEl: number;
@@ -627,13 +479,7 @@ interface CandidateSearchState {
     openRunLo: number | null;
 }
 
-/**
- * Search for up to `maxPasses` passes over the observer. Periodically yields
- * nothing (`undefined`) purely so a Web Worker driver can slice the search
- * with macrotask yields and keep its event loop responsive; the generator's
- * return value is the final result. `wallBudgetMs` is the sole fuse guarding
- * pathological searches — past it the result reports `partial: true`.
- */
+/** Search up to `maxPasses` passes; yields `undefined` so a worker can slice with macrotask yields. */
 export function* findPasses(
     params: PassSearchParams
 ): Generator<undefined, PassSearchResult, void> {
@@ -647,7 +493,6 @@ export function* findPasses(
     const gate = params.gate;
     const budgetDeadline =
         params.wallBudgetMs !== undefined ? performance.now() + params.wallBudgetMs : null;
-    // Top-N by start time, kept sorted ascending.
     const top: PassRow[] = [];
     let partial = false;
 
@@ -685,27 +530,13 @@ export function* findPasses(
         });
     }
 
-    // Stage 2+3: chronological coarse scan; refine runs as they close.
     const heap = new MinHeap();
     for (let i = 0; i < states.length; i++) heap.push(states[i].nextT, i);
     let samplesSinceYield = 0;
-    // mayStopEarly is an O(states) scan — only worth running right after a new
-    // pass makes the top list full (or a later pass reshuffles it).
     let exitCheckDue = false;
-    // Set when the loop breaks via mayStopEarly: the top list is proven
-    // unbeatable, so the finalization below (tail graze scans for niceties
-    // that start past the boundary) can only burn worker time — and worse,
-    // trip its fuse and misreport a complete result as `partial`. Skipped.
     let exitedEarly = false;
 
-    /**
-     * Tangential grazes shorter than one coarse step can fit entirely inside
-     * a below→below sample pair. Such a graze is by definition near-tangent,
-     * so the elevation leaves the threshold ring slowly and the flanking
-     * samples sit within a few degrees of it. Re-scanning only those gaps
-     * (bounded extra evaluations, 2 per real pass worst case at LEO cadence)
-     * closes the graze hole without a fixed ultra-fine sweep.
-     */
+    /** Re-scan below→below gaps with elevated flanks: a sub-step graze hides only there. */
     const grazeScan = (s: CandidateSearchState, hiMs: number): void => {
         const gap = hiMs - s.prevT;
         if (gap <= 0 || s.prevEffEl < minEl - GRAZE_MARGIN_DEG) return;
@@ -728,20 +559,13 @@ export function* findPasses(
         }
     };
 
-    // All future discoveries start after the earliest pending sample time or
-    // the last/first sample that could still bracket a pass, so once the top
-    // list is full and those are past the Nth pass's start, nothing can beat
-    // the current result.
+    // Stop once the full top list can no longer be beaten by a later discovery.
     const mayStopEarly = (): boolean => {
         if (top.length < resolved.maxPasses) return false;
         const boundary = top[top.length - 1].startMs;
         const heapKey = heap.minKey;
         if (heapKey !== null && heapKey <= boundary) return false;
-        // Closed state: any still-hiding pass rises AFTER its last sample
-        // (`prevT`) — so `prevT >= boundary` closes the barrier. Open state:
-        // its next pass could start anywhere past the run window; the window
-        // opened on the previous (below-threshold) sample, so the run's
-        // `openRunLo` is the earliest start it can contribute.
+        // Closed: hiding passes rise after `prevT`; open: earliest start is `openRunLo`.
         return states.every((s) =>
             s.openRunLo === null ? s.prevT >= boundary : s.openRunLo >= boundary
         );
@@ -755,8 +579,6 @@ export function* findPasses(
                 break;
             }
         }
-        // The wall-clock budget is the single fuse; without it, only the
-        // window, the heap, or an unbeatable top list ends the search.
         if (budgetDeadline !== null && performance.now() >= budgetDeadline) {
             partial = true;
             break;
@@ -770,8 +592,6 @@ export function* findPasses(
         const elDeg = la && la.visible ? la.look.elevation * RAD2DEG : -90;
         const above = elDeg >= minEl;
 
-        // Closed-gap graze check comes first: a below→below step pair is the
-        // only place a pass shorter than one step can hide.
         if (!above && s.openRunLo === null) grazeScan(s, t);
 
         if (above) {
@@ -797,8 +617,6 @@ export function* findPasses(
         s.prevEffEl = elDeg;
         s.nextT = t + s.stepMs;
         if (s.nextT < resolved.endMs) heap.push(s.nextT, si);
-        // Re-arm the (rare) exit scan once the popped frontier is past the
-        // full list's boundary — by then the heap min has proven the stopper.
         if (top.length >= resolved.maxPasses && t > top[top.length - 1].startMs) {
             exitCheckDue = true;
         }
@@ -809,13 +627,7 @@ export function* findPasses(
         }
     }
 
-    // Finalization: runs still open at the window end plus each closed
-    // satellite's leftover tail gap. Skipped entirely after an early exit:
-    // every undiscovered pass starts past the unbeatable boundary, so tails
-    // cannot enter the top list — scanning them only spends worker time and
-    // risks a spurious `partial` from the fuse below. A tail deadline mirrors
-    // the search's own fuse so a pathological strand can never block the
-    // worker past it; when it trips we disclose incompleteness via `partial`.
+    // Finalization: open runs plus each closed satellite's tail gap (skipped after early exit; tail fuse guards the worker).
     const tailDeadline = performance.now() + FINALIZE_BUDGET_MS;
     if (!exitedEarly) {
         for (const s of states) {
@@ -824,19 +636,10 @@ export function* findPasses(
                 break;
             }
             if (s.openRunLo === null) {
-                // Closed sat: graze-scan the tail gap after its last sample.
-                // Cap the strand at the state's pending sample: everything from
-                // there on either starts past the already-unbeatable top-N
-                // boundary (early exit) or is disclosed by `partial` (budget
-                // exit) / impossible (normal heap exhaustion ⇒ nextT ≥ endMs).
-                // Without the cap a ~days-long strand executed tens of thousands
-                // of SGP4 evaluations synchronously here, freezing propagation.
+                // Cap the strand at the pending sample: uncapped, a days-long strand runs tens of thousands of SGP4 evals synchronously.
                 grazeScan(s, Math.min(resolved.endMs, s.nextT));
                 continue;
             }
-            // Budget-cut or window-tail runs span an arbitrary number of passes;
-            // refineRun samples at maxDuration/8, so even a multi-day open run
-            // stays bounded and returns all of its passes.
             const rows = refineRun(
                 s.candidate.rec,
                 s.candidate.name,

@@ -6,9 +6,7 @@
 
     let canvas: HTMLCanvasElement;
     let scene: GlobeScene | undefined = $state();
-    // Last tree-filter array applied via setFilter (guard so per-snapshot mask
-    // republishes don't re-init the worker); last highlight state applied —
-    // both plain, deliberately untracked.
+    // Guard so per-snapshot mask republishes don't re-init the worker.
     let appliedFilter: number[] | null = null;
     let ringTarget = -1;
 
@@ -74,20 +72,12 @@
         const sats = trackerState.satellites;
         const mask = trackerState.brushMask;
         if (sats.length === 0) return;
-        // One effect drives both scene entry points: setFilter must only run on
-        // an actual tree-filter change — the graph republishes the brush mask
-        // once per propagate snapshot, and re-running setFilter there would
-        // re-walk the whole catalog (worker re-init per snapshot). GlobeScene
-        // treats setFilter as mask-invalidation, so the mask is (re)applied on
-        // both paths; it stays render-time-only culling either way (graphBrush.ts).
+        // setFilter runs only on actual filter change (mask republishes every snapshot).
         if (indices !== appliedFilter) {
             const filtered = indices.map((i) => sats[i]);
             trackerState.hovered = null;
             trackerState.hoveredIndex = -1;
             trackerState.pinnedIndex = -1;
-            // Untrack: setFilter re-reads elementMode (for the worker init). If the
-            // effect tracked it, a mode toggle would re-walk the whole catalog and
-            // re-bump the worker's generation — which pins the graph in snap mode.
             untrack(() => {
                 scene?.setFilter(filtered, indices);
                 scene?.setBrushMask(mask);
@@ -100,14 +90,9 @@
 
     $effect(() => {
         if (!scene) return;
-        // Hover from either view (globe or graph) takes precedence over the pin.
         const index =
             trackerState.hoveredIndex >= 0 ? trackerState.hoveredIndex : trackerState.pinnedIndex;
         const filteredIdx = index >= 0 ? trackerState.activeIndices.indexOf(index) : -1;
-        // A pinned/hovered satellite that drifts outside the committed brush
-        // region is filtered from both views — its ring must not outlive the
-        // culled dot. The cheap state compare keeps the per-snapshot mask churn
-        // from rebuilding the highlight geometry when membership is unchanged.
         const mask = trackerState.brushMask;
         const target = filteredIdx >= 0 && (!mask || mask[filteredIdx] === 1) ? filteredIdx : -1;
         if (target === ringTarget) return;
@@ -118,8 +103,7 @@
 
     $effect(() => {
         if (!scene) return;
-        // Ground track follows the pin only — hover must never trigger an
-        // orbit-length worker rebuild (index maps through the active filter).
+        // Ground track follows the pin only (hover must not trigger a worker rebuild).
         const pin = trackerState.pinnedIndex;
         const filteredIdx = pin >= 0 ? trackerState.activeIndices.indexOf(pin) : -1;
         scene.setGroundTrack(filteredIdx);
@@ -133,7 +117,7 @@
 
 <div class="relative h-full w-full overflow-hidden bg-[#1a1a1f]">
     <!-- eslint-disable-next-line svelte/no-unused-svelte-ignore -->
-    <!-- svelte-ignore a11y_no_interactive_element_to_noninteractive_role -- interactive 3D viewer surface -->
+    <!-- svelte-ignore a11y_no_interactive_element_to_noninteractive_role -->
     <canvas
         bind:this={canvas}
         class="block h-full w-full outline-none"

@@ -6,38 +6,23 @@ import type { ObserverLocation, PassRow } from './passes';
 
 export type { ElementMode };
 
-/**
- * Request to search passes from an observer over the satellites currently
- * loaded in the worker (the tree-filtered set as sent to the last `init`).
- */
+/** Pass search over the worker's currently loaded (tree-filtered) set. */
 export interface PassesRequest {
     requestId: number;
     observer: ObserverLocation;
-    /** Search window start (ms). */
     startMs: number;
-    /** Search window end (ms). */
     endMs: number;
-    /** Minimum elevation for a pass (degrees). */
     minElDeg?: number;
-    /** Maximum number of passes returned (default 20). */
     maxPasses?: number;
-    /**
-     * Search cap: when the active set is larger, only this many satellites —
-     * sorted by orbital period ascending (lowest orbit first) — are searched.
-     */
+    /** When the active set is larger, only this many satellites (shortest period first) are searched. */
     maxSats?: number;
-    /**
-     * Original-catalog index of each satellite in the order they were sent to
-     * the last `init` (i.e. `trackerState.activeIndices`), for result mapping.
-     */
+    /** Original-catalog index per satellite in last-`init` order, for result mapping. */
     originalIndices: number[];
 }
 
-/** Result cap bookkeeping the UI surfaces as a "limited to N" note. */
+/** Result cap bookkeeping surfaced as a "limited to N" note. */
 export interface PassCapInfo {
-    /** Satellites the search could pass at this location (after the plane-cone screen). */
     active: number;
-    /** Satellites actually searched after the cap. */
     searched: number;
     capped: boolean;
 }
@@ -49,46 +34,25 @@ export interface WorkerResponse {
     epoch?: number;
     /** Worker-side catalog version; bumped on every init so views can drop stale snapshots. */
     generation?: number;
-    /**
-     * Service-side data-regime version (bumped on init and element-mode switch),
-     * echoed from the propagate request; a view holding an older revision must
-     * snap to the new data instead of blending across the switch.
-     */
+    /** Data-regime version (init/mode switch); an older revision must snap, not blend. */
     revision?: number;
     colors?: Float32Array;
     positions?: Float32Array;
     elements?: Float32Array;
     message?: string;
     ranges?: number[];
-    /** Pass search results (type 'passes'). */
     passes?: PassRow[];
-    /** True when the pass search was cut short by its budget. */
     partial?: boolean;
-    /** Pass search candidate cap bookkeeping (type 'passes'). */
     capInfo?: PassCapInfo;
-    /** Per-track orbital period (ms) — ground tracks carry it for window sliding. */
     periodMs?: number;
-    /** Orbit bakes: flat per-sat vertex time offsets (ms from the bake epoch). */
     vertexTimes?: Float32Array;
-    /** Orbit bakes: per-satellite orbital period (ms), 0 for skipped satellites. */
     periods?: number[];
-    /** Orbit bakes: per-satellite chain vertex counts (aligned with vertexTimes). */
     vertexCounts?: number[];
-    /**
-     * Orbit bakes: flat SGP4-failure run layout, grouped per satellite as
-     * [nRuns, vertsRun1, vertsRun2, …]. A single run (nRuns === 1) means the
-     * chain is contiguous and safely slidable.
-     */
+    /** Flat SGP4-failure run layout per satellite: [nRuns, vertsRun1, …]. */
     runs?: Int32Array;
 }
 
-/**
- * Blend the `prev -> next` snapshots into `current` (`stride` floats per item).
- * Channels named in `angleOffsets` are degrees wrapped to [0, 360), so they
- * blend along the shortest arc — a 359°→0° wrap never drags a point halfway
- * across the chart. A NaN endpoint means "unknown" (a failed propagation) and
- * is replaced by the other endpoint rather than poisoning the blend.
- */
+/** Blend `prev -> next` into `current`; angle channels wrap to the shortest arc, NaN yields to the other endpoint. */
 export function blendInto(
     prev: Float32Array,
     next: Float32Array,
@@ -114,21 +78,13 @@ export function blendInto(
 
 type Listener = (message: WorkerResponse) => void;
 
-// Position refresh scales with the propagated count: small filters stay snappy,
-// while large catalogs slow the interval to leave the worker headroom. Budget
-// ~100k propagated satellites/sec, clamped to a sane range.
+// Position refresh scales with propagated count (~100k sats/sec), clamped to a sane range.
 const MIN_CADENCE_MS = 120;
 const MAX_CADENCE_MS = 600;
 const THROUGHPUT_PER_MS = 100;
 const TICK_MS = 30;
 
-/**
- * A single shared SGP4 worker, driven by this service. It propagates the catalog
- * on a count-scaled cadence, emitting ECF positions (globe) and the argument of
- * latitude (graph) from one pass — so no view propagates on the main thread and
- * the service is independent of any component's lifecycle. The worker lives for
- * the app's lifetime; components subscribe to its messages.
- */
+/** Shared SGP4 worker: propagates on a count-scaled cadence so no view works the main thread. Lives for the app lifetime. */
 class PropagationService {
     private worker: Worker | undefined;
     private readonly listeners = new Set<Listener>();
@@ -139,9 +95,8 @@ class PropagationService {
     private pending = false;
     private lastRequestWall = 0;
     private requestSeq = 0;
-    /** Regime counter (see $lib/simclock for why epoch deltas alone can't serve views). */
+    /** Regime counter; a user scrub is a regime change that must snap, not blend. */
     private revision = 0;
-    /** Last seen `simScrubSeq`; a user scrub is a regime change that must snap, not blend. */
     private lastSeenScrubSeq = 0;
 
     private ensure(): Worker | undefined {
@@ -150,8 +105,6 @@ class PropagationService {
             this.worker = new Worker(new URL('./workers/sgp4.worker.ts', import.meta.url), {
                 type: 'module'
             });
-            // Hook visibility only after a worker actually exists (constructor
-            // can throw) so retries never stack listeners.
             document.addEventListener('visibilitychange', this.onVisibility);
             this.worker.onmessage = (event: MessageEvent<WorkerResponse>) =>
                 this.handle(event.data);
@@ -176,11 +129,7 @@ class PropagationService {
             else this.stopLoop();
         } else if (message.type === 'positions' && message.positions && message.elements) {
             this.pending = false;
-            // Anchor the cadence on receipt, not send: the next request fires
-            // cadence.ms after the previous response LANDS, so stamps advance
-            // at (real response interval)× speed and the worker stays single-
-            // flight — no watchdog refire can upstage a still-outstanding
-            // response (the watchdog below only covers a genuinely lost one).
+            // Anchor cadence on receipt so the worker stays single-flight; the watchdog only covers a lost response.
             this.lastRequestWall = performance.now();
         }
         this.emit(message);
@@ -233,11 +182,9 @@ class PropagationService {
 
     subscribe(listener: Listener): () => void {
         this.listeners.add(listener);
-        // Wake the propagation loop back up for the first (re)subscriber.
         if (this.listeners.size === 1 && this.count > 0) this.startLoop();
         return () => {
             this.listeners.delete(listener);
-            // No viewers — let the worker idle until someone listens again.
             if (this.listeners.size === 0) {
                 this.pending = false;
                 this.stopLoop();
@@ -257,7 +204,7 @@ class PropagationService {
 
     /** Switch which orbital-element set the worker emits. */
     setMode(mode: ElementMode): void {
-        this.revision++; // regime change: the next stamped response must snap
+        this.revision++;
         this.ensure()?.postMessage({ type: 'mode', mode });
     }
 
@@ -283,19 +230,12 @@ class PropagationService {
         this.ensure()?.postMessage({ type: 'buildGroundTrack', epoch, requestId, index });
     }
 
-    /**
-     * Search passes over the worker's currently loaded (tree-filtered)
-     * catalog from an observer location. Results arrive as a
-     * `type: 'passes'` response stamped with the catalog generation.
-     */
+    /** Search passes over the worker's loaded catalog; results arrive as `type: 'passes'`. */
     findPasses(request: PassesRequest): void {
         this.ensure()?.postMessage({
             type: 'passes',
             ...request,
-            // Callers pass live state (e.g. `trackerState.activeIndices`, a
-            // Svelte `$state` proxy) — structured-clone rejects proxies with
-            // DataCloneError, which used to kill every search silently at this
-            // postMessage. Snapshot a plain array at the boundary.
+            // Snapshot the live `$state` proxy: structured-clone rejects proxies with DataCloneError.
             originalIndices: [...request.originalIndices]
         });
     }

@@ -52,14 +52,11 @@
     const TICKS = 5;
     const MAX_POINTS = 60000;
     const MIN_W = 320;
-    // Sane default panel width; the user can drag it larger up to MAX_W.
     const DEFAULT_W = 560;
     const MIN_H = 200;
     const MAX_W = 1400;
     const MAX_H = 1000;
 
-    // Touch screens get a wider/taller default sheet (the compact desktop
-    // profile wastes most of a phone); sizes stay user-resizable either way.
     const coarsePointer =
         typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
 
@@ -69,18 +66,12 @@
         color: THREE.Color;
     }
 
-    // The graph axis keys live in trackerState (not component-local state) so
-    // URL deep links (`gx`/`gy`) can seed and mirror them.
     let xKey = $derived(trackerState.graphXKey);
     let yKey = $derived(trackerState.graphYKey);
 
-    // Starts minimized; the + button in the corner expands it.
     let collapsed = $state(true);
     let showModel = $state(false);
 
-    // Panel is anchored bottom-left; the top-right handle resizes it. Mobile
-    // takes nearly the full viewport beside its 6px edges; desktop clamps to
-    // the compact 560px profile. The SSR fallback (592px) yields DEFAULT_W.
     let width = $state(
         Math.min(
             coarsePointer ? MAX_W : Math.min(MAX_W, DEFAULT_W),
@@ -114,9 +105,7 @@
     let yRange = $state<[number, number]>([0, 1]);
     let xLog = $state(false);
     let yLog = $state(false);
-    // Tooltip tracking the highlighted point: `uIndex` is the sample's position
-    // in the filtered samples list so frame() can re-derive x/y values as the
-    // blend glides — otherwise the tooltip drifts from the ring during playback.
+    // `uIndex` indexes the filtered samples so the tooltip tracks the blend per frame.
     let hover = $state<{
         x: number;
         y: number;
@@ -126,37 +115,20 @@
         yVal: number;
     } | null>(null);
 
-    // --- Brush-select state -------------------------------------------------
-    // TODO(a11y, deferred): interaction is pointer-first; a keyboard
-    // alternative (focusable brush mode + arrow-key rect editing) is accepted
-    // follow-up work.
-    // pressActive: pointer is down on the canvas (potential brush start);
-    // brushActive: the drag passed BRUSH_DRAG_THRESHOLD_PX so the live overlay
-    // is up and picking/pinning are suppressed until release.
+    // TODO(a11y): pointer-first interaction; keyboard brush editing is accepted follow-up.
     let pressActive = false;
     let brushActive = $state(false);
     let brushStart = { x: 0, y: 0 };
-    // Press origin (for the tap-vs-drag threshold) and the committed brush at
-    // press time (cancel rollback — a cancelled gesture must not keep its
-    // live preview commits).
     let pressPoint = { x: 0, y: 0 };
     let brushBeforeGesture: GraphBrush | null = null;
-    // Canvas-local min/max rect while dragging (clamped to the plot).
     let brushLive = $state<ScreenRect | null>(null);
-    // Moving the committed selection: pointer went down inside its rect, so
-    // the drag translates it instead of drawing a new one.
     let dragSelection = $state(false);
     let dragGrab = { x: 0, y: 0 };
     let dragSize = { w: 0, h: 0 };
-    // Resizing the committed selection from its bottom-right corner.
     let resizeSelection = $state(false);
     let resizeAnchor = { x: 0, y: 0 };
-    // Pointer hovers the committed rect (for the move cursor).
     let overSelection = $state(false);
-    // Pointer hovers a resize corner (cursor direction, null when not).
     let resizeCursor: 'nwse' | 'nesw' | null = $state(null);
-    // True when the committed brush currently hides every visible point —
-    // toggles only when the count crosses zero, never per frame.
     let brushEmpty = $state(false);
 
     let renderer: THREE.WebGLRenderer | undefined;
@@ -168,27 +140,19 @@
     let lastMoveWall = 0;
     let lastPreviewWall = 0;
 
-    // Live orbital elements from the shared propagation service, 7 per satellite
-    // (a, e, i, raan, argp, m, u), indexed by the filtered/active position. We
-    // blend the previous and next snapshots per frame so the points glide.
+    // 7 elements per satellite (a, e, i, raan, argp, m, u) in filtered-slot order; blended per frame.
     let elPrev: Float32Array<ArrayBufferLike> = new Float32Array(0);
     let elNext: Float32Array<ArrayBufferLike> = new Float32Array(0);
     let elCurrent: Float32Array<ArrayBufferLike> = new Float32Array(0);
     let elPrevEpoch = 0;
     let elNextEpoch = 0;
     let catalogGen = 0;
-    /**
-     * Data regime of the held-forward snapshot (`message.revision`). -1 forces
-     * the first snapshot to snap; older revisions are stale and dropped; newer
-     * ones (catalog init / element-mode switch, even while paused) snap so the
-     * fresh regime takes effect instead of blending across the switch.
-     */
+    /** Held snapshot's data regime: older revisions drop, newer ones snap. */
     let regimeRevision = -1;
 
     const xLabel = $derived(paramMeta(xKey).label);
     const yLabel = $derived(paramMeta(yKey).label);
 
-    // Chip text for the committed brush (only while its axes are selected).
     const chipText = $derived.by(() => {
         const brush = trackerState.graphBrush;
         if (!brushIsActiveForAxes(brush, xKey, yKey)) return null;
@@ -199,9 +163,6 @@
         );
     });
 
-    // Canvas rect of the COMMITTED brush, redrawn from data bounds every
-    // render — the live drag rect only exists mid-gesture, so without this
-    // the selection square vanishes the moment the pointer is released.
     const brushOverlayRect = $derived.by(() => {
         if (plot.w === 0) return null;
         return brushToScreenRect(trackerState.graphBrush, {
@@ -215,7 +176,6 @@
         });
     });
 
-    // Data-space min/max under the live drag rect, for the per-axis labels.
     const brushAxesLive = $derived.by(() => {
         const r = brushLive;
         if (!r) return null;
@@ -227,7 +187,6 @@
         };
     });
 
-    // Where each parameter sits inside the worker's 7-element-per-satellite block.
     const EL_INDEX: Record<BaseParamKey, number> = {
         a: 0,
         e: 1,
@@ -238,7 +197,6 @@
         u: 6
     };
 
-    // Static per-satellite data; recomputed only when the catalog/filter changes.
     const samples = $derived.by(() => {
         const sats = trackerState.satellites;
         const active = trackerState.activeIndices;
@@ -257,13 +215,10 @@
         return out;
     });
 
-    // Hover (from either view) takes precedence; otherwise the pinned satellite.
     const focusIndex = $derived(
         trackerState.hoveredIndex >= 0 ? trackerState.hoveredIndex : trackerState.pinnedIndex
     );
 
-    // Index the samples by satellite index so the highlight can be updated per
-    // frame (from the RAF blend) rather than per snapshot.
     const samplesByIndex = $derived.by(() => new Map(samples.map((s) => [s.index, s])));
 
     function baseValue(els: Float32Array, s: Sample, key: BaseParamKey): number {
@@ -319,15 +274,12 @@
         return (value - range[0]) / (range[1] - range[0] || 1);
     }
 
-    // White ring around the focused satellite's point, refreshed per frame.
     let highlightPoint = $state<{ x: number; y: number } | null>(null);
 
     function highlightValues(s: Sample): { xVal: number; yVal: number } {
         return { xVal: paramValue(s, xKey), yVal: paramValue(s, yKey) };
     }
 
-    // Per-frame tooltip refresh, paired with updateHighlight() so the text and
-    // the white ring always show the same instantaneous blend values.
     function updateHoverValues(): void {
         if (!hover) return;
         const sample = samples[hover.uIndex];
@@ -383,8 +335,6 @@
         );
     }
 
-    // Match the drawing buffer to the host and cache the plot rect. Only writes
-    // `plot` when it actually moved, so the overlay doesn't churn every frame.
     function syncSize(): boolean {
         if (!renderer || !host || !camera) return false;
         const w0 = host.clientWidth;
@@ -406,8 +356,6 @@
         return true;
     }
 
-    // Scan both endpoints of the current blend so points stay inside the axis
-    // while they glide between snapshots.
     function scanRange(
         key: ParamKey,
         isLog: boolean,
@@ -449,10 +397,7 @@
         color.needsUpdate = true;
     }
 
-    // Per-frame hot path: positions only, using the ranges cached by `layout`.
-    // Brush filtering happens HERE, at render time: a sample outside the brush
-    // keeps its array slot (uIndex) and is parked offscreen instead of being
-    // removed or reordered — the pick raycast then simply can't hit it.
+    // Hot path: brush filtering parks culled samples offscreen but keeps their slots.
     function updatePoints(): void {
         if (!renderer || !camera || !geometry || !scene) return;
         const n = Math.min(samples.length, MAX_POINTS);
@@ -483,9 +428,6 @@
                 !Number.isFinite(yn) ||
                 (brushing && !pointInBrush(brush, xKey, yKey, xv, yv))
             ) {
-                // NaN row (failed propagation off the worker) or brushed-out
-                // point — park the dot far offscreen so it can't poison the
-                // geometry's bounding sphere.
                 position.setXYZ(k, -10000, -10000, 0);
                 continue;
             }
@@ -494,19 +436,13 @@
         }
         position.needsUpdate = true;
         geometry.setDrawRange(0, n);
-        // Keep pick raycasts honest: invalidate the cached bounding sphere (it
-        // is recomputed lazily from the live buffer on the next pick).
         geometry.boundingSphere = null;
-        // Only meaningful with an active brush; the no-op $state write when it
-        // doesn't change is free.
         brushEmpty = brushing && visible === 0;
         updateHoverValues();
         updateHighlight();
         renderer.render(scene, camera);
     }
 
-    // Cold path: resize, axis ranges and colors. Runs on a new snapshot, an axis
-    // change, or a resize — not every frame.
     function layout(): void {
         if (!syncSize()) return;
         computeRanges();
@@ -518,7 +454,6 @@
         if (!canvas || !raycaster || !camera || !points) return null;
         const rect = canvas.getBoundingClientRect();
         if (rect.width === 0 || rect.height === 0) return null;
-        // Touch has no hover to pre-refine a tap — widen the catch radius.
         raycaster.params.Points.threshold = event.pointerType === 'touch' ? 14 : 5;
         const pointer = new THREE.Vector2(
             ((event.clientX - rect.left) / rect.width) * 2 - 1,
@@ -529,27 +464,17 @@
         return hit?.index !== undefined ? hit.index : null;
     }
 
-    // --- Brush-select interaction -------------------------------------------
-    // A press starts a potential brush; only once the drag passes
-    // BRUSH_DRAG_THRESHOLD_PX does the live overlay open and picking/pinning
-    // get suppressed, so plain hover and click-to-pin behave exactly as today.
-
     function canvasPoint(event: PointerEvent): { x: number; y: number } {
         const rect = canvas!.getBoundingClientRect();
         return { x: event.clientX - rect.left, y: event.clientY - rect.top };
     }
 
     function onPointerDown(event: PointerEvent): void {
-        // Only the primary pointer drives the brush; a second touch during a
-        // drag must not clobber the rect.
         if (pressActive || !event.isPrimary || !canvas) return;
         pressActive = true;
         const p = canvasPoint(event);
         pressPoint = p;
         brushBeforeGesture = trackerState.graphBrush;
-        // Resizable corners first (any but the × one): the opposite corner
-        // stays anchored. Then the interior: drag translates. The × button
-        // intercepts its own clicks, so any canvas press here is a gesture.
         const committed = brushOverlayRect;
         const corner =
             committed && !brushActive ? hitResizeCorner(p, committed, event.pointerType) : null;
@@ -557,45 +482,31 @@
             resizeSelection = true;
             resizeAnchor = resizeAnchorFor(corner, committed, p);
             resizeCursor = corner;
-            // Seed the live rect so the square never blinks out between
-            // takeover (which hides the committed overlay) and first move.
             brushLive = { ...committed };
             hover = null;
             trackerState.hoveredIndex = -1;
             canvas.setPointerCapture(event.pointerId);
             return;
         }
-        // Down inside the committed selection → drag it (translate), never
-        // start a new rect there.
         if (committed && !brushActive && pointInCommitted(p, committed, event.pointerType)) {
             dragSelection = true;
             dragGrab = { x: p.x - committed.x0, y: p.y - committed.y0 };
             dragSize = { w: committed.x1 - committed.x0, h: committed.y1 - committed.y0 };
-            // Seed the live rect so the square never blinks out between
-            // takeover (which hides the committed overlay) and first move.
             brushLive = { ...committed };
             hover = null;
             trackerState.hoveredIndex = -1;
             canvas.setPointerCapture(event.pointerId);
             return;
         }
-        // Clamp the start corner to the plot: a press in a canvas margin must
-        // not inflate the dominant-axis extent (it would let the painted
-        // margin distance commit a degenerate edge column).
         const { l, t, w, h } = plot;
         brushStart = {
             x: Math.min(Math.max(p.x, l), l + w),
             y: Math.min(Math.max(p.y, t), t + h)
         };
-        // Capture so a drag ending over the chip/axis row still commits.
         canvas.setPointerCapture(event.pointerId);
     }
 
-    /**
-     * Resize-corner hit test: top-right, bottom-left, bottom-right. The
-     * top-left corner holds the × button, so it never resizes (null there).
-     * Returns the cursor direction for the hit corner.
-     */
+    /** Resize-corner hit test (top-left holds ×, so never resizes). */
     function hitResizeCorner(
         p: { x: number; y: number },
         rect: ScreenRect,
@@ -610,20 +521,18 @@
         return null;
     }
 
-    /** Opposite corner (the resize anchor) for a grabbed corner. */
+    /** Opposite (anchor) corner for a grabbed resize corner. */
     function resizeAnchorFor(
         corner: 'nwse' | 'nesw',
         rect: ScreenRect,
         p: { x: number; y: number }
     ): { x: number; y: number } {
-        // 'nwse' only serves bottom-right; 'nesw' serves two corners —
-        // disambiguate by proximity to the press point.
         if (corner === 'nwse') return { x: rect.x0, y: rect.y0 };
         const dTR = Math.abs(p.x - rect.x1) + Math.abs(p.y - rect.y0);
         const dBL = Math.abs(p.x - rect.x0) + Math.abs(p.y - rect.y1);
         return dTR <= dBL ? { x: rect.x0, y: rect.y1 } : { x: rect.x1, y: rect.y0 };
     }
-    /** Hit-test the committed selection rect (wider catch radius for touch). */
+    /** Hit-test the committed selection rect (wider radius for touch). */
     function pointInCommitted(
         p: { x: number; y: number },
         rect: ScreenRect,
@@ -638,12 +547,7 @@
         );
     }
 
-    /**
-     * Live preview: commit the current drag rect (throttled) so counts, globe
-     * culling, and the chip track the gesture. The mask path is render-time
-     * only — no worker re-init rides along. Focus clearing stays on release:
-     * unpinning mid-drag would fight the gesture.
-     */
+    /** Live preview commit (throttled, render-time mask only — no worker re-init). */
     function previewBrush(rect: ScreenRect): void {
         const now = performance.now();
         if (now - lastPreviewWall < 33) return;
@@ -654,8 +558,6 @@
 
     function onPointerMove(event: PointerEvent): void {
         if (resizeSelection) {
-            // Corner drag: the opposite corner stays anchored, the grabbed
-            // one follows the pointer (clamped to the plot). Shown live.
             const p = canvasPoint(event);
             const { l, t, w, h } = plot;
             const x1 = Math.min(Math.max(p.x, l), l + w);
@@ -665,8 +567,6 @@
             return;
         }
         if (dragSelection) {
-            // Translate the committed rect with the pointer, clamped so it
-            // stays inside the plot. Shown through the live overlay.
             const p = canvasPoint(event);
             const { l, t, w, h } = plot;
             const x0 = Math.min(Math.max(p.x - dragGrab.x, l), l + w - dragSize.w);
@@ -679,14 +579,12 @@
         if (pressActive && !brushActive) {
             const p = canvasPoint(event);
             if (dragPassedThreshold(brushStart.x, brushStart.y, p.x, p.y)) {
-                // Brush begins: suppress hover/picking for the whole drag.
                 brushActive = true;
                 hover = null;
                 trackerState.hoveredIndex = -1;
             }
         }
         if (brushActive) {
-            // Rect updates bypass the hover throttle so the overlay is fluid.
             brushLive = updateBrushRect(canvasPoint(event));
             if (brushLive) previewBrush(brushLive);
             return;
@@ -694,7 +592,6 @@
         const now = performance.now();
         if (now - lastMoveWall < 33) return;
         lastMoveWall = now;
-        // Move cursor over the committed selection (cheap boolean, no overlay churn).
         const hov = brushOverlayRect;
         const hp = hov ? canvasPoint(event) : null;
         overSelection = hov !== null && hp !== null && pointInCommitted(hp, hov, event.pointerType);
@@ -724,8 +621,6 @@
         const { l, t, w, h } = plot;
         const x = Math.min(Math.max(p.x, l), l + w);
         const y = Math.min(Math.max(p.y, t), t + h);
-        // Clamp to plot bounds so the rect stays inside the axes even when the
-        // pointer leaves the canvas (pointer capture keeps events flowing).
         return normalizedRect(brushStart.x, brushStart.y, x, y);
     }
 
@@ -734,12 +629,11 @@
         if (el.hasPointerCapture(event.pointerId)) el.releasePointerCapture(event.pointerId);
     }
 
-    /** Sub-threshold press → exactly the old click behavior (pin/unpin). */
+    /** Sub-threshold press behaves as a click (pin/unpin). */
     function clickAt(event: PointerEvent): void {
         pressActive = false;
         const index = pick(event);
         if (index !== null) trackerState.pinnedIndex = samples[index].index;
-        // Clicking empty space unpins, matching the globe's click behavior.
         else trackerState.pinnedIndex = -1;
     }
 
@@ -756,8 +650,6 @@
                 brushOverlayRect !== null &&
                 pointInCommitted(up, brushOverlayRect, event.pointerType);
             resizeCursor = null;
-            // No real movement → plain click (dots inside the selection stay
-            // pinnable; empty taps still unpin).
             if (!dragPassedThreshold(pressPoint.x, pressPoint.y, up.x, up.y)) {
                 clickAt(event);
                 return;
@@ -773,9 +665,6 @@
                 yLog
             });
             if (!brush) {
-                // Degenerate resize (corner dragged past the anchor into a
-                // hairline): keep the pre-gesture selection — resize is not a
-                // clear gesture.
                 if (wasResize && trackerState.graphBrush !== brushBeforeGesture) {
                     trackerState.graphBrush = brushBeforeGesture;
                 }
@@ -789,8 +678,6 @@
             clickAt(event);
             return;
         }
-        // Released drag ≥ threshold → commit (or clear via a null brush from a
-        // tiny/hairline rect, per brushFromCanvasRect).
         const rect = brushLive;
         endBrushInteraction();
         if (!rect) return;
@@ -807,8 +694,7 @@
     }
 
     function onPointerCancel(event: PointerEvent): void {
-        // Cancelled drag: abort without commit — roll back to the pre-gesture
-        // brush so live preview commits don't leak through the cancel.
+        // Roll back live preview commits on cancel.
         releaseBrushCapture(event);
         resizeSelection = false;
         dragSelection = false;
@@ -824,8 +710,7 @@
         brushLive = null;
     }
 
-    // A committed brush filters both views — satellites it ignores can't stay
-    // hovered or pinned (mirrors the tree filter's unpin behavior).
+    // A committed brush filters both views, so it clears hover/pin outside it.
     function clearFocusOutsideBrush(brush: GraphBrush): void {
         for (const index of [trackerState.hoveredIndex, trackerState.pinnedIndex]) {
             if (index < 0) continue;
@@ -836,8 +721,6 @@
             if (!pointInBrush(brush, xKey, yKey, xv, yv)) {
                 if (trackerState.hoveredIndex === index) {
                     trackerState.hoveredIndex = -1;
-                    // Also drop the globe-side hover payload so a stale tooltip
-                    // doesn't linger until the next globe pointermove.
                     trackerState.hovered = null;
                 }
                 if (trackerState.pinnedIndex === index) trackerState.pinnedIndex = -1;
@@ -853,8 +736,7 @@
 
     function onHandleDown(event: PointerEvent): void {
         resizing = true;
-        // Baseline from the rendered box: on mobile the panel is CSS-clamped
-        // (max-w/max-h), so drag math must start from the clamped size.
+        // Baseline from the rendered (possibly CSS-clamped) box.
         const rect = panelBox?.getBoundingClientRect();
         resizeStart = {
             x: event.clientX,
@@ -872,7 +754,6 @@
     }
 
     function onHandleUp(event: PointerEvent): void {
-        // pointercancel implies capture is already released (NotFoundError otherwise).
         const el = event.currentTarget as HTMLElement;
         if (el.hasPointerCapture(event.pointerId)) el.releasePointerCapture(event.pointerId);
         resizing = false;
@@ -894,30 +775,17 @@
 
     let rafId = 0;
 
-    // Per-frame: blend the last two snapshots into the current element values.
-    // Angular channels (raan, argp, m, u) blend along the shortest arc so the
-    // 359°→0° wrap of one orbit period doesn't drag points across the chart.
     function frame(): void {
         rafId = requestAnimationFrame(frame);
         if (elCurrent.length === 0) return;
-        // Blend against the shared simulated clock — the exact same epoch the
-        // globe renders from, so the two views always show the same instant.
-        // renderEpochMs interpolates between clock ticks at frame rate, and
-        // the factor keeps growing past the newest snapshot (dead reckoning,
-        // capped via renderBlend), matching the globe's behavior at 600×.
         const simEpoch = renderEpochMs();
         const blend = renderBlend(elPrevEpoch, elNextEpoch, simEpoch);
         blendInto(elPrev, elNext, elCurrent, blend, 7, [3, 4, 5, 6]);
         updatePoints();
     }
 
-    // --- Brush → globe bridge ------------------------------------------------
-    // Publish the composed (tree ∩ brush) visible mask for the globe. Values
-    // come from the freshest snapshot (elNext); the graph itself re-checks
-    // membership per frame in updatePoints, while the globe refreshes once per
-    // snapshot and whenever the brush/tree set/axes change. trackerState reads
-    // here are untracked on purpose — callers track what must retrigger this
-    // (a tracked deep read inside history effects caused catalog re-inits).
+    // Brush → globe bridge: composed (tree ∩ brush) mask. Reads here stay untracked;
+    // callers track retriggers (a tracked deep read once caused catalog re-inits).
     function publishBrushMask(): void {
         trackerState.brushMask = computeBrushMask(
             trackerState.graphBrush,
@@ -928,8 +796,6 @@
         );
     }
 
-    // Set up three.js once the canvas/host refs exist, and subscribe to the
-    // shared propagation service for positions + orbital elements.
     $effect(() => {
         if (!canvas || !host) return;
         let r: THREE.WebGLRenderer;
@@ -961,11 +827,7 @@
                 opacity: 0.9
             })
         );
-        // The plot spans its own canvas, so frustum culling is meaningless — and
-        // worse, the renderer computes the geometry's bounding sphere once on the
-        // first render (over the still-empty buffer = a 0-radius sphere at the
-        // origin) and never invalidates it, which permanently kills every
-        // subsequent pick raycast.
+        // Frustum culling off: the bounding sphere is computed over the empty buffer and would kill picks.
         pts.frustumCulled = false;
         s.add(pts);
         const ray = new THREE.Raycaster();
@@ -985,8 +847,6 @@
         const unsubscribe = propagation.subscribe((message) => {
             if (message.type !== 'positions' || !message.elements || message.epoch === undefined)
                 return;
-            // A new catalog (same or different size) must not blend into the
-            // previous one — snap straight to the new snapshot.
             if (message.generation !== catalogGen) {
                 catalogGen = message.generation ?? 0;
                 elPrev = message.elements;
@@ -999,19 +859,11 @@
                 publishBrushMask();
                 return;
             }
-            // Data-regime versioning: a newer revision (catalog init or
-            // element-mode switch — even while paused) means fresh data must
-            // replace the pair; an older one is a stale in-flight response.
-            // Same-revision backwards epochs are also stale (a watchdog refire
-            // overtaking a slow original, on a FIFO worker) and drop —
-            // deliberate backwards jumps always ride a revision bump.
+            // Newer revision (init/mode switch) replaces the pair; older is stale.
+            // Same-revision backwards epochs also drop — real jumps ride a revision bump.
             const messageRevision = message.revision ?? -1;
             if (messageRevision < regimeRevision) return;
             if (messageRevision === regimeRevision && message.epoch < elNextEpoch) return;
-            // Continuity guard shared with the globe: routine simulated-time
-            // advances blend; discontinuous epochs snap; same-epoch
-            // snapshots (paused clock) drop — repeated stamps have span ≈ 0 and
-            // the render stays static.
             const action =
                 messageRevision > regimeRevision ||
                 epochAction(
@@ -1031,7 +883,7 @@
                 layout();
                 return;
             }
-            if (message.epoch === elNextEpoch) return; // same epoch → same data
+            if (message.epoch === elNextEpoch) return;
             elPrev = elNext;
             elPrevEpoch = elNextEpoch;
             elNext = message.elements;
@@ -1062,7 +914,6 @@
         };
     });
 
-    // Re-layout when the active set, catalog, or axes change.
     $effect(() => {
         void samples;
         void xKey;
@@ -1070,21 +921,13 @@
         untrack(() => layout());
     });
 
-    // Axis-change policy: a brush drawn in one parameter space is meaningless
-    // in another — switching x/y axes CLEARS the committed brush (the region
-    // is never silently re-evaluated). Valid brushes keep their reference so
-    // this stays a no-op.
+    // Axis change clears the committed brush (a region in one parameter space is meaningless in another).
     $effect(() => {
         const brush = trackerState.graphBrush;
         const validated = invalidateBrushOnAxisChange(brush, xKey, yKey);
         if (validated !== brush) trackerState.graphBrush = validated;
     });
 
-    // Republish the globe's brush mask when the brush, the tree-filtered set,
-    // or the axes change. The writes that feed computeBrushMask (element
-    // arrays) are deliberately untracked — snapshot-driven refreshes come from
-    // the propagation callback, not from per-frame reactive churn (history:
-    // a tracked deep read caused catalog re-inits).
     $effect(() => {
         void trackerState.graphBrush;
         void samples;
