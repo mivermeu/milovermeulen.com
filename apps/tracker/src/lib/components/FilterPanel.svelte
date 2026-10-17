@@ -1,4 +1,6 @@
 <script lang="ts">
+    let { open = true, onToggle }: { open?: boolean; onToggle?: () => void } = $props();
+
     import { trackerState } from '$lib/state.svelte';
     import { findMatchingNodeIds, findNode, saveExpanded, restoreExpanded } from '$lib/tree';
     import Panel from './Panel.svelte';
@@ -75,7 +77,10 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<Panel title="Filters">
+<Panel title="Filters" {open} {onToggle} bare>
+    {#snippet summary()}
+        {visibleCount} of {trackerState.satellites.length}{#if selectionActive}&nbsp;selection{/if}
+    {/snippet}
     <div class="mb-2 text-[10px] text-brand-text">
         Showing <span class="font-mono text-brand-text-highlight">{visibleCount}</span>
         of {trackerState.satellites.length}{#if selectionActive}

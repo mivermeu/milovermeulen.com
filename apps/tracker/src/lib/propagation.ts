@@ -289,7 +289,15 @@ class PropagationService {
      * `type: 'passes'` response stamped with the catalog generation.
      */
     findPasses(request: PassesRequest): void {
-        this.ensure()?.postMessage({ type: 'passes', ...request });
+        this.ensure()?.postMessage({
+            type: 'passes',
+            ...request,
+            // Callers pass live state (e.g. `trackerState.activeIndices`, a
+            // Svelte `$state` proxy) — structured-clone rejects proxies with
+            // DataCloneError, which used to kill every search silently at this
+            // postMessage. Snapshot a plain array at the boundary.
+            originalIndices: [...request.originalIndices]
+        });
     }
 }
 

@@ -8,7 +8,12 @@ import {
     type LookAngles,
     type SatRec
 } from 'satellite.js';
-import { EARTH_EQUATORIAL_RADIUS_KM, meanMotionRadPerSec, semiMajorAxisKm } from './astro';
+import {
+    EARTH_EQUATORIAL_RADIUS_KM,
+    EARTH_MEAN_RADIUS_KM,
+    meanMotionRadPerSec,
+    semiMajorAxisKm
+} from './astro';
 
 /**
  * Location-centric pass finding: "which of these satellites will pass above
@@ -51,8 +56,20 @@ const OMEGA_EARTH = 7.2921159553e-5;
 
 /** Higher-altitude bodies (GEO) coarse-step at most every hour. */
 const MAX_STEP_MS = 3_600_000;
+/** Horizon threshold shared by the pass search and the footprint ring. */
+export const PASS_MIN_EL_DEG = 10;
 /** Single definition site for the search-candidate cap (worker + UI note surface). */
 export const PASS_SEARCH_MAX_SATS = 2000;
+/**
+ * Generous visibility cap: only satellites whose perigee is at most this high
+ * are searched. Everything the naked eye (or binoculars) can catch is LEO —
+ * GEO/MEO objects are permanently too distant — and the cap doubles as an
+ * ordering fix: always-above-horizon high objects otherwise squat the first
+ * chronological top-N slots. Perigee, not mean altitude, so eccentric orbits
+ * with a low, visible arc (Molniya-type) still qualify. Matches the app's
+ * LEO color split (< 2000 km).
+ */
+export const PASS_MAX_PERIGEE_KM = 2000;
 /** Bisection convergence for rise/set times (milliseconds). */
 const BISECT_TOL_MS = 20;
 const BISECT_MAX_ITERS = 30;
@@ -226,8 +243,12 @@ function lookDegAt(rec: SatRec, tMs: number, observerGd: ObserverGd): { az: numb
  * Largest geocentric angle ψ (degrees), for any surface observer, at which a
  * satellite at radius `radiusKm` is at or above `minElDeg` elevation.
  * From `tan e = (r·cos ψ − R) / (r·sin ψ)`:  ψ = arccos((R/r)·cos e) − e.
+ *
+ * Exported for the globe's visibility footprint: the ground region seeing
+ * the satellite above `minElDeg` is the spherical cap of radius ψ around
+ * the subsatellite point.
  */
-function maxCentralAngleDeg(radiusKm: number, minElDeg: number): number {
+export function maxCentralAngleDeg(radiusKm: number, minElDeg: number): number {
     const e = Math.min(minElDeg, 89.999) * DEG2RAD;
     const arg = (EARTH_EQUATORIAL_RADIUS_KM / radiusKm) * Math.cos(e);
     if (arg >= 1) return 180; // degenerate small radius: treat as always-in-cone
@@ -297,6 +318,17 @@ function resolveParams(params: PassSearchParams): ResolvedParams {
  * every daily trough, which used to wrongly screen out whole orbital
  * classes — sun-sync (~98°) at mid-latitudes failed brute-force checks.)
  */
+/**
+ * Altitude pre-screen (exported): true when the satellite can never be an
+ * interesting pass target — its perigee sits above PASS_MAX_PERIGEE_KM, so
+ * even its closest approach is beyond naked-eye/binocular range. Zero SGP4
+ * calls for them, and they stop occupying the chronological top-N slots.
+ */
+export function exceedsPassAltitude(rec: SatRec): boolean {
+    const perigeeKm = semiMajorAxisKm(rec) * (1 - Math.min(rec.ecco, 0.99)) - EARTH_MEAN_RADIUS_KM;
+    return !(perigeeKm <= PASS_MAX_PERIGEE_KM);
+}
+
 export function planeScreensOut(rec: SatRec, observerLatDeg: number, minElDeg = 10): boolean {
     const n = meanMotionRadPerSec(rec);
     if (!(n > 0)) return true;
@@ -639,6 +671,7 @@ export function* findPasses(
     // Stage 1: static screen + per-satellite search state.
     const states: CandidateSearchState[] = [];
     for (const candidate of params.candidates) {
+        if (exceedsPassAltitude(candidate.rec)) continue;
         if (planeScreensOut(candidate.rec, params.observer.latDeg, minEl)) continue;
         const maxDurSec = maxAboveThresholdSec(candidate.rec, minEl);
         if (!(maxDurSec > 0)) continue;
@@ -659,6 +692,11 @@ export function* findPasses(
     // mayStopEarly is an O(states) scan — only worth running right after a new
     // pass makes the top list full (or a later pass reshuffles it).
     let exitCheckDue = false;
+    // Set when the loop breaks via mayStopEarly: the top list is proven
+    // unbeatable, so the finalization below (tail graze scans for niceties
+    // that start past the boundary) can only burn worker time — and worse,
+    // trip its fuse and misreport a complete result as `partial`. Skipped.
+    let exitedEarly = false;
 
     /**
      * Tangential grazes shorter than one coarse step can fit entirely inside
@@ -712,7 +750,10 @@ export function* findPasses(
     while (heap.size > 0) {
         if (exitCheckDue) {
             exitCheckDue = false;
-            if (mayStopEarly()) break;
+            if (mayStopEarly()) {
+                exitedEarly = true;
+                break;
+            }
         }
         // The wall-clock budget is the single fuse; without it, only the
         // window, the heap, or an unbeatable top list ends the search.
@@ -769,41 +810,46 @@ export function* findPasses(
     }
 
     // Finalization: runs still open at the window end plus each closed
-    // satellite's leftover tail gap. A tail deadline mirrors the search's own
-    // fuse so a pathological strand can never block the worker past it; when
-    // it trips we disclose incompleteness via `partial`.
+    // satellite's leftover tail gap. Skipped entirely after an early exit:
+    // every undiscovered pass starts past the unbeatable boundary, so tails
+    // cannot enter the top list — scanning them only spends worker time and
+    // risks a spurious `partial` from the fuse below. A tail deadline mirrors
+    // the search's own fuse so a pathological strand can never block the
+    // worker past it; when it trips we disclose incompleteness via `partial`.
     const tailDeadline = performance.now() + FINALIZE_BUDGET_MS;
-    for (const s of states) {
-        if (performance.now() >= tailDeadline) {
-            partial = true;
-            break;
+    if (!exitedEarly) {
+        for (const s of states) {
+            if (performance.now() >= tailDeadline) {
+                partial = true;
+                break;
+            }
+            if (s.openRunLo === null) {
+                // Closed sat: graze-scan the tail gap after its last sample.
+                // Cap the strand at the state's pending sample: everything from
+                // there on either starts past the already-unbeatable top-N
+                // boundary (early exit) or is disclosed by `partial` (budget
+                // exit) / impossible (normal heap exhaustion ⇒ nextT ≥ endMs).
+                // Without the cap a ~days-long strand executed tens of thousands
+                // of SGP4 evaluations synchronously here, freezing propagation.
+                grazeScan(s, Math.min(resolved.endMs, s.nextT));
+                continue;
+            }
+            // Budget-cut or window-tail runs span an arbitrary number of passes;
+            // refineRun samples at maxDuration/8, so even a multi-day open run
+            // stays bounded and returns all of its passes.
+            const rows = refineRun(
+                s.candidate.rec,
+                s.candidate.name,
+                s.candidate.index,
+                s.openRunLo,
+                resolved.endMs,
+                resolved,
+                observerGd,
+                gate
+            );
+            s.openRunLo = null;
+            for (const row of rows) insert(row);
         }
-        if (s.openRunLo === null) {
-            // Closed sat: graze-scan the tail gap after its last sample.
-            // Cap the strand at the state's pending sample: everything from
-            // there on either starts past the already-unbeatable top-N
-            // boundary (early exit) or is disclosed by `partial` (budget
-            // exit) / impossible (normal heap exhaustion ⇒ nextT ≥ endMs).
-            // Without the cap a ~days-long strand executed tens of thousands
-            // of SGP4 evaluations synchronously here, freezing propagation.
-            grazeScan(s, Math.min(resolved.endMs, s.nextT));
-            continue;
-        }
-        // Budget-cut or window-tail runs span an arbitrary number of passes;
-        // refineRun samples at maxDuration/8, so even a multi-day open run
-        // stays bounded and returns all of its passes.
-        const rows = refineRun(
-            s.candidate.rec,
-            s.candidate.name,
-            s.candidate.index,
-            s.openRunLo,
-            resolved.endMs,
-            resolved,
-            observerGd,
-            gate
-        );
-        s.openRunLo = null;
-        for (const row of rows) insert(row);
     }
 
     return { passes: top, partial };

@@ -145,7 +145,7 @@
                     {#if norad !== null}
                         <button
                             type="button"
-                            class="-mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded p-0 text-sm transition-opacity hover:opacity-80"
+                            class="-mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded border-0 p-0 text-sm transition-opacity hover:opacity-80"
                             class:text-amber-400={satFavorited}
                             class:text-brand-text={!satFavorited}
                             class:opacity-40={!satFavorited}
@@ -159,7 +159,7 @@
                     {/if}
                     <button
                         type="button"
-                        class="-mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded p-0 text-xs text-brand-text opacity-60 transition-opacity hover:opacity-100"
+                        class="-mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded border-0 p-0 text-xs text-brand-text opacity-60 transition-opacity hover:opacity-100"
                         onclick={() => (trackerState.pinnedIndex = -1)}
                         aria-label="Close"
                     >
@@ -286,7 +286,7 @@
             {#snippet actions()}
                 <button
                     type="button"
-                    class="-mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded p-0 text-xs text-brand-text opacity-60 transition-opacity hover:opacity-100"
+                    class="-mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded border-0 p-0 text-xs text-brand-text opacity-60 transition-opacity hover:opacity-100"
                     onclick={() => (trackerState.pinnedIndex = -1)}
                     aria-label="Close"
                 >

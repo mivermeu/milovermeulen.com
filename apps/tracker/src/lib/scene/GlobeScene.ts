@@ -14,6 +14,7 @@ import { renderEpochMs } from '$lib/state.svelte';
 import { epochAction, renderBlend } from '$lib/simclock';
 import { writeWindowEdges } from '$lib/trackSlide';
 import { buildOrbitChain, type OrbitChain } from '$lib/orbitTrack';
+import { maxCentralAngleDeg, PASS_MIN_EL_DEG } from '$lib/passes';
 
 const EARTH_RADIUS_KM = 6371;
 export const GLOBE_RADIUS = 6.4;
@@ -50,6 +51,12 @@ const POINTER_THROTTLE_MS = 66;
 // is cheap enough to run per rendered frame, so the terminator tracks the
 // rendered clock exactly instead of stepping on a refresh cadence.
 const TERMINATOR_POINTS = 128;
+/** Visibility-footprint ring resolution (unit circle, auto-closed). */
+const FOOTPRINT_SEGMENTS = 128;
+/** Lift above the globe surface so the ring never z-fights the earth mesh. */
+const FOOTPRINT_LIFT = 0.015;
+/** Ring's local plane normal before orientation. */
+const FOOTPRINT_UP = new THREE.Vector3(0, 0, 1);
 
 export interface GlobeSceneCallbacks {
     onError?: (message: string) => void;
@@ -88,6 +95,8 @@ export class GlobeScene {
     private readonly hoverScratch = new THREE.Vector3();
     private readonly groundTrackMesh: THREE.LineSegments;
     private readonly groundTrackGeometry: THREE.BufferGeometry;
+    private readonly footprintRing: THREE.LineLoop;
+    private readonly footScratch = new THREE.Vector3();
     private showGroundTrack = true;
     private groundTrackIndex = -1;
     private groundTrackReady = false;
@@ -391,6 +400,34 @@ export class GlobeScene {
         this.groundTrackMesh.renderOrder = 998;
         this.groundTrackMesh.visible = false;
         this.scene.add(this.groundTrackMesh);
+
+        // Pinned-satellite visibility footprint: the horizon circle around the
+        // subpoint inside which the satellite stands above PASS_MIN_EL_DEG —
+        // the same threshold the pass search uses. A unit circle re-posed per
+        // frame (no buffer rewrite): center at R·cos ψ along the subpoint axis,
+        // radius R·sin ψ, plane ⊥ the axis.
+        const footVerts = new Float32Array(FOOTPRINT_SEGMENTS * 3);
+        for (let k = 0; k < FOOTPRINT_SEGMENTS; k++) {
+            const a = (k / FOOTPRINT_SEGMENTS) * Math.PI * 2;
+            footVerts[k * 3] = Math.cos(a);
+            footVerts[k * 3 + 1] = Math.sin(a);
+            footVerts[k * 3 + 2] = 0;
+        }
+        const footGeo = new THREE.BufferGeometry();
+        footGeo.setAttribute('position', new THREE.Float32BufferAttribute(footVerts, 3));
+        this.footprintRing = new THREE.LineLoop(
+            footGeo,
+            new THREE.LineBasicMaterial({
+                color: 0x8b9cc9,
+                transparent: true,
+                opacity: 0.35,
+                depthWrite: false
+            })
+        );
+        this.footprintRing.frustumCulled = false;
+        this.footprintRing.renderOrder = 997;
+        this.footprintRing.visible = false;
+        this.scene.add(this.footprintRing);
 
         // Prime the sun state so frame 0 already has the terminator and the
         // night overlay oriented correctly to the (real-time default) clock.
@@ -1062,6 +1099,47 @@ export class GlobeScene {
             this.groundTrackReady && this.groundTrackIndex >= 0 && this.showGroundTrack;
     }
 
+    /**
+     * Per-frame visibility-footprint pose: the horizon circle around the
+     * pinned satellite's live subpoint inside which it stands above
+     * PASS_MIN_EL_DEG. Same visibility gate as the ground track (it is that
+     * track's companion layer), positioned from the live blended dot — ECF in
+     * both reference frames, so no GMST rotation applies. Owns its visibility
+     * outright since it runs every frame anyway.
+     */
+    private updateFootprint(): void {
+        if (!this.groundTrackReady || this.groundTrackIndex < 0 || !this.showGroundTrack) {
+            this.footprintRing.visible = false;
+            return;
+        }
+        const i = this.groundTrackIndex * 3;
+        const px = this.positionArray[i];
+        const py = this.positionArray[i + 1];
+        const pz = this.positionArray[i + 2];
+        if (!Number.isFinite(px + py + pz)) {
+            this.footprintRing.visible = false;
+            return;
+        }
+        const r = Math.hypot(px, py, pz);
+        const rKm = r / SCALE;
+        if (!(r > 0) || !(rKm > EARTH_RADIUS_KM)) {
+            this.footprintRing.visible = false;
+            return;
+        }
+        const psiDeg = maxCentralAngleDeg(rKm, PASS_MIN_EL_DEG);
+        if (!(psiDeg > 0)) {
+            this.footprintRing.visible = false;
+            return;
+        }
+        const psi = (psiDeg * Math.PI) / 180;
+        const surfR = GLOBE_RADIUS + FOOTPRINT_LIFT;
+        const dir = this.footScratch.set(px / r, py / r, pz / r);
+        this.footprintRing.position.copy(dir).multiplyScalar(surfR * Math.cos(psi));
+        this.footprintRing.quaternion.setFromUnitVectors(FOOTPRINT_UP, dir);
+        this.footprintRing.scale.setScalar(surfR * Math.sin(psi));
+        this.footprintRing.visible = true;
+    }
+
     private handlePointerMove(event: PointerEvent): void {
         const now = performance.now();
         if (now - this.lastPointerMoveWall < POINTER_THROTTLE_MS) return;
@@ -1595,6 +1673,7 @@ export class GlobeScene {
         this.updatePositions();
         this.rebuildOrbitWindows();
         this.slideGroundTrack();
+        this.updateFootprint();
 
         if (this.highlightIndex >= 0 && this.pointerOverCanvas) {
             const sat = this.satellites[this.highlightIndex];

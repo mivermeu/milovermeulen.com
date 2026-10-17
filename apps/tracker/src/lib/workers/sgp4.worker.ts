@@ -10,6 +10,7 @@ import {
 import { EARTH_MEAN_RADIUS_KM, semiMajorAxisKm, tleEpochMs } from '$lib/astro';
 import {
     capCandidates,
+    exceedsPassAltitude,
     findPasses,
     planeScreensOut,
     PASS_SEARCH_MAX_SATS,
@@ -374,6 +375,7 @@ async function runPassSearch(message: PassesMessage): Promise<void> {
     // such a case. (findPasses re-applies the screen internally; harmless.)
     const screened: PassCandidate[] = [];
     for (const sat of satellites) {
+        if (exceedsPassAltitude(sat.rec)) continue;
         if (planeScreensOut(sat.rec, message.observer.latDeg, minElDeg)) continue;
         screened.push({
             name: sat.name,

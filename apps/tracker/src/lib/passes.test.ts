@@ -10,7 +10,9 @@ import {
 } from 'satellite.js';
 import {
     capCandidates,
+    exceedsPassAltitude,
     findPasses,
+    maxCentralAngleDeg,
     planeScreensOut,
     type PassCandidate,
     type PassRow,
@@ -615,5 +617,127 @@ describe('plane screen — near-boundary sun-sync regression (C1)', () => {
             expect(reference.length).toBeGreaterThan(5);
             expect(result.value.passes.length, `raan ${raan}`).toBe(reference.length);
         }
+    });
+});
+
+describe('findPasses — early exit does not misreport partial', () => {
+    // Thousands of frequent passers over a long window: the top-N fills
+    // almost immediately and the early exit fires, but the old finalization
+    // still tripped its fuse on the tail strands and reported a complete
+    // result as partial.
+    const candidates: PassCandidate[] = [];
+    for (let i = 0; i < 2000; i++) {
+        // Spread around the orbit so passes start at distinct times.
+        const shifted = makeCandidate({
+            name: `FLOCK-${i}`,
+            index: i,
+            satnum: 200 + i,
+            epochYear: 26,
+            epochDay: 1,
+            inclinationDeg: 51.6,
+            raanDeg: (i * 1.7) % 360,
+            ecc7: 10,
+            argpDeg: 0,
+            meanAnomalyDeg: (i * 47) % 360,
+            meanMotionRevPerDay: 15.5
+        });
+        candidates.push(shifted);
+    }
+    const start = EPOCH_MS + 12 * 3600_000;
+    const end = start + 7 * 86_400_000;
+
+    it('complete top-N reports partial=false', () => {
+        const iter = findPasses({
+            candidates,
+            observer: { latDeg: 47.38, lonDeg: 8.54 },
+            startMs: start,
+            endMs: end,
+            minElDeg: 10,
+            maxPasses: 20
+        });
+        let result = iter.next();
+        while (!result.done) result = iter.next();
+        expect(result.value.passes.length).toBe(20);
+        expect(result.value.partial).toBe(false);
+        // Non-decreasing starts — the list is the true top-20. Equal
+        // neighbours only happen for passes already underway at the window
+        // start (rise clipped to exactly `start`).
+        for (let i = 1; i < result.value.passes.length; i++) {
+            const prev = result.value.passes[i - 1].startMs;
+            const cur = result.value.passes[i].startMs;
+            expect(cur >= prev).toBe(true);
+            expect(cur > prev || cur === start).toBe(true);
+        }
+    });
+});
+
+describe('exceedsPassAltitude', () => {
+    const leo = () =>
+        makeCandidate({
+            name: 'LEO',
+            index: 0,
+            satnum: 300,
+            epochYear: 26,
+            epochDay: 1,
+            inclinationDeg: 51.6,
+            raanDeg: 0,
+            ecc7: 10,
+            argpDeg: 0,
+            meanAnomalyDeg: 0,
+            meanMotionRevPerDay: 15.5
+        }).rec;
+    const geo = () =>
+        makeCandidate({
+            name: 'GEO',
+            index: 1,
+            satnum: 301,
+            epochYear: 26,
+            epochDay: 1,
+            inclinationDeg: 0.1,
+            raanDeg: 0,
+            ecc7: 10,
+            argpDeg: 0,
+            meanAnomalyDeg: 0,
+            meanMotionRevPerDay: 1.0027
+        }).rec;
+
+    it('keeps LEO, drops GEO and MEO', () => {
+        expect(exceedsPassAltitude(leo())).toBe(false);
+        expect(exceedsPassAltitude(geo())).toBe(true);
+    });
+
+    it('a geostationary satellite produces no passes', () => {
+        const rec = geo();
+        const iter = findPasses({
+            candidates: [{ name: 'GEO', rec, index: 1 }],
+            observer: { latDeg: 0, lonDeg: 0 },
+            startMs: EPOCH_MS,
+            endMs: EPOCH_MS + 2 * 86_400_000,
+            minElDeg: 10,
+            maxPasses: 20
+        });
+        let result = iter.next();
+        while (!result.done) result = iter.next();
+        expect(result.value.passes).toEqual([]);
+        expect(result.value.partial).toBe(false);
+    });
+});
+
+describe('maxCentralAngleDeg — visibility footprint', () => {
+    it('gives the ISS horizon circle at 10° elevation', () => {
+        // 420 km orbit: acos((6378.137/6791)·cos10°) − 10° ≈ 12.3°.
+        expect(maxCentralAngleDeg(6371 + 420, 10)).toBeCloseTo(12.3, 0);
+    });
+
+    it('gives the GEO horizon circle', () => {
+        expect(maxCentralAngleDeg(42164, 10)).toBeCloseTo(71.4, 0);
+    });
+
+    it('widens toward the horizon as the threshold drops', () => {
+        expect(maxCentralAngleDeg(6791, 0)).toBeGreaterThan(maxCentralAngleDeg(6791, 10));
+    });
+
+    it('reports degenerate for sub-surface radii', () => {
+        expect(maxCentralAngleDeg(6000, 10)).toBe(180);
     });
 });

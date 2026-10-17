@@ -23,6 +23,7 @@
         type ScreenRect
     } from '$lib/graphBrush';
     import Panel from './Panel.svelte';
+    import InfoTip from './InfoTip.svelte';
     import OrbitModelModal from './OrbitModelModal.svelte';
     import {
         EARTH_RADIUS_KM,
@@ -1093,20 +1094,8 @@
     });
 </script>
 
-{#snippet infoTip(key: ParamKey)}
-    <span class="group relative inline-flex">
-        <button
-            type="button"
-            aria-label={`About ${paramMeta(key).label}`}
-            class="flex h-5 w-5 items-center justify-center rounded-full border border-brand-text/30 p-0 text-[9px] font-semibold text-brand-text/60 hover:border-brand-text/60 hover:bg-transparent hover:text-brand-text"
-            >i</button
-        >
-        <span
-            role="tooltip"
-            class="pointer-events-none absolute top-5 right-0 z-40 hidden w-52 rounded border border-brand-secondary bg-brand-bg/95 p-2 text-[10px] leading-snug text-brand-text shadow-lg group-focus-within:block group-hover:block"
-            >{paramMeta(key).desc}</span
-        >
-    </span>
+{#snippet axisTip(key: ParamKey)}
+    <InfoTip label={`About ${paramMeta(key).label}`}>{paramMeta(key).desc}</InfoTip>
 {/snippet}
 
 {#if collapsed}
@@ -1167,7 +1156,7 @@
                             <option value={p.key}>{p.short} — {p.label}</option>
                         {/each}
                     </select>
-                    {@render infoTip(xKey)}
+                    {@render axisTip(xKey)}
                     <span class="text-brand-text/50">×</span>
                     <select
                         bind:value={trackerState.graphYKey}
@@ -1182,7 +1171,7 @@
                             <option value={p.key}>{p.short} — {p.label}</option>
                         {/each}
                     </select>
-                    {@render infoTip(yKey)}
+                    {@render axisTip(yKey)}
                     <button
                         type="button"
                         aria-label="Open the orbital element explorer"

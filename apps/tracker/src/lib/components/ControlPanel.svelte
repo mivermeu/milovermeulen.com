@@ -1,4 +1,6 @@
 <script lang="ts">
+    let { open = true, onToggle }: { open?: boolean; onToggle?: () => void } = $props();
+
     import { untrack } from 'svelte';
     import {
         trackerState,
@@ -133,24 +135,11 @@
     </span>
 {/snippet}
 
-<Panel title="Controls">
-    {#snippet actions()}
-        <button
-            type="button"
-            id="panels-close"
-            aria-label="Hide panels"
-            onclick={() => (trackerState.panelsOpen = false)}
-            class="flex h-6 w-6 items-center justify-center rounded border border-brand-secondary bg-brand-secondary/85 p-0 text-brand-text hover:bg-white/10 md:hidden"
-        >
-            <svg viewBox="0 0 12 12" class="h-3 w-3" aria-hidden="true">
-                <path
-                    d="M2 2 10 10M10 2 2 10"
-                    stroke="currentColor"
-                    stroke-width="1.6"
-                    fill="none"
-                />
-            </svg>
-        </button>
+<Panel title="Controls" {open} {onToggle} bare>
+    {#snippet summary()}
+        {atNow ? 'Live' : formatOffset(offsetMs)} · {trackerState.simSpeed}×{trackerState.simPlaying
+            ? ''
+            : ' · paused'}
     {/snippet}
     <div class="space-y-3">
         <label class="flex cursor-pointer items-center gap-2">
@@ -234,7 +223,7 @@
                     {#each favoriteEntries as entry (entry.norad)}
                         <button
                             type="button"
-                            class="flex w-full items-center justify-between gap-2 rounded px-1 py-0.5 text-left text-[11px] text-brand-text transition-colors hover:bg-white/10 {trackerState.pinnedIndex ===
+                            class="flex w-full items-center justify-between gap-2 rounded border-0 px-1 py-0.5 text-left text-[11px] text-brand-text transition-colors hover:bg-white/10 {trackerState.pinnedIndex ===
                             entry.index
                                 ? 'bg-white/15 text-brand-text-highlight'
                                 : ''}"

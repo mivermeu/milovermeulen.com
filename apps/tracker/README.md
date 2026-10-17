@@ -30,7 +30,7 @@ panels.
   so the stay-live state never flickers between now/±0 s)
 - **ECF/ECI reference frame** toggle
 - **Pass finder** — set an observer location (geolocation or manual) and see the next 20 passes over
-  your horizon (10°) in the next 7 days, with live countdowns and az/el; rows pin the satellite on
+  your horizon (10°) in the next 2 days, with live countdowns and az/el; rows pin the satellite on
   the globe
 - **Orbital element explorer** — scatter the catalog over any pair of graph parameters
 - **Favorites** — star a satellite from its info panel; the watch list persists in localStorage

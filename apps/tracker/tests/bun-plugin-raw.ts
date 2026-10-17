@@ -26,6 +26,18 @@ const rawPlugin: BunPlugin = {
             const text = await Bun.file(args.path).text();
             return { contents: `export default ${JSON.stringify(text)};`, loader: 'js' };
         });
+        // Svelte 5 runes (`$state(...)` etc.) are compile-time macros Vite
+        // strips; under `bun test` they would throw ReferenceError. For
+        // module-level state tested here reactivity is irrelevant, so call
+        // through: `$state(x)` → `(x)`. Test-only; production builds compile
+        // runes properly via vite-plugin-svelte.
+        build.onLoad({ filter: /\.svelte\.ts$/ }, async (args) => {
+            let text = await Bun.file(args.path).text();
+            text = text
+                .replace(/\$(state|derived|effect|props)(?:\.[a-z]+)?\(/g, '(')
+                .replace(/\$derived\.by\(/g, '(');
+            return { contents: text, loader: 'ts' };
+        });
     }
 };
 
