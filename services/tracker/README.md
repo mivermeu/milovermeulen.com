@@ -1,7 +1,8 @@
-# Satellite Tracker Backend
+# Tracker service
 
-TLE data fetcher and API server for the [Satellite Tracker](../tracker/) app. Fetches orbital data
-from Space-Track (with CelesTrak fallback), persists it to disk, and serves it over HTTP.
+TLE data fetcher and API server for the [Satellite Tracker](../../apps/tracker/) app. Fetches
+orbital data from Space-Track (with CelesTrak fallback), persists it to disk, and serves it over
+HTTP.
 
 Zero external Python dependencies — stdlib only. Requires Python 3.12+ (declared in the root
 `pyproject.toml`; the backend uses `datetime.UTC`).
@@ -50,7 +51,7 @@ Without this, `fetch.py` falls back to CelesTrak (public, no auth).
 ### 3. Run the fetcher
 
 ```bash
-cd apps/backend
+cd services/tracker
 python3 -c "
 from fetch import *
 from pathlib import Path
@@ -86,7 +87,7 @@ if not tle_path.exists():
 ### 4. Start the API server
 
 ```bash
-python3 apps/backend/server.py
+python3 services/tracker/server.py   # from the repo root
 # Satellite API listening on 127.0.0.1:8081
 ```
 
@@ -110,8 +111,9 @@ curl http://localhost:8081/tles.json | head -c 200
 The TLE catalog is several MB. `server.py` sends
 `Cache-Control: public, max-age=<SATELLITE_CACHE_MAX_AGE>` with `ETag` / `Last-Modified` validators,
 answers conditional requests with `304`, and supports `HEAD` — so repeat loads are cheap.
-`nginx.conf` gzips `application/json` on the way out (~4.5 MB → ~1.2 MB; enable `ngx_brotli` for a
-further ~30%). Deploy the updated `nginx.conf` and reload nginx for the compression to take effect.
+`deploy/nginx.conf` gzips `application/json` on the way out (~4.5 MB → ~1.2 MB; enable `ngx_brotli`
+for a further ~30%). Deploy the updated `deploy/nginx.conf` and reload nginx for the compression to
+take effect.
 
 ## Object type enrichment
 
@@ -146,13 +148,11 @@ Without this, the frontend falls back to CelesTrak → bundled samples.
 
 ### nginx
 
-The config is in `nginx.conf`. Copy it to `/etc/nginx/sites-available/satellite-api` and symlink to
-`sites-enabled`. Requires a `limit_req_zone` directive in the `http` block of
-`/etc/nginx/nginx.conf`:
-
-```nginx
-limit_req_zone $binary_remote_addr zone=satellite_api:10m rate=10r/s;
-```
+The config is in `deploy/nginx.conf` — one vhost shared by every service on the host. Copy it to
+`/etc/nginx/sites-available/site` and symlink it into `sites-enabled` (the current install on this
+host is still named `satellite-api`; either name works, it is the same single vhost). The file is
+self-contained: it declares the `limit_req_zone` it uses, so do not repeat that directive in
+`nginx.conf` — nginx rejects a duplicate zone name.
 
 CORS is handled by the Python server directly (`server.py`), not nginx.
 
@@ -190,7 +190,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3.12 /path/to/apps/backend/server.py
+ExecStart=/usr/bin/python3.12 /path/to/services/tracker/server.py
 Restart=on-failure
 RestartSec=5
 Environment=SATELLITE_API_HOST=127.0.0.1
@@ -209,7 +209,8 @@ Description=Fetch satellite TLE data
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/python3.12 -c "from apps.backend.fetch import *; ..."
+WorkingDirectory=/path/to/milovermeulen.com
+ExecStart=/usr/bin/python3.12 -c "from services.tracker.fetch import *; ..."
 ```
 
 ```ini
@@ -244,20 +245,20 @@ tailscale funnel --bg 8080
 
 ```bash
 pip install pytest  # or use your preferred test runner
-python3 -m pytest apps/backend/tests/ -v
+python3 -m pytest services/tracker/tests/ -v
 ```
 
 Or with unittest:
 
 ```bash
-cd apps/backend
+cd services/tracker
 python3 -m unittest discover -s tests -v
 ```
 
 ## Linting & Formatting
 
 ```bash
-ruff check apps/backend/
-ruff format apps/backend/
-npx basedpyright apps/backend/
+ruff check services/tracker/
+ruff format services/tracker/
+npx basedpyright services/tracker/
 ```

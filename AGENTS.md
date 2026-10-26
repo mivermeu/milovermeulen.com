@@ -1,33 +1,54 @@
-```# Agent Guidelines for milovermeulen.com
+# Agent Guidelines for milovermeulen.com
 
-This document provides guidelines and best practices for AI agents and developers contributing to this project.
+This document provides guidelines and best practices for AI agents and developers contributing to
+this project.
 
 ## Project Overview
+
 This is a **Turborepo monorepo** managed by **bun** containing multiple apps under a single domain:
+
 - `apps/portfolio` (`/`) — Personal portfolio and resume website
 - `apps/webneut` (`/webneut`) — Neutrino oscillation visualizer
 - `apps/tracker` (`/tracker`) — Satellite globe tracker
+- `apps/cool-tools` (`/cool-tools`) — Small browser tools
 - `apps/builder` (`/builder`) — Cat tree builder (planned)
 
-All apps are built with **SvelteKit**, **Svelte 5**, and **Tailwind CSS v4**. The portfolio app emphasizes a high-end, polished aesthetic with custom components like `BracketedSection` and `Noise`.
+All apps are built with **SvelteKit**, **Svelte 5**, and **Tailwind CSS v4**. The portfolio app
+emphasizes a high-end, polished aesthetic with custom components like `BracketedSection` and
+`Noise`.
+
+Long-running backends live in `services/`, not `apps/`. They are plain processes rather than static
+sites, so they are deployed by hand instead of over FTPS.
 
 ## Editor
 
-The primary editor is **Zed**. When configuring linter/formatter tooling, prefer LSP-based tools that integrate well with Zed's built-in support (e.g., basedpyright for Python, eslint for JS/TS, Svelte extension for .svelte files).
+The primary editor is **Zed**. When configuring linter/formatter tooling, prefer LSP-based tools
+that integrate well with Zed's built-in support (e.g., basedpyright for Python, eslint for JS/TS,
+Svelte extension for .svelte files).
 
 ## Workspace Structure
 
+```text
+apps/                 # independent SvelteKit apps, each a static deploy with its own base path
+  portfolio/          # /
+  webneut/            # /webneut, with oscillator-rs/ (Rust/WASM engine)
+  tracker/            # /tracker
+  cool-tools/         # /cool-tools
+services/             # long-running backends: not bun workspaces, deployed by hand
+  tracker/            # TLE fetcher + JSON API
+packages/
+  shared-config/      # shared Tailwind theme, fonts, utility CSS
+deploy/
+  nginx.conf          # host vhost fronting every service
 ```
 
-apps/ # independent SvelteKit apps portfolio/ # base path / webneut/ # base path /webneut
-oscillator-rs/ # Rust/WASM oscillation engine packages/ shared-config/ # shared Tailwind theme,
-fonts, and utility CSS
-
-````
-
-- Shared Tailwind tokens live in `packages/shared-config/app.css`. Import via `@import 'shared-config/app.css';`.
+- Shared Tailwind tokens live in `packages/shared-config/app.css`. Import via
+  `@import 'shared-config/app.css';`.
 - Each app has its own `svelte.config.js`, `vite.config.ts`, `tsconfig.json`, and `src/`.
-- Each app uses `@sveltejs/adapter-static` with `prerender = true` and sets `kit.paths.base` for its subroute.
+- Each app uses `@sveltejs/adapter-static` with `prerender = true` and sets `kit.paths.base` for its
+  subroute.
+- `services/` holds long-running backends (`services/tracker`, and `services/transit` when it
+  lands). They are not bun workspaces and are deployed manually to the host, never over FTPS.
 
 ## Commands
 
@@ -40,7 +61,14 @@ bun format           # run Prettier across the repo
 bun test             # run all tests via Turborepo (bun test per app)
 bun run test         # same as above; both invoke `turbo test`
 bun run build:wasm   # (webneut) compile the Rust crate to WASM
-````
+```
+
+Backend checks (the same ones CI runs):
+
+```bash
+python3.12 -m pytest services/tracker/tests -q
+ruff check services
+```
 
 ### Before finalizing a task
 
@@ -73,6 +101,9 @@ step is needed in normal workflows. Building webneut requires the Rust toolchain
 3. Set `kit.paths.base` in `apps/new-app/svelte.config.js` to `/new-app`
 4. Add `shared-config: "workspace:*"` to its devDependencies
 5. Run `bun install`
+
+A backend service goes in `services/<name>/` instead: no `svelte.config.js` (so the deploy workflow
+ignores it), its own README, tests, and systemd unit templates.
 
 ## Svelte 5 Best Practices
 
@@ -189,7 +220,3 @@ Key design decisions:
 it.** Always wait for confirmation before staging, committing, or pushing changes.
 
 Before committing, run `bun format` to ensure all code is formatted with Prettier.
-
-```
-
-```

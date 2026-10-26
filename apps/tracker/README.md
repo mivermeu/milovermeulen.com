@@ -99,7 +99,7 @@ VITE_SATELLITE_API_KEY=your-api-key
 
 Without these, the app fetches TLE data directly from CelesTrak (public, no auth needed).
 
-See the [backend README](../backend/README.md) for setting up the local API server.
+See the [backend README](../../services/tracker/README.md) for setting up the local API server.
 
 ### Development
 
