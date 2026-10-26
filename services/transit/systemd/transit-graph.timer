@@ -1,0 +1,10 @@
+[Unit]
+Description=Weekly transit track graph rebuild
+
+[Timer]
+OnCalendar=Mon 04:30
+Persistent=true
+RandomizedDelaySec=1800
+
+[Install]
+WantedBy=timers.target

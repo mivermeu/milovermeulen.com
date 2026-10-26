@@ -1,9 +1,9 @@
-"""Snapshot API for the transit frontend.
+"""Snapshot and graph API for the transit frontend.
 
-Serves the JSON the poller writes. Stays deliberately dumb: no merging, no
-database, no auth — it is rebuilt from a file on every request, so a poller
-crash degrades to a stale snapshot instead of an outage. Runs on localhost
-behind nginx, which also gzips it.
+Serves the JSON the poller and graph builder write. Stays deliberately dumb: no
+merging, no database, no auth — files are read per request, so a poller crash
+degrades to a stale snapshot instead of an outage. Runs on localhost behind
+nginx, which also gzips it.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ import email.utils
 import json
 import logging
 import os
+import re
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -21,7 +22,14 @@ from typing import Any
 log = logging.getLogger("transit.api")
 
 CACHE_CONTROL = "public, max-age=10, stale-while-revalidate=20"
+IMMUTABLE_CACHE = "public, max-age=31536000, immutable"
 STALE_AFTER_S = int(os.environ.get("TRANSIT_STALE_AFTER", "120"))
+
+# Content-addressed artifacts only. Anything else in the directory stays private,
+# and the pattern is also what keeps path traversal out.
+_STATIC_NAME = re.compile(
+    r"^(graph\.json|audit\.json|graph-[0-9a-f]{12}\.json|shapes-[0-9a-f]{12}\.bin)$"
+)
 
 
 class SnapshotAPIHandler(BaseHTTPRequestHandler):
@@ -43,37 +51,45 @@ class SnapshotAPIHandler(BaseHTTPRequestHandler):
         path = self.path.split("?", 1)[0]
         if path in ("/health", "/healthz"):
             self._health(send_body)
-        elif path in ("/", "/snapshot.json"):
-            self._snapshot(send_body)
+            return
+        name = self.snapshot_name if path == "/" else path.lstrip("/")
+        if name == self.snapshot_name:
+            self._serve_file(name, send_body, CACHE_CONTROL, missing_status=503)
+        elif _STATIC_NAME.match(name):
+            cache = IMMUTABLE_CACHE if "-" in name else CACHE_CONTROL
+            self._serve_file(name, send_body, cache, missing_status=404)
         else:
             self._json(404, {"error": "not found"}, send_body)
 
-    def _snapshot(self, send_body: bool) -> None:
-        path = self.www_dir / self.snapshot_name
+    def _serve_file(
+        self, name: str, send_body: bool, cache_control: str, missing_status: int
+    ) -> None:
+        path = self.www_dir / name
         try:
             # Read from one open handle and fstat it, so ETag/Last-Modified cannot
-            # describe a different inode than the bytes (the poller os.replace()s
-            # the file underneath us).
+            # describe a different inode than the bytes (the writers rename files
+            # underneath us).
             with path.open("rb") as handle:
                 stat = os.fstat(handle.fileno())
                 payload = handle.read()
         except OSError:
-            self._json(503, {"error": "snapshot unavailable"}, send_body)
+            self._json(missing_status, {"error": f"{name} unavailable"}, send_body)
             return
 
+        content_type = "application/json" if name.endswith(".json") else "application/octet-stream"
         etag = f'"{stat.st_mtime_ns}-{len(payload)}"'
         if self.headers.get("If-None-Match") == etag:
             self.send_response(304)
             self.send_header("ETag", etag)
-            self.send_header("Cache-Control", CACHE_CONTROL)
+            self.send_header("Cache-Control", cache_control)
             self._cors()
             self.end_headers()
             return
 
         self.send_response(200)
-        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(payload)))
-        self.send_header("Cache-Control", CACHE_CONTROL)
+        self.send_header("Cache-Control", cache_control)
         self.send_header("ETag", etag)
         self.send_header("Last-Modified", email.utils.formatdate(stat.st_mtime, usegmt=True))
         self._cors()

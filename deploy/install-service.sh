@@ -135,12 +135,17 @@ install_service() {
     printf '  code: %s\n' "$dst"
 
     # Units: substitute the install root, refuse anything still pointing elsewhere.
-    for unit_file in "$src"/systemd/*.service; do
+    # Timers are installed alongside their service; only services carry a cwd.
+    for unit_file in "$src"/systemd/*.service "$src"/systemd/*.timer; do
         [ -f "$unit_file" ] || continue
         unit=$(basename "$unit_file")
         sed "s|/path/to/milovermeulen.com|$INSTALL_ROOT|g" "$unit_file" >"/tmp/$unit"
-        grep -q "^WorkingDirectory=$INSTALL_ROOT\$" "/tmp/$unit" ||
-            die "$unit: WorkingDirectory is not $INSTALL_ROOT after substitution"
+        case "$unit" in
+            *.service)
+                grep -q "^WorkingDirectory=$INSTALL_ROOT\$" "/tmp/$unit" ||
+                    die "$unit: WorkingDirectory is not $INSTALL_ROOT after substitution"
+                ;;
+        esac
         sudo install -m 644 -o root -g root "/tmp/$unit" "/etc/systemd/system/$unit"
         rm -f "/tmp/$unit"
         units+=("$unit")
@@ -152,8 +157,17 @@ install_service() {
 
     if [ "$enable" = 1 ]; then
         for unit in "${units[@]}"; do
-            sudo systemctl enable "$unit" >/dev/null
-            sudo systemctl restart "$unit"
+            # Timers are enabled directly. A oneshot service with no [Install]
+            # (e.g. a graph rebuild) is triggered by its timer, never enabled.
+            if [ "$unit" != "${unit%.timer}" ]; then
+                sudo systemctl enable --now "$unit" >/dev/null
+            elif grep -q '^\[Install\]' "/etc/systemd/system/$unit"; then
+                sudo systemctl enable "$unit" >/dev/null
+                sudo systemctl restart "$unit"
+            else
+                printf '  %-24s %s\n' "$unit" "oneshot (not enabled)"
+                continue
+            fi
             printf '  %-24s %s\n' "$unit" "$(systemctl is-active "$unit")"
         done
     fi

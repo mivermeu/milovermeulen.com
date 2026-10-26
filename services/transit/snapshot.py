@@ -17,10 +17,6 @@ MAX_NEXT_STOPS = 3
 
 # GTFS-realtime VehicleStopStatus.
 _STATUS = {0: "INCOMING_AT", 1: "STOPPED_AT", 2: "IN_TRANSIT_TO"}
-# NYCT Direction (gtfs-realtime-NYCT.proto): NORTH=1, EAST=2, SOUTH=3, WEST=4.
-# EAST and WEST are documented as unused, and MTA omits the field for northbound
-# trips, so fall back to the direction marker in the trip id.
-_DIRECTION = {1: "N", 2: "E", 3: "S", 4: "W"}
 
 
 def _event_time(event: gtfs.StopTimeEvent | None) -> int | None:
@@ -36,17 +32,6 @@ def _next_stops(update: gtfs.TripUpdate) -> list[dict[str, Any]]:
         }
         for stop in update.stop_time_updates[:MAX_NEXT_STOPS]
     ]
-
-
-def _direction(trip: gtfs.TripDescriptor) -> str | None:
-    mapped = _DIRECTION.get(trip.nyct_direction)
-    if mapped:
-        return mapped
-    # Trip ids encode direction as 080750_1..S04R / 134400_GS.S01R.
-    for part in (trip.trip_id or "").split(".")[1:]:
-        if part[:1] in ("N", "S"):
-            return part[0]
-    return None
 
 
 def _vehicles_by_trip(feeds: dict[str, gtfs.Feed]) -> dict[str, gtfs.VehiclePosition]:
@@ -65,7 +50,7 @@ def _train(update: gtfs.TripUpdate, vehicle: gtfs.VehiclePosition) -> dict[str, 
         "id": trip.train_id or vehicle.vehicle_id or trip.trip_id,
         "trip": trip.trip_id,
         "route": trip.route_id,
-        "dir": _direction(trip),
+        "dir": gtfs.trip_direction(trip),
         "start_date": trip.start_date,
         "status": _STATUS.get(vehicle.current_status),
         "stop": vehicle.stop_id or first_stop,

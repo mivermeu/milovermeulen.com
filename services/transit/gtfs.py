@@ -89,6 +89,24 @@ _NYCT_ACTUAL_TRACK = 2
 Fields = list[tuple[int, int, Any]]
 
 
+# NYCT Direction (gtfs-realtime-NYCT.proto): NORTH=1, EAST=2, SOUTH=3, WEST=4.
+# EAST and WEST are documented as unused, and MTA omits the field for northbound
+# trips, so fall back to the direction marker in the trip id.
+_NYCT_DIRECTION = {1: "N", 2: "E", 3: "S", 4: "W"}
+
+
+def trip_direction(trip: TripDescriptor) -> str | None:
+    """Best direction for a trip: the NYCT extension, else its trip id."""
+    mapped = _NYCT_DIRECTION.get(trip.nyct_direction)
+    if mapped:
+        return mapped
+    # Trip ids encode direction as 080750_1..S04R / 134400_GS.S01R.
+    for part in (trip.trip_id or "").split(".")[1:]:
+        if part[:1] in ("N", "S"):
+            return part[0]
+    return None
+
+
 class GtfsRtError(ValueError):
     """Raised when a payload is not decodable GTFS-realtime."""
 

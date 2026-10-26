@@ -151,12 +151,52 @@ Notes:
 - MTA publishes no lat/lon anywhere in this feed. v0 has no positions; the frontend derives them
   once the track graph lands.
 
+## Track graph
+
+Static schedules do not join to realtime by trip id: MTA prefixes static ids
+(`ASP26GEN-1038-Sunday-00_080750_1..S03R`) while realtime uses `080750_1..S04R`, and the patterns
+drift. Measured live: **0%** on trip id, ~**90%** on route + ordered stop sequence (90.6% on
+2026-10-26 23:20; single-stop sequences are excluded, since they match by accident). So the graph
+keys on patterns and the join scores stop-sequence overlap.
+
+```bash
+python3.12 -m services.transit.build_graph   # download, build, publish
+python3.12 -m services.transit.diagnose      # live join report
+```
+
+`build_graph` uses `gtfs_supplemented.zip` — the feed realtime actually runs (19.6 MB, 79,889 trips)
+— versions every download by checksum under `$TRANSIT_DATA_DIR/static/`, and refuses to build when
+the service window has expired (`--allow-expired` overrides).
+
+| File                | Contents                                                                                                         |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `graph.json`        | manifest: current hash, feed version, counts                                                                     |
+| `graph-<hash>.json` | 496 stations, 992 platforms, 257 patterns with ordered stops and distance along the shape                        |
+| `shapes-<hash>.bin` | little-endian float32 lat/lon pairs; `offset` in the graph is a **float index** — ×4 for bytes, ×8 for one point |
+| `audit.json`        | worst platform-to-shape distances, ranked                                                                        |
+
+Hashed files are served `immutable`; the manifest is short-cached, so a rebuild is picked up without
+a redeploy.
+
+### Projection and audit
+
+Neither static feed carries `shape_dist_traveled`, so each platform is projected onto its pattern's
+shape (haversine length, local planar projection), constrained to be monotonic along the trip — that
+constraint is what keeps doubled-back shapes sane.
+
+\1
+
+The build streams `stop_times.txt` and `shapes.txt` (2.3M and 150k rows) instead of loading them as
+dicts: peak RSS is ~350 MB and the whole build takes ~6 s. 14,109 trips in the current feed carry no
+`shape_id` and are counted in the log rather than guessed at.
+
 ## Deployment
 
 One command from the repo root:
 
 ```bash
 deploy/install-service.sh transit --enable --nginx
+sudo systemctl start transit-graph.service   # first graph build
 journalctl -u transit-poller -f
 ```
 
@@ -184,6 +224,10 @@ traverse them.
 **Port.** The `transit-api` unit sets `TRANSIT_API_PORT=8083` because 8082 is already published on
 this host by the Riven container. The code default stays 8082 so the service remains portable;
 `deploy/nginx.conf` proxies `/transit/` to whichever port the unit declares.
+
+The install also brings `transit-graph.service` + `transit-graph.timer`, a weekly rebuild of the
+track graph (Mondays 04:30, `Persistent=true`). The graph build is a oneshot with no `[Install]`, so
+the installer enables the timer and leaves the unit alone.
 
 ## Tests
 
