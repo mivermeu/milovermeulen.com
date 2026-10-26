@@ -8,8 +8,9 @@
 # Apps are discovered dynamically: every apps/<name>/ with a svelte.config.js is
 # deployable, and its base path and Rust/WASM need are read from the repo - there is
 # no hardcoded app list to maintain. On push, only apps whose files changed (or all
-# apps, when shared files change) are deployed; keep apps/backend out of the matrix
-# simply by not giving it a svelte.config.js.
+# apps, when shared files change) are deployed. `services/` (long-running backends) is
+# excluded by construction: a service never carries a svelte.config.js. A service-only push still
+# runs the test gate below, then selects no apps and skips build/deploy.
 #
 # Required repository secrets (Settings > Secrets and variables > Actions > Secrets):
 #   FTPS_HOST, FTPS_USER, FTPS_PASSWORD
@@ -38,6 +39,7 @@ on:
         branches: [main]
         paths:
             - 'apps/**'
+            - 'services/**'
             - 'packages/**'
             - 'package.json'
             - 'bun.lock'
@@ -88,7 +90,7 @@ jobs:
             - name: Backend tests
               run: |
                   python -m pip install --quiet pytest
-                  python -m pytest apps/backend/tests -q
+                  python -m pytest services/tracker/tests -q
 
     plan:
         name: Plan

@@ -41,10 +41,13 @@ Each dev server runs on its own port. See individual app `package.json` for port
 │   │   └── oscillator-rs/  # Rust/WASM neutrino oscillation engine
 │   ├── tracker/         # SvelteKit + static adapter, base path /tracker
 │   ├── cool-tools/      # SvelteKit + static adapter, base path /cool-tools
-│   ├── backend/         # Python: TLE fetcher + API server (not a static app)
 │   └── builder/         # planned
+├── services/            # long-running backends: not bun workspaces, deployed by hand
+│   └── tracker/         # Python: TLE fetcher + API server
 ├── packages/
 │   └── shared-config/   # shared Tailwind v4 theme, fonts, utility classes
+├── deploy/
+│   └── nginx.conf       # host vhost fronting every service
 ├── turbo.json           # Turborepo pipeline config
 └── package.json         # root workspace config
 ```

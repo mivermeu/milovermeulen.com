@@ -59,4 +59,4 @@ jobs:
             - name: Backend tests
               run: |
                   python -m pip install --quiet pytest
-                  python -m pytest apps/backend/tests -q
+                  python -m pytest services/tracker/tests -q
