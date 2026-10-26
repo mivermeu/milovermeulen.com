@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import archive, feeds, gtfs, snapshot
+from . import archive, estimator, feeds, graph, gtfs, snapshot
 
 log = logging.getLogger("transit.poller")
 
@@ -70,6 +70,8 @@ class Poller:
                 bad_days=config.bad_days,
             )
         )
+        self.estimator = estimator.Estimator()
+        self._graph_warned = False
         self.cycles = 0
         self._last_prune = 0.0
         self._stop = threading.Event()
@@ -124,7 +126,21 @@ class Poller:
             health[name] = entry
 
         trip_feeds = {name: feed for name, feed in parsed.items() if name in feeds.TRIP_FEEDS}
-        document = snapshot.build(trip_feeds, parsed.get(feeds.ALERTS_FEED), health, started)
+        self._refresh_graph()
+        try:
+            positions = self.estimator.update(trip_feeds, started) if self.estimator.index else {}
+        except Exception:
+            # An estimator bug must not cost the cycle: publish stop-level state.
+            log.exception("estimator failed; publishing stop-level snapshot")
+            positions = {}
+        document = snapshot.build(
+            trip_feeds,
+            parsed.get(feeds.ALERTS_FEED),
+            health,
+            started,
+            positions=positions,
+            graph_hash=self.estimator.graph_hash,
+        )
         self._write_snapshot(document)
 
         self.cycles += 1
@@ -136,6 +152,8 @@ class Poller:
             {
                 "t": int(started),
                 "trains": len(document["trains"]),
+                "estimated": document["estimated"],
+                "unmatched": self.estimator.unmatched,
                 "alerts": len(document["alerts"]),
                 "ok": len(health) - len(failed),
                 "failed": failed,
@@ -167,6 +185,23 @@ class Poller:
             ",".join(failed) or "-",
         )
         return document
+
+    def _refresh_graph(self) -> None:
+        manifest = graph.load_manifest(self.config.www_dir)
+        if not manifest:
+            if not self._graph_warned:
+                log.warning("no graph published: trains will carry stop-level state only")
+                self._graph_warned = True
+            return
+        if manifest.get("hash") == self.estimator.graph_hash:
+            return
+        document = graph.load_graph(self.config.www_dir)
+        if document:
+            self.estimator.set_graph(document, manifest.get("hash"))
+            log.info(
+                "graph loaded: %s (%d patterns)", manifest.get("hash"), len(document["patterns"])
+            )
+            self._graph_warned = False
 
     def _write_snapshot(self, document: dict[str, Any]) -> None:
         payload = json.dumps(document, separators=(",", ":"), ensure_ascii=False).encode("utf-8")

@@ -12,7 +12,7 @@ from typing import Any
 
 from . import gtfs
 
-SCHEMA_VERSION = 0
+SCHEMA_VERSION = 1
 MAX_NEXT_STOPS = 3
 
 # GTFS-realtime VehicleStopStatus.
@@ -65,6 +65,8 @@ def build(
     alerts_feed: gtfs.Feed | None,
     health: dict[str, dict[str, Any]],
     now: float | None = None,
+    positions: dict[str, dict[str, Any]] | None = None,
+    graph_hash: str | None = None,
 ) -> dict[str, Any]:
     stamp = time.time() if now is None else now
     vehicles = _vehicles_by_trip(trip_feeds)
@@ -84,6 +86,22 @@ def build(
                 continue
             trains.append(_train(update, vehicle))
     trains.sort(key=lambda train: (train["route"] or "", train["trip"] or ""))
+    for train in trains:
+        position = (positions or {}).get(train["id"])
+        if position is None:
+            train.update(
+                {
+                    "pattern": None,
+                    "edge": None,
+                    "s": None,
+                    "v": None,
+                    "confidence": 0.0,
+                    "stale": False,
+                    "reset": False,
+                }
+            )
+        else:
+            train.update(position)
 
     alerts = [
         {
@@ -102,7 +120,9 @@ def build(
         "generated_at": int(stamp),
         "header_ts": header_ts,
         "feeds": health,
+        "graph": graph_hash,
         "scheduled_trips": scheduled,
+        "estimated": sum(1 for train in trains if train["edge"]),
         "trains": trains,
         "alerts": alerts,
     }

@@ -85,14 +85,14 @@ day file is whole.
 Measured steady state is roughly **2.3 GB**: ~0.8 GB of raw for 48 h (alerts are the bulk of each
 cycle), ~1–1.5 GB of series for 90 days at 60 s, and ~65 MB of metadata.
 
-## Snapshot schema (v0)
+## Snapshot schema (v1)
 
-Stop-level on purpose, so the service can ship before the track graph exists. v1 will add
-`edge`/`s`/`v`/`confidence` additively.
+v0 was stop-level; v1 adds the estimated position along the track graph (`pattern`, `edge`, `s`,
+`v`, `confidence`) additively, so a v0 reader keeps working.
 
 ```json
 {
-    "v": 0,
+    "v": 1,
     "generated_at": 1792978330,
     "header_ts": 1792978300,
     "feeds": {
@@ -105,6 +105,8 @@ Stop-level on purpose, so the service can ship before the track graph exists. v1
             "alerts": 0
         }
     },
+    "scheduled_trips": 58,
+    "estimated": 238,
     "trains": [
         {
             "id": "1G 2121+ CRS/BDN",
@@ -116,7 +118,14 @@ Stop-level on purpose, so the service can ship before the track graph exists. v1
             "stop": "G29S",
             "seq": 4,
             "vehicle_ts": 1792978290,
-            "next": [{ "stop": "G24S", "arr": 1792978362, "dep": 1792978382 }]
+            "next": [{ "stop": "G24S", "arr": 1792978362, "dep": 1792978382 }],
+            "pattern": "G-4f2a1c9b3e",
+            "edge": "G-4f2a1c9b3e:4:G29S>G24S",
+            "s": 0.0,
+            "v": 11.2,
+            "confidence": 0.95,
+            "stale": false,
+            "reset": false
         }
     ],
     "alerts": [
@@ -148,8 +157,35 @@ Notes:
   set of strictly future stops. Per-train detail belongs in a separate endpoint later.
 - `effect`/`cause` are usually `null`: MTA leaves them unset, so alert severity has to be derived
   from text. `routes`/`stops` (from `informed_entity`) are the reliable structure.
-- MTA publishes no lat/lon anywhere in this feed. v0 has no positions; the frontend derives them
-  once the track graph lands.
+- `edge` names the pattern and the segment (`pattern:index:from>to`); `s` is metres from the start
+  of that edge and `v` is metres per second. Lat/lon is the frontend's job: slice `shapes.bin` by
+  the pattern's stop distances.
+- `confidence` folds in match quality, vehicle staleness and whether the observation forced a reset.
+  It is not a measure of how far the train moved.
+- `reset: true` means the target jumped further than a train could travel in that cycle (re-route,
+  restart, bad placement), so the position was re-anchored. Fade it rather than animating the jump.
+  A _pattern_ change (short-turn) re-anchors silently with `reset: false`.
+- Trains with `edge: null` had no pattern match; they still carry `status`/`stop`, so the map can
+  show them at the platform with `confidence: 0`.
+
+## Position estimation
+
+`estimator.py` keys state by NYCT `train_id`, not `trip_id`, so a short-turn (same train, new trip)
+continues instead of jumping. Each cycle it:
+
+1. joins the trip to a pattern by stop sequence;
+2. turns the observation into a target distance along the shape — the stop itself for `STOPPED_AT`,
+   between the previous and next stop for `IN_TRANSIT_TO`, with the ETA implying the speed for the
+   rest of the segment;
+3. advances the previous estimate and corrects it towards the target with a 5 s time constant. At
+   the 30 s poll cadence that constant makes the correction effectively immediate (`α ≈ 0.9975`); it
+   only smooths when ticks are closer together. The observation leads, the prediction is a prior;
+4. caps movement at 30 m/s, and re-anchors (with `reset`) only when the error exceeds what a train
+   could cover in the cycle — `600 m + 30 m/s × elapsed`. A train observed `STOPPED_AT` always
+   reports `v: 0`; a correction is not current speed.
+
+Lat/lon for a train is `stops[edge_index].dist + s` along its pattern's shape; `s_total` is included
+so a client does not need to re-derive it.
 
 ## Track graph
 
@@ -183,8 +219,6 @@ a redeploy.
 Neither static feed carries `shape_dist_traveled`, so each platform is projected onto its pattern's
 shape (haversine length, local planar projection), constrained to be monotonic along the trip — that
 constraint is what keeps doubled-back shapes sane.
-
-\1
 
 The build streams `stop_times.txt` and `shapes.txt` (2.3M and 150k rows) instead of loading them as
 dicts: peak RSS is ~350 MB and the whole build takes ~6 s. 14,109 trips in the current feed carry no

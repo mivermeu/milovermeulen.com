@@ -1,4 +1,4 @@
-"""Tests for the served snapshot shape (schema v0)."""
+"""Tests for the served snapshot shape (schema v1)."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ def build_snapshot() -> dict:
 
 def test_identity_and_stamp():
     document = build_snapshot()
-    assert document["v"] == 0
+    assert document["v"] == 1
     assert document["generated_at"] == 1792978330
     assert document["header_ts"] is not None
 
@@ -97,3 +97,28 @@ def test_unassigned_trips_are_counted_not_rendered():
 def test_assigned_trips_are_not_double_counted():
     document = build_snapshot()
     assert document["scheduled_trips"] == 0
+
+
+def test_positions_are_merged_by_train_id():
+    document = snapshot.build(
+        {"gtfs-g": feed("gtfs-g.pb")},
+        None,
+        {},
+        now=1.0,
+        positions={
+            "1G 2121+ CRS/BDN": {
+                "pattern": "G-N",
+                "edge": "G-N:3:G29S>G30S",
+                "s": 42.5,
+                "v": 11.0,
+                "confidence": 0.9,
+                "stale": False,
+            }
+        },
+    )
+    estimated = [train for train in document["trains"] if train["edge"]]
+    assert len(estimated) == 1
+    assert estimated[0]["s"] == 42.5
+    assert document["estimated"] == 1
+    plain = [train for train in document["trains"] if not train["edge"]]
+    assert plain and plain[0]["confidence"] == 0.0

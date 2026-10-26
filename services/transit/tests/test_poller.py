@@ -6,7 +6,7 @@ import gzip
 import json
 from pathlib import Path
 
-from .. import feeds
+from .. import estimator, feeds, gtfs
 from ..poller import Config, Poller
 from .wire import feed as build_feed
 
@@ -45,7 +45,7 @@ def test_tick_publishes_snapshot(tmp_path):
     assert path.exists()
     saved = json.loads(path.read_text())
     assert saved == document
-    assert saved["v"] == 0
+    assert saved["v"] == 1
     # gtfs-g contributes 20 trains, gtfs-si 7; the other feeds are empty.
     assert len(saved["trains"]) == 27
     assert saved["alerts"]
@@ -121,3 +121,47 @@ def test_differential_feed_is_quarantined(tmp_path):
     assert document["feeds"]["gtfs-g"]["ok"] is False
     assert "incrementality" in document["feeds"]["gtfs-g"]["error"]
     assert len(document["trains"]) == 7
+
+
+def test_snapshot_carries_positions_when_a_graph_is_published(tmp_path):
+    feed = gtfs.parse_feed(fixture("gtfs-g.pb"))
+    trip = next(update for update in feed.trip_updates if len(update.stop_time_updates) > 4)
+    stops = [stop.stop_id for stop in trip.stop_time_updates]
+    pattern = {
+        "id": "G-TEST",
+        "route": "G",
+        "dir": gtfs.trip_direction(trip.trip),
+        "shape": "SH-TEST",
+        "length_m": float((len(stops) - 1) * 500),
+        "stops": [[stop, index * 500.0] for index, stop in enumerate(stops)],
+    }
+    www = tmp_path / "www"
+    www.mkdir(parents=True)
+    (www / "graph-test.json").write_text(json.dumps({"patterns": [pattern]}))
+    (www / "graph.json").write_text(
+        json.dumps({"hash": "test", "graph": "graph-test.json", "shapes": "shapes-test.bin"})
+    )
+
+    document = poller_for(tmp_path, mapping_ok()).tick()
+
+    assert document["graph"] == "test"
+    assert document["estimated"] > 0
+    estimated = [train for train in document["trains"] if train["edge"]]
+    assert estimated
+    assert estimated[0]["pattern"] == "G-TEST"
+    assert estimated[0]["s"] >= 0
+
+
+def test_estimator_failure_still_publishes_a_snapshot(tmp_path, monkeypatch):
+    poller = poller_for(tmp_path, mapping_ok())
+    poller.estimator.index = object()  # pretend a graph is loaded
+
+    def explode(*_args: object, **_kwargs: object) -> dict:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(estimator.Estimator, "update", explode)
+    document = poller.tick()
+
+    assert document["trains"]
+    assert document["estimated"] == 0
+    assert (tmp_path / "www" / "snapshot.json").exists()
