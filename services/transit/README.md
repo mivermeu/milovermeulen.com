@@ -61,7 +61,7 @@ curl -s localhost:8082/health
 | `TRANSIT_PRUNE_SECONDS` | `3600`                     | prune at most once per hour                       |
 | `TRANSIT_STALE_AFTER`   | `120`                      | `/health` reports `stale` after this many seconds |
 | `TRANSIT_API_HOST`      | `127.0.0.1`                | API bind address                                  |
-| `TRANSIT_API_PORT`      | `8082`                     | API port                                          |
+| `TRANSIT_API_PORT`      | `8082`                     | API port (this host's unit overrides to `8083`)   |
 
 ## Archive layout
 
@@ -153,21 +153,37 @@ Notes:
 
 ## Deployment
 
+One command from the repo root:
+
 ```bash
-cd services/transit
-sudo useradd --system --home /var/lib/transit-archive --shell /usr/sbin/nologin transit
-sudo mkdir -p /var/lib/transit-archive /var/www/transit-api
-sudo chown transit:transit /var/lib/transit-archive /var/www/transit-api
-sudo install -m 644 systemd/transit-poller.service systemd/transit-api.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now transit-poller.service transit-api.service
+deploy/install-service.sh transit --enable --nginx
 journalctl -u transit-poller -f
 ```
 
-Both units run as the `transit` user and assume the repo is checked out at
-`/path/to/milovermeulen.com`; adjust `WorkingDirectory` and the `ExecStart` python path if not. The
-nginx vhost in `deploy/nginx.conf` already has a commented `location /transit/` block — uncomment it
-once the API is running so `/transit/snapshot.json` resolves.
+The installer is idempotent. It runs this service's tests, copies the package to
+`/opt/milovermeulen/services/transit`, creates the `transit` user and both data directories if they
+are missing, substitutes the install root into the unit templates, installs and reloads them, and
+with `--enable --nginx` also starts the units and refreshes `deploy/nginx.conf`. Use `--skip-tests`
+to iterate on a broken test.
+
+Host layout it produces:
+
+| What            | Where                                                            |
+| --------------- | ---------------------------------------------------------------- |
+| code            | `/opt/milovermeulen/services/transit` (read-only to the service) |
+| archive         | `/var/lib/transit-archive`                                       |
+| served snapshot | `/var/www/transit-api/snapshot.json`                             |
+| units           | `/etc/systemd/system/transit-{poller,api}.service`               |
+| route           | `https://<host>/transit/` → `127.0.0.1:8083`                     |
+
+Both units run as `transit` and call `python3.12 -m services.transit.<module>` with
+`WorkingDirectory=/opt/milovermeulen`, so the `services` package has to be installed there. Never
+point `WorkingDirectory` at the repo checkout: home directories are `0750` and a service user cannot
+traverse them.
+
+**Port.** The `transit-api` unit sets `TRANSIT_API_PORT=8083` because 8082 is already published on
+this host by the Riven container. The code default stays 8082 so the service remains portable;
+`deploy/nginx.conf` proxies `/transit/` to whichever port the unit declares.
 
 ## Tests
 

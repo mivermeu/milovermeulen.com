@@ -11,11 +11,17 @@ NoNewPrivileges=true
 ProtectSystem=strict
 PrivateTmp=true
 ReadWritePaths=/var/lib/transit-archive /var/www/transit-api
-WorkingDirectory=/path/to/milovermeulen.com
+# Root of the installed services package, so `-m services.transit.*` resolves.
+# deploy/install-service.sh substitutes this path if the install root ever moves.
+WorkingDirectory=/opt/milovermeulen
 ExecStart=/usr/bin/python3.12 -m services.transit.server
 Environment=TRANSIT_WWW_DIR=/var/www/transit-api
 Environment=TRANSIT_API_HOST=127.0.0.1
-Environment=TRANSIT_API_PORT=8082
+# 8082 is published by the Riven container on this host. The code default stays 8082;
+# this unit is the host-specific override, and deploy/nginx.conf proxies /transit/ here.
+Environment=TRANSIT_API_PORT=8083
+# ProtectSystem=strict leaves the install read-only; be explicit about bytecode.
+Environment=PYTHONDONTWRITEBYTECODE=1
 Restart=always
 RestartSec=5
 
