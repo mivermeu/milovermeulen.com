@@ -66,7 +66,7 @@ bun run build:wasm   # (webneut) compile the Rust crate to WASM
 Backend checks (the same ones CI runs):
 
 ```bash
-python3.12 -m pytest services/tracker/tests -q
+python3.12 -m pytest services -q
 ruff check services
 ```
 

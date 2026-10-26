@@ -1,0 +1,22 @@
+[Unit]
+Description=Transit GTFS-RT poller
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=transit
+Group=transit
+NoNewPrivileges=true
+ProtectSystem=strict
+PrivateTmp=true
+ReadWritePaths=/var/lib/transit-archive /var/www/transit-api
+WorkingDirectory=/path/to/milovermeulen.com
+ExecStart=/usr/bin/python3.12 -m services.transit.poller
+Environment=TRANSIT_DATA_DIR=/var/lib/transit-archive
+Environment=TRANSIT_WWW_DIR=/var/www/transit-api
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
