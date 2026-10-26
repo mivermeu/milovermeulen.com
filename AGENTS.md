@@ -36,10 +36,12 @@ apps/                 # independent SvelteKit apps, each a static deploy with it
   cool-tools/         # /cool-tools
 services/             # long-running backends: not bun workspaces, deployed by hand
   tracker/            # TLE fetcher + JSON API
+  transit/            # MTA GTFS-RT poller + snapshot API
 packages/
   shared-config/      # shared Tailwind theme, fonts, utility CSS
 deploy/
   nginx.conf          # host vhost fronting every service
+  install-service.sh  # installs a service onto the host: code, user, units, vhost
 ```
 
 - Shared Tailwind tokens live in `packages/shared-config/app.css`. Import via
@@ -47,8 +49,27 @@ deploy/
 - Each app has its own `svelte.config.js`, `vite.config.ts`, `tsconfig.json`, and `src/`.
 - Each app uses `@sveltejs/adapter-static` with `prerender = true` and sets `kit.paths.base` for its
   subroute.
-- `services/` holds long-running backends (`services/tracker`, and `services/transit` when it
-  lands). They are not bun workspaces and are deployed manually to the host, never over FTPS.
+- `services/` holds long-running backends (`services/tracker`, `services/transit`). They are not bun
+  workspaces and are deployed to the host by hand, never over FTPS.
+
+### Deploying a service
+
+```bash
+deploy/install-service.sh <name> --enable --nginx   # tests, code, units, dirs, restart, vhost
+deploy/install-service.sh --all --enable            # every service in the spec table
+```
+
+- The installer copies `services/<name>` to `/opt/milovermeulen/services/<name>`, and the units run
+  `python3.12 -m services.<name>.<module>` with `WorkingDirectory=/opt/milovermeulen`. Never point
+  `WorkingDirectory` at the repo checkout: home directories are `0750`, so service users cannot
+  traverse them.
+- Units live in `services/<name>/systemd/*.service` and carry their own `User=`/`Group=`. The
+  installer creates that user and the data directories declared in its `SERVICE_SPECS` table; add an
+  entry there when a new service lands.
+- Host state is not in git: data under `/var/lib` and `/var/www`, the vhost in `deploy/nginx.conf`
+  (installed as `/etc/nginx/sites-available/satellite-api`), units in `/etc/systemd/system`.
+- Ports on this host: 8080 nginx, 8081 tracker API, 8083 transit API. 8082 is published by the Riven
+  container, which is why the transit unit overrides its default port.
 
 ## Commands
 
