@@ -127,7 +127,9 @@
 </script>
 
 <div class="relative h-dvh w-full overflow-hidden bg-[#0b0f1a]">
-    <div bind:this={container} class="absolute inset-0" aria-label="Live transit map"></div>
+    <!-- Explicit size: MapLibre sets position: relative on its container, which defeats
+    an `absolute inset-0` sizing strategy. Height comes from the parent instead. -->
+    <div bind:this={container} class="h-full w-full" aria-label="Live transit map"></div>
 
     <header
         class="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-3 p-4"
