@@ -33,6 +33,7 @@ apps/                 # independent SvelteKit apps, each a static deploy with it
   portfolio/          # /
   webneut/            # /webneut, with oscillator-rs/ (Rust/WASM engine)
   tracker/            # /tracker
+  transit/            # /transit
   cool-tools/         # /cool-tools
 services/             # long-running backends: not bun workspaces, deployed by hand
   tracker/            # TLE fetcher + JSON API

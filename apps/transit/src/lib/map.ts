@@ -2,6 +2,8 @@ import './maplibre-worker';
 
 import type { Feature, FeatureCollection, LineString, Point, Position } from 'geojson';
 import * as maplibregl from 'maplibre-gl';
+
+import { basemapStyle, registerPmtilesProtocol } from './basemap';
 import { routeColor } from './palette';
 import type { Graph, PatternGeometry, TrainPosition } from './types';
 
@@ -47,13 +49,18 @@ const NYC_BOUNDS: [[number, number], [number, number]] = [
  * Create the map: a blank style (no tiles in v1) over the NYC area, with every
  * rotation gesture turned off so the view can only pan and zoom.
  */
+let basemapWarned = false;
+
 export function createMap(container: HTMLElement): maplibregl.Map {
+    registerPmtilesProtocol();
     const map = new maplibregl.Map({
         container,
-        style: { version: 8, sources: {}, layers: [] },
+        style: basemapStyle(),
         center: NYC_CENTER,
         zoom: 10.5,
-        minZoom: 9,
+        // The archive covers z10–13; below z10 the viewport is wider than its
+        // bounds and the edges go bare.
+        minZoom: 10,
         maxZoom: 16,
         maxBounds: NYC_BOUNDS,
         dragRotate: false,
@@ -65,6 +72,17 @@ export function createMap(container: HTMLElement): maplibregl.Map {
     // `dragRotate: false` does not cover pinch and keyboard rotation.
     map.touchZoomRotate.disableRotation();
     map.keyboard.disableRotation();
+
+    // A missing archive (e.g. before the tiles are uploaded) should cost the
+    // basemap, not the transit layers. Warn once instead of per failed tile.
+    map.on('error', (event) => {
+        if (basemapWarned) return;
+        basemapWarned = true;
+        console.warn(
+            'map error (a missing basemap archive is the usual cause); the map continues without it',
+            event.error
+        );
+    });
 
     return map;
 }

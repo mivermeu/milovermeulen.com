@@ -98,6 +98,7 @@
       "version": "0.0.1",
       "dependencies": {
         "maplibre-gl": "^6.16.0",
+        "pmtiles": "^4.5.0",
       },
       "devDependencies": {
         "@eslint/js": "^10.0.1",
@@ -618,6 +619,8 @@
     "playwright-core": ["playwright-core@1.61.1", "", { "bin": { "playwright-core": "cli.js" } }, "sha512-h7Qlt6m4REp25qvIdvbDtVmD4LqVXfpRxhORv9L0jzETM05p4fuPJ3dKyuSXQxDSbXnmS79HAgi9589lGSpLkg=="],
 
     "plotly.js-dist": ["plotly.js-dist@3.7.0", "", {}, "sha512-mt3rwiYuR8/NArlFm5CEtJ6xsvmPIRDSntrn7m3RQWK//0nWch1OyEV4gwhpCqUxFtf9r4f30yQ7jNrAovecCg=="],
+
+    "pmtiles": ["pmtiles@4.5.0", "", { "dependencies": { "fflate": "^0.8.2" } }, "sha512-CBeD4SoUluFziGdy/8k7FOjQxQy486n+929W/tWophauvMICpkZ26vGBWhDt/6b1FZQWNaf4jFdT/5+q0Wii5w=="],
 
     "pngjs": ["pngjs@5.0.0", "", {}, "sha512-40QW5YalBNfQo5yRYmiw7Yz6TKKVr3h6970B2YE+3fQpsWcrbj1PzJgxeJ19DRQjhMbKPIuMY8rFaXc8moolVw=="],
 

@@ -40,6 +40,7 @@ Each dev server runs on its own port. See individual app `package.json` for port
 │   ├── webneut/         # SvelteKit + static adapter, base path /webneut
 │   │   └── oscillator-rs/  # Rust/WASM neutrino oscillation engine
 │   ├── tracker/         # SvelteKit + static adapter, base path /tracker
+│   ├── transit/         # SvelteKit + static adapter, base path /transit
 │   ├── cool-tools/      # SvelteKit + static adapter, base path /cool-tools
 │   └── builder/         # planned
 ├── services/            # long-running backends: not bun workspaces, deployed by hand

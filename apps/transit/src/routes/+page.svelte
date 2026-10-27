@@ -290,6 +290,12 @@
             <span class="flex items-center gap-1"
                 ><span class="h-2 w-2 rounded-full border border-white/40"></span>re-anchored</span
             >
+            <a
+                class="pointer-events-auto underline decoration-dotted"
+                href="https://www.openstreetmap.org/copyright"
+                target="_blank"
+                rel="noreferrer">© OSM</a
+            >
         </div>
 
         {#if selectedMotion}
