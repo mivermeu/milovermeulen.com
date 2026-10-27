@@ -1,3 +1,5 @@
+import './maplibre-worker';
+
 import type { Feature, FeatureCollection, LineString, Point, Position } from 'geojson';
 import * as maplibregl from 'maplibre-gl';
 import { routeColor } from './palette';

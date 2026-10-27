@@ -27,6 +27,7 @@
         let frame = 0;
         let timer: ReturnType<typeof setInterval> | undefined;
         let last = performance.now();
+        let lastPaint = 0;
 
         const adopt = (snapshot: TransitData['snapshot']) => {
             if (!data) return;
@@ -66,7 +67,12 @@
                 });
             }
 
-            paintTrains(map, positions);
+            // setData re-tiles the source on the worker, so publish at ~12 Hz rather
+            // than every frame; the sim still advances at display rate.
+            if (now - lastPaint >= 80) {
+                paintTrains(map, positions);
+                lastPaint = now;
+            }
             trains = positions.length;
             stale = staleCount;
             frame = requestAnimationFrame(paint);
@@ -101,6 +107,9 @@
             try {
                 await reload();
                 map = createMap(container);
+                if (import.meta.env.DEV) {
+                    (window as unknown as { __map: unknown }).__map = map;
+                }
                 await new Promise<void>((resolve) => map?.on('load', () => resolve()));
                 if (disposed) {
                     map.remove();
