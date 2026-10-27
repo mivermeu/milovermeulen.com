@@ -24,6 +24,7 @@ export type TrainProperties = {
     reset: boolean;
     confidence: number;
     positioned: boolean;
+    selected: boolean;
 };
 
 const NETWORK_SOURCE = 'network';
@@ -32,6 +33,7 @@ const STATIONS_SOURCE = 'stations';
 const STATIONS_LAYER = 'stations-dots';
 const TRAINS_SOURCE = 'trains';
 const TRAINS_LAYER = 'trains-dots';
+const SELECTED_LAYER = 'trains-selected';
 
 const NYC_CENTER: [number, number] = [-73.98, 40.73];
 
@@ -178,6 +180,52 @@ export function installLayers(
             'circle-stroke-opacity': ['case', ['get', 'reset'], 0, ['get', 'stale'], 0.5, 1]
         }
     });
+
+    // A ring under the selected train; the inspector is the only thing that sets it.
+    map.addLayer({
+        id: SELECTED_LAYER,
+        type: 'circle',
+        source: TRAINS_SOURCE,
+        filter: ['==', ['get', 'selected'], true],
+        paint: {
+            'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 9, 15, 14],
+            'circle-color': 'transparent',
+            'circle-stroke-color': '#ffffff',
+            'circle-stroke-width': 2,
+            'circle-stroke-opacity': 0.9
+        }
+    });
+}
+
+/**
+ * Dim everything outside the active routes. An empty list restores the map.
+ * Lines stay visible for context, trains fade harder so the selection reads.
+ */
+export function applyRouteFilter(map: maplibregl.Map, routes: string[]): void {
+    const active = routes.length > 0;
+    const matches: maplibregl.ExpressionSpecification = [
+        'in',
+        ['get', 'route'],
+        ['literal', routes]
+    ];
+    map.setPaintProperty(
+        NETWORK_LAYER,
+        'line-opacity',
+        active ? ['case', matches, 0.9, 0.08] : 0.9
+    );
+    const visibility: maplibregl.ExpressionSpecification = [
+        'case',
+        ['get', 'reset'],
+        0.3,
+        ['get', 'stale'],
+        0.55,
+        1
+    ];
+    map.setPaintProperty(
+        TRAINS_LAYER,
+        'circle-opacity',
+        active ? ['*', visibility, ['case', matches, 1, 0.08]] : visibility
+    );
 }
 
 /**
@@ -212,7 +260,8 @@ export function trainGeoJSON(
                 stale: train.stale,
                 reset: train.reset,
                 confidence: train.confidence,
-                positioned: train.positioned
+                positioned: train.positioned,
+                selected: train.selected === true
             }
         }))
     };

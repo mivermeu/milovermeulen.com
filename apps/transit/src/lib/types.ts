@@ -181,4 +181,6 @@ export interface TrainPosition {
     confidence: number;
     /** False when the trip had no pattern match. */
     positioned: boolean;
+    /** Highlighted by the inspector. */
+    selected?: boolean;
 }

@@ -185,7 +185,8 @@ describe('trainGeoJSON', () => {
             stale: true,
             reset: false,
             confidence: 0.8,
-            positioned: true
+            positioned: true,
+            selected: false
         });
     });
 
