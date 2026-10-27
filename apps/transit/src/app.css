@@ -1,0 +1,78 @@
+@import 'shared-config/app.css';
+
+html,
+body {
+    background-color: theme('colors.brand-bg');
+    color: theme('colors.brand-text');
+    color-scheme: dark;
+}
+
+body {
+    @apply text-sm;
+    /* Full-viewport app: no rubber-banding / pull-to-refresh fighting the overlays. */
+    overscroll-behavior: none;
+}
+
+@layer base {
+    h3 {
+        @apply mb-4 border-b border-brand-secondary pb-2 text-lg font-semibold text-brand-text-highlight;
+    }
+
+    button {
+        @apply inline-flex cursor-pointer items-center justify-center rounded-lg border border-brand-primary bg-transparent px-3 py-2 whitespace-nowrap text-brand-text transition-colors duration-150;
+    }
+
+    button:hover:not(:disabled) {
+        @apply bg-white/15;
+    }
+
+    button:active:not(:disabled) {
+        transform: scale(0.97);
+    }
+
+    button:disabled {
+        @apply cursor-not-allowed opacity-40;
+    }
+
+    input[type='number'] {
+        @apply rounded-md border border-brand-text/20 bg-brand-bg px-2 py-1 text-sm text-brand-text-highlight;
+    }
+
+    input[type='number']:focus {
+        @apply border-brand-primary outline-none;
+    }
+}
+
+/* Full-viewport in a viewport-fit=cover page: keep controls clear of the
+   notch / Dynamic Island / home bar. env() resolves to 0 where unsupported. */
+.app-shell {
+    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+        env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+}
+
+/*
+ * Touch ergonomics. Unlayered rules beat utilities in the cascade, so this
+ * scales up the small desktop-first tap targets and type sizes on coarse
+ * pointers without touching desktop visuals. Form fonts >= 16px stop iOS
+ * Safari's zoom-on-focus from blowing out the layout.
+ */
+@media (pointer: coarse) {
+    input,
+    select,
+    textarea {
+        font-size: 1rem;
+    }
+
+    input[type='range'] {
+        height: 1.75rem;
+    }
+
+    input[type='checkbox'] {
+        width: 1.125rem;
+        height: 1.125rem;
+    }
+
+    [role='treeitem'] {
+        padding-block: 0.375rem;
+    }
+}
