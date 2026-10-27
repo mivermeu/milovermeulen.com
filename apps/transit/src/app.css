@@ -76,3 +76,18 @@ body {
         padding-block: 0.375rem;
     }
 }
+
+/*
+ * The shared theme references the font at the domain root (`/fonts/...`), which
+ * only resolves for an app served at `/`. Under `/transit` it 404s. Bundle the
+ * copy with this app instead: Vite hashes it and applies the base path, in dev
+ * and in the build. The shared rule stays in the cascade but is never fetched,
+ * because this later declaration wins for the same family and descriptors.
+ */
+@font-face {
+    font-family: 'AtkinsonHyperlegibleMono';
+    src: url('./lib/assets/fonts/AtkinsonHyperlegibleMono-VariableFont_wght.ttf') format('truetype');
+    font-weight: 200 800;
+    font-style: normal;
+    font-display: swap;
+}
