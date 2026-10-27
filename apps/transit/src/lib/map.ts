@@ -1,44 +1,7 @@
+import type { Feature, FeatureCollection, LineString, Point, Position } from 'geojson';
 import * as maplibregl from 'maplibre-gl';
 import { routeColor } from './palette';
 import type { Graph, PatternGeometry, TrainPosition } from './types';
-
-/**
- * The GeoJSON shapes this module builds.
- *
- * `@types/geojson` ships only as a transitive dependency of maplibre-gl, so the
- * ambient `GeoJSON` namespace is not part of the app's type program. Mirroring
- * the handful of shapes we emit here keeps the render boundary typed (rather
- * than silently falling back to `any`) without declaring a global namespace.
- * The shapes are structurally compatible with `@types/geojson`.
- */
-// Ambient declaration only; it emits nothing at runtime.
-// eslint-disable-next-line @typescript-eslint/no-namespace
-export declare namespace GeoJSON {
-    type Position = [number, number];
-    type Geometry = Point | LineString;
-
-    interface Point {
-        type: 'Point';
-        coordinates: Position;
-    }
-
-    interface LineString {
-        type: 'LineString';
-        coordinates: Position[];
-    }
-
-    interface Feature<G extends Geometry | null = Geometry, P = Record<string, unknown>> {
-        type: 'Feature';
-        id?: string | number;
-        geometry: G;
-        properties: P;
-    }
-
-    interface FeatureCollection<G extends Geometry | null = Geometry, P = Record<string, unknown>> {
-        type: 'FeatureCollection';
-        features: Feature<G, P>[];
-    }
-}
 
 export type NetworkProperties = {
     id: string;
@@ -109,8 +72,8 @@ export function createMap(container: HTMLElement): maplibregl.Map {
 export function networkGeoJSON(
     graph: Graph,
     geometries: Map<string, PatternGeometry>
-): GeoJSON.FeatureCollection<GeoJSON.LineString, NetworkProperties> {
-    const features: GeoJSON.Feature<GeoJSON.LineString, NetworkProperties>[] = [];
+): FeatureCollection<LineString, NetworkProperties> {
+    const features: Feature<LineString, NetworkProperties>[] = [];
 
     for (const pattern of graph.patterns) {
         const geometry = geometries.get(pattern.id);
@@ -134,9 +97,7 @@ export function networkGeoJSON(
 }
 
 /** One Point per station, named so the UI can label them later. */
-export function stationsGeoJSON(
-    graph: Graph
-): GeoJSON.FeatureCollection<GeoJSON.Point, StationProperties> {
+export function stationsGeoJSON(graph: Graph): FeatureCollection<Point, StationProperties> {
     return {
         type: 'FeatureCollection',
         features: graph.stations.map((station) => ({
@@ -217,10 +178,25 @@ export function installLayers(
     });
 }
 
+/**
+ * Replace the network and station geometry after a weekly graph rebuild.
+ * Cheaper than recreating the map, and keeps the camera where the user left it.
+ */
+export function updateNetwork(
+    map: maplibregl.Map,
+    graph: Graph,
+    geometries: Map<string, PatternGeometry>
+): void {
+    const network = map.getSource(NETWORK_SOURCE) as maplibregl.GeoJSONSource | undefined;
+    network?.setData(networkGeoJSON(graph, geometries));
+    const stations = map.getSource(STATIONS_SOURCE) as maplibregl.GeoJSONSource | undefined;
+    stations?.setData(stationsGeoJSON(graph));
+}
+
 /** Positioned trains as points; unpositioned trips are filtered out at render. */
 export function trainGeoJSON(
     positions: TrainPosition[]
-): GeoJSON.FeatureCollection<GeoJSON.Point, TrainProperties> {
+): FeatureCollection<Point, TrainProperties> {
     return {
         type: 'FeatureCollection',
         features: positions.map((train) => ({
@@ -255,8 +231,8 @@ export function paintTrains(map: maplibregl.Map, positions: TrainPosition[]): vo
 }
 
 /** Convert a flat lat/lon buffer into MapLibre's [lng, lat] pairs. */
-function lngLatPairs(buffer: Float32Array): [number, number][] {
-    const pairs: [number, number][] = [];
+function lngLatPairs(buffer: Float32Array): Position[] {
+    const pairs: Position[] = [];
     for (let i = 0; i + 1 < buffer.length; i += 2) {
         pairs.push([buffer[i + 1], buffer[i]]);
     }
