@@ -47,6 +47,7 @@ _STOP_TIME_SEQUENCE = 1
 _STOP_TIME_ARRIVAL = 2
 _STOP_TIME_DEPARTURE = 3
 _STOP_TIME_STOP_ID = 4
+_STOP_TIME_SCHEDULE_RELATIONSHIP = 5
 
 _EVENT_DELAY = 1
 _EVENT_TIME = 2
@@ -54,6 +55,7 @@ _EVENT_TIME = 2
 # TripDescriptor: note that route_id and direction_id are 5 and 6, not 2 and 3.
 _TRIP_ID = 1
 _TRIP_START_DATE = 3
+_TRIP_SCHEDULE_RELATIONSHIP = 4
 _TRIP_ROUTE_ID = 5
 _TRIP_DIRECTION_ID = 6
 
@@ -95,6 +97,17 @@ Fields = list[tuple[int, int, Any]]
 _NYCT_DIRECTION = {1: "N", 2: "E", 3: "S", 4: "W"}
 
 
+# TripDescriptor.ScheduleRelationship values this service cares about.
+SCHEDULE_CANCELED = 3
+SCHEDULE_DELETED = 7
+
+_VEHICLE_STATUS = {0: "INCOMING_AT", 1: "STOPPED_AT", 2: "IN_TRANSIT_TO"}
+
+
+def vehicle_status_name(status: int | None) -> str | None:
+    return _VEHICLE_STATUS.get(status)
+
+
 def trip_direction(trip: TripDescriptor) -> str | None:
     """Best direction for a trip: the NYCT extension, else its trip id."""
     mapped = _NYCT_DIRECTION.get(trip.nyct_direction)
@@ -123,6 +136,7 @@ class StopTimeUpdate:
     stop_id: str | None = None
     arrival: StopTimeEvent | None = None
     departure: StopTimeEvent | None = None
+    schedule_relationship: int | None = None
     scheduled_track: str | None = None
     actual_track: str | None = None
 
@@ -133,6 +147,7 @@ class TripDescriptor:
     route_id: str | None = None
     direction_id: int | None = None
     start_date: str | None = None
+    schedule_relationship: int | None = None
     train_id: str | None = None
     nyct_direction: int | None = None
 
@@ -283,6 +298,7 @@ def _parse_stop_time_update(fields: Fields) -> StopTimeUpdate:
     update = StopTimeUpdate(
         stop_sequence=_integer(fields, _STOP_TIME_SEQUENCE),
         stop_id=_text(fields, _STOP_TIME_STOP_ID),
+        schedule_relationship=_integer(fields, _STOP_TIME_SCHEDULE_RELATIONSHIP),
     )
     arrival = _message(fields, _STOP_TIME_ARRIVAL)
     if arrival is not None:
@@ -303,6 +319,7 @@ def _parse_trip_descriptor(fields: Fields) -> TripDescriptor:
         route_id=_text(fields, _TRIP_ROUTE_ID),
         direction_id=_integer(fields, _TRIP_DIRECTION_ID),
         start_date=_text(fields, _TRIP_START_DATE),
+        schedule_relationship=_integer(fields, _TRIP_SCHEDULE_RELATIONSHIP),
     )
     nyct = _message(fields, _NYCT_TRIP_DESCRIPTOR)
     if nyct is not None:

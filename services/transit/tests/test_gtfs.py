@@ -127,3 +127,14 @@ def test_incrementality_is_surfaced():
     feed = gtfs.parse_feed(build_feed([], incrementality=1))
     assert feed.incrementality == 1
     assert not feed.trip_updates
+
+
+def test_schedule_relationship_is_parsed():
+    stop_time = ld(4, b"A01N") + vi(5, 1)
+    trip = ld(1, b"trip-1") + vi(4, 3)
+    trip_update = ld(1, trip) + ld(2, stop_time)
+
+    feed = gtfs.parse_feed(build_feed([ld(3, trip_update)]))
+
+    assert feed.trip_updates[0].trip.schedule_relationship == 3
+    assert feed.trip_updates[0].stop_time_updates[0].schedule_relationship == 1

@@ -13,12 +13,13 @@ import os
 import signal
 import threading
 import time
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import archive, estimator, feeds, graph, gtfs, snapshot
+from . import archive, estimator, events, feeds, graph, gtfs, series, snapshot
 
 log = logging.getLogger("transit.poller")
 
@@ -32,7 +33,8 @@ class Config:
     interval: float = 30.0
     timeout: float = 10.0
     raw_hours: int = 48
-    series_days: int = 90
+    series_days: int = 180
+    meta_days: int = 365
     series_every: int = 2
     bad_days: int = 7
     prune_seconds: float = 3600.0
@@ -45,7 +47,8 @@ class Config:
             interval=float(os.environ.get("TRANSIT_INTERVAL", "30")),
             timeout=float(os.environ.get("TRANSIT_HTTP_TIMEOUT", "10")),
             raw_hours=int(os.environ.get("TRANSIT_RAW_HOURS", "48")),
-            series_days=int(os.environ.get("TRANSIT_SERIES_DAYS", "90")),
+            series_days=int(os.environ.get("TRANSIT_SERIES_DAYS", "180")),
+            meta_days=int(os.environ.get("TRANSIT_META_DAYS", "365")),
             series_every=int(os.environ.get("TRANSIT_SERIES_EVERY", "2")),
             bad_days=int(os.environ.get("TRANSIT_BAD_DAYS", "7")),
             prune_seconds=float(os.environ.get("TRANSIT_PRUNE_SECONDS", "3600")),
@@ -67,10 +70,17 @@ class Poller:
                 root=config.data_dir,
                 raw_hours=config.raw_hours,
                 series_days=config.series_days,
+                meta_days=config.meta_days,
                 bad_days=config.bad_days,
             )
         )
         self.estimator = estimator.Estimator()
+        self.event_tracker = events.EventTracker()
+        self.boot_id = uuid.uuid4().hex[:12]
+        self._last_ok: dict[str, int] = {}
+        self._last_counts: dict[str, int] = {}
+        self._last_failed: set[str] = set()
+        self._last_tick_ok = True
         self._graph_warned = False
         self.cycles = 0
         self._last_prune = 0.0
@@ -102,6 +112,16 @@ class Poller:
                     bytes_total += len(result.payload)
                     try:
                         feed = gtfs.parse_feed(result.payload)
+                        if (
+                            name in feeds.TRIP_FEEDS
+                            and not feed.trip_updates
+                            and not feed.vehicles
+                            and self._last_counts.get(name, 0) > 0
+                        ):
+                            # A feed that had trains and now parses to nothing is
+                            # a broken response, not an empty system. Treating it
+                            # as valid would emit a disappearance for every train.
+                            raise gtfs.GtfsRtError("empty feed")
                         if feed.incrementality not in (None, 0):
                             # DIFFERENTIAL feeds only carry deltas; merging them as if
                             # they were full datasets would silently drop trains.
@@ -121,10 +141,13 @@ class Poller:
                             vehicles=len(feed.vehicles),
                             alerts=len(feed.alerts),
                         )
+                        self._last_ok[name] = int(started)
+                        self._last_counts[name] = len(feed.trip_updates)
                         if feed.header_ts:
                             entry["age_s"] = max(0, int(started - feed.header_ts))
             health[name] = entry
 
+        failed = [name for name, entry in health.items() if not entry["ok"]]
         trip_feeds = {name: feed for name, feed in parsed.items() if name in feeds.TRIP_FEEDS}
         self._refresh_graph()
         try:
@@ -143,16 +166,33 @@ class Poller:
         )
         self._write_snapshot(document)
 
+        rows = series.rows(trip_feeds, positions, self.estimator.graph_hash, started)
+        transitions = self.event_tracker.observe(
+            trip_feeds,
+            positions,
+            started,
+            first_cycle=self.cycles == 0,
+            previous_ok=self._last_tick_ok,
+            failed=set(failed),
+            previous_failed=self._last_failed,
+            gone_after=max(events.GONE_AFTER_S, 3 * self.config.interval),
+            boot=self.boot_id,
+        )
+
         self.cycles += 1
         if self.cycles % max(1, self.config.series_every) == 0:
-            self.archive.append_series(document["trains"], started)
+            self.archive.append_series(rows, started)
+        self.archive.append_events(transitions, started)
 
-        failed = [name for name, entry in health.items() if not entry["ok"]]
         self.archive.append_meta(
             {
                 "t": int(started),
+                "boot": self.boot_id,
+                "cycle_ok": True,
+                "last_ok": dict(self._last_ok),
                 "trains": len(document["trains"]),
                 "estimated": document["estimated"],
+                "events": len(transitions),
                 "unmatched": self.estimator.unmatched,
                 "alerts": len(document["alerts"]),
                 "ok": len(health) - len(failed),
@@ -167,6 +207,11 @@ class Poller:
             started,
         )
 
+        # Record the cycle outcome before pruning: a prune error is an ops issue,
+        # not a reason to treat the next bracket as unbounded.
+        self._last_failed = set(failed)
+        self._last_tick_ok = True
+
         # Time-based, not cycle-based: a restart loop must not disable retention.
         if started - self._last_prune >= self.config.prune_seconds:
             self._last_prune = started
@@ -175,10 +220,11 @@ class Poller:
                 log.info("pruned %d archived files", removed)
 
         log.info(
-            "cycle %d: trains=%d alerts=%d feeds=%d/%d bytes=%d failed=%s",
+            "cycle %d: trains=%d alerts=%d events=%d feeds=%d/%d bytes=%d failed=%s",
             self.cycles,
             len(document["trains"]),
             len(document["alerts"]),
+            len(transitions),
             len(health) - len(failed),
             len(health),
             bytes_total,
@@ -224,6 +270,7 @@ class Poller:
             try:
                 self.tick()
             except Exception:
+                self._last_tick_ok = False
                 log.exception("poll cycle failed; retrying next interval")
             next_run += self.config.interval
             delay = max(0.0, next_run - time.monotonic())

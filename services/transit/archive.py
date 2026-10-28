@@ -6,6 +6,8 @@ Three tiers, by how replaceable the data is:
   what makes replay and parser changes safe; nothing else can reconstruct it.
 * ``series/`` one compact row per train per cycle, gzipped JSONL, longer
   retention. Cheap enough to keep for months, rich enough for delay analysis.
+* ``events/`` one row per observed stop transition (arrival, departure, skip,
+  cancellation, disappearance). This is the label tier and is kept forever.
 * ``meta/``   one row per poll cycle: per-feed status, latency, byte counts.
   Also the history behind the frontend's degraded-feed banner.
 * ``bad/``    payloads that failed validation, kept so a bad feed can be
@@ -31,7 +33,8 @@ from typing import Any
 class ArchiveConfig:
     root: Path
     raw_hours: int = 48
-    series_days: int = 90
+    series_days: int = 180
+    meta_days: int = 365
     bad_days: int = 7
 
 
@@ -66,41 +69,33 @@ class Archive:
         path.write_bytes(payload)
         return path
 
-    def append_series(self, trains: list[dict[str, Any]], now: float | None = None) -> int:
-        if not trains:
+    def append_series(self, rows: list[dict[str, Any]], now: float | None = None) -> int:
+        return self._append_rows("series", rows, now)
+
+    def append_events(self, events: list[dict[str, Any]], now: float | None = None) -> int:
+        return self._append_rows("events", events, now)
+
+    def _append_rows(self, tier: str, rows: list[dict[str, Any]], now: float | None = None) -> int:
+        if not rows:
             return 0
         stamp = time.time() if now is None else now
-        path = self.config.root / "series" / f"{_day(stamp)}.jsonl.gz"
+        path = self.config.root / tier / f"{_day(stamp)}.jsonl.gz"
         path.parent.mkdir(parents=True, exist_ok=True)
-        rows = []
-        for train in trains:
-            row = {
-                "t": int(stamp),
-                "id": train.get("id"),
-                "trip": train.get("trip"),
-                "route": train.get("route"),
-                "dir": train.get("dir"),
-                "st": train.get("status"),
-                "stop": train.get("stop"),
-                "seq": train.get("seq"),
-                "next": [
-                    [entry.get("stop"), entry.get("arr"), entry.get("dep")]
-                    for entry in train.get("next", [])
-                ],
-            }
-            rows.append(json.dumps(row, separators=(",", ":")) + "\n")
 
         # One complete gzip member per cycle, appended in a single write and
         # fsynced: a reader never sees a half-written row, and a crash costs at
         # most the newest cycle. A crash *during* that write can still truncate
         # the tail, so analysis readers should stop at the first bad member
         # (`gzip -dc` does) rather than assume the file is whole.
-        member = gzip.compress("".join(rows).encode("utf-8"), compresslevel=6)
+        payload = b"".join(
+            (json.dumps(row, separators=(",", ":")) + "\n").encode("utf-8") for row in rows
+        )
+        member = gzip.compress(payload, compresslevel=6)
         with path.open("ab") as handle:
             handle.write(member)
             handle.flush()
             os.fsync(handle.fileno())
-        return len(trains)
+        return len(rows)
 
     def append_meta(self, record: dict[str, Any], now: float | None = None) -> None:
         stamp = time.time() if now is None else now
@@ -117,9 +112,10 @@ class Archive:
         cutoffs = {
             "raw": stamp - self.config.raw_hours * 3600,
             "series": stamp - self.config.series_days * 86400,
-            "meta": stamp - self.config.series_days * 86400,
+            "meta": stamp - self.config.meta_days * 86400,
             "bad": stamp - self.config.bad_days * 86400,
         }
+        # `events/` is deliberately absent: labels are kept forever.
         removed = 0
         for path in list(self.config.root.rglob("*")):
             if not path.is_file():
