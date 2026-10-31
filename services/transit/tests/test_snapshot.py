@@ -122,3 +122,12 @@ def test_positions_are_merged_by_train_id():
     assert document["estimated"] == 1
     plain = [train for train in document["trains"] if not train["edge"]]
     assert plain and plain[0]["confidence"] == 0.0
+
+
+def test_placeholders_keep_the_compat_status_and_are_counted():
+    document = build_snapshot()
+    pre = [train for train in document["trains"] if train["pre"]]
+    assert pre, "the fixture contains placeholder vehicles"
+    assert all(train["status"] == "IN_TRANSIT_TO" for train in pre)
+    assert document["predeparture"] == len(pre)
+    assert any(not train["pre"] for train in document["trains"])

@@ -36,6 +36,7 @@ def build_feed(
     status: int = 1,
     stop_id: str = "T1N",
     timestamp: float = 1000.0,
+    seq: int | None = None,
 ) -> gtfs.Feed:
     update = gtfs.TripUpdate(
         trip=gtfs.TripDescriptor(trip_id=trip_id, route_id=route, train_id=train_id)
@@ -47,6 +48,7 @@ def build_feed(
     vehicle = gtfs.VehiclePosition(
         trip_id=trip_id,
         stop_id=stop_id,
+        current_stop_sequence=seq,
         current_status=status,
         timestamp=int(timestamp),
     )
@@ -211,3 +213,37 @@ def test_trains_without_a_vehicle_are_skipped():
     update.vehicles = []
     assert instance.update({"t": update}, now=1000.0) == {}
     assert instance.without_vehicle == 1
+
+
+def test_placeholders_are_skipped_and_counted():
+    instance = make_estimator()
+    positions = instance.update({"t": build_feed(status=None, seq=None, stop_id="T1N")}, now=1000.0)
+    assert positions == {}
+    assert instance.placeholders == 1
+    assert instance.observed == 1
+
+
+def test_placeholders_off_their_origin_are_counted():
+    instance = make_estimator()
+    instance.update({"t": build_feed(status=None, seq=None, stop_id="T3N")}, now=1000.0)
+    assert instance.placeholders == 1
+    assert instance.placeholders_off_origin == 1
+
+
+def test_a_sequence_without_a_status_is_still_observed():
+    instance = make_estimator()
+    positions = instance.update({"t": build_feed(status=None, seq=3, stop_id="T2N")}, now=1000.0)
+    assert instance.placeholders == 0
+    assert positions
+
+
+def test_a_future_timestamp_halves_confidence():
+    fresh = make_estimator()
+    skewed = make_estimator()
+    fresh_position = fresh.update(
+        {"t": build_feed(status=1, seq=3, stop_id="T2N", timestamp=1000)}, now=1000.0
+    )["1T 1200"]
+    skewed_position = skewed.update(
+        {"t": build_feed(status=1, seq=3, stop_id="T2N", timestamp=1200)}, now=1000.0
+    )["1T 1200"]
+    assert skewed_position["confidence"] == fresh_position["confidence"] * 0.5

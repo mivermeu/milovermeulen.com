@@ -11,7 +11,7 @@ def feed(
     start: str = "20261027",
     train: str | None = "1G 2121",
     stop: str = "G29S",
-    seq: int = 4,
+    seq: int | None = 4,
     status: int = 1,
     timestamp: int = 2000,
     stops: tuple[str, ...] = ("G29S", "G24S", "G22S", "G20S", "G18S", "G16S", "G14S", "G12S"),
@@ -62,7 +62,7 @@ def test_row_carries_the_whole_contract():
     rows = series.rows({"gtfs-g": feed()}, POSITIONS, "ae12bb22cb7b", now=1000.0)
     assert len(rows) == 1
     row = rows[0]
-    assert row["v"] == 1
+    assert row["v"] == 2
     assert row["t"] == 1000
     assert row["id"] == "1G 2121"
     assert row["trip"] == "T1"
@@ -70,6 +70,7 @@ def test_row_carries_the_whole_contract():
     assert row["route"] == "G"
     assert row["dir"] == "S"
     assert row["st"] == "STOPPED_AT"
+    assert row["pre"] is False
     assert row["stop"] == "G29S"
     assert row["seq"] == 4
     assert row["feed"] == "gtfs-g"
@@ -130,3 +131,9 @@ def test_duplicate_train_ids_across_feeds_keep_the_first_row():
     payload = feed()
     rows = series.rows({"a": payload, "b": payload}, POSITIONS, None, now=1000.0)
     assert len(rows) == 1
+
+
+def test_placeholder_rows_are_flagged_with_a_null_status():
+    rows = series.rows({"f": feed(status=None, seq=None)}, {}, None, now=1000.0)
+    assert rows[0]["pre"] is True
+    assert rows[0]["st"] is None

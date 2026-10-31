@@ -125,7 +125,15 @@ def test_differential_feed_is_quarantined(tmp_path):
 
 def test_snapshot_carries_positions_when_a_graph_is_published(tmp_path):
     feed = gtfs.parse_feed(fixture("gtfs-g.pb"))
-    trip = next(update for update in feed.trip_updates if len(update.stop_time_updates) > 4)
+    vehicles = {vehicle.trip_id: vehicle for vehicle in feed.vehicles}
+    trip = next(
+        update
+        for update in feed.trip_updates
+        if len(update.stop_time_updates) > 4
+        and (vehicle := vehicles.get(update.trip.trip_id)) is not None
+        and vehicle.current_stop_sequence is not None
+        and vehicle.current_status is not None
+    )
     stops = [stop.stop_id for stop in trip.stop_time_updates]
     pattern = {
         "id": "G-TEST",
@@ -177,6 +185,8 @@ def test_meta_records_boot_and_per_feed_health(tmp_path):
     assert record["cycle_ok"] is True
     assert len(record["last_ok"]) == len(feeds.FEED_NAMES)
     assert record["events"] == 0
+    assert "placeholders" in record
+    assert "placeholder_share" in record
 
 
 def test_series_rows_carry_the_widened_contract(tmp_path):
@@ -188,7 +198,7 @@ def test_series_rows_carry_the_widened_contract(tmp_path):
         rows = [json.loads(line) for line in handle]
     assert rows
     row = rows[0]
-    assert row["v"] == 1
+    assert row["v"] == 2
     assert "start" in row
     assert "vehicle_ts" in row
     assert "feed" in row

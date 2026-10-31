@@ -43,6 +43,7 @@ class Observation:
     feed: str
     predictions: dict[str, int] = field(default_factory=dict)
     confidence: float | None = None
+    placeholder: bool = False
 
 
 class EventTracker:
@@ -93,6 +94,12 @@ class EventTracker:
             if key in current:
                 continue
             previous = self.previous[key]
+            if previous.placeholder:
+                # A placeholder vanishing is not a trip end.
+                del self.previous[key]
+                self.seen_at.pop(key, None)
+                self.cancelled = {entry for entry in self.cancelled if entry[0] != key}
+                continue
             if previous.feed in failed_now or previous.feed in failed_before:
                 # The feed is down, not the trains. Drop the state silently so a
                 # recovery starts fresh instead of reporting a fake trip end.
@@ -154,6 +161,7 @@ class EventTracker:
                     feed=feed_name,
                     predictions=predictions,
                     confidence=position.get("confidence"),
+                    placeholder=gtfs.is_placeholder(vehicle),
                 )
         return observations
 
@@ -163,6 +171,11 @@ class EventTracker:
         self, previous: Observation, current: Observation, t_lo: float, t_hi: float
     ) -> list[dict[str, Any]]:
         events: list[dict[str, Any]] = []
+
+        if previous.placeholder or current.placeholder:
+            # No position claim on either side: the train did not move, or we lost
+            # the observation. Neither is an arrival or a departure.
+            return events
 
         if previous.trip != current.trip:
             # The same physical train started a new trip (short-turn) or the feed
@@ -231,6 +244,7 @@ class EventTracker:
                     status=None,
                     vehicle_ts=None,
                     feed=feed_name,
+                    placeholder=False,
                 )
                 events.append(self._event(observation, "cancel", now, now, "schedule", None))
         return events

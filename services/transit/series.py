@@ -17,7 +17,7 @@ from typing import Any
 
 from . import gtfs
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 # The served snapshot caps at three stops for the renderer; the series can afford
 # a longer feature horizon.
 NEXT_STOPS = 6
@@ -84,6 +84,7 @@ def rows(
                     "seq": vehicle.current_stop_sequence,
                     "feed": feed_name,
                     "vehicle_ts": vehicle.timestamp,
+                    "pre": gtfs.is_placeholder(vehicle),
                     "pattern": position.get("pattern"),
                     "edge": edge_index(position.get("edge")),
                     "s": position.get("s_total"),

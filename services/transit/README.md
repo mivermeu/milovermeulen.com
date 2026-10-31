@@ -80,11 +80,11 @@ Files, not a database: retention is `rm` by mtime, and the day files are directl
 DuckDB or pandas when analysis starts. The raw tier is the only thing that can re-derive history
 after a parser change.
 
-**Series row** (`v: 1`) — one per observed train per sample:
+**Series row** (`v: 2`) — one per observed train per sample:
 
 ```json
 {
-    "v": 1,
+    "v": 2,
     "t": 1792980000,
     "id": "1R 2104",
     "trip": "…",
@@ -96,6 +96,7 @@ after a parser change.
     "seq": 12,
     "feed": "gtfs-nqrw",
     "vehicle_ts": 1792979995,
+    "pre": false,
     "pattern": "R-abc",
     "edge": 9,
     "s": 8125.4,
@@ -144,6 +145,12 @@ s emits exactly one `trip_end`/`disappeared`.
 Series and events are never re-derived after the fact: the events tier is the training set, so it is
 kept forever while the series is the bigger, replaceable tier.
 
+Placeholders produce no events: a transition into or out of a placeholder is an observation gap, not
+a movement. The first real observation of a trip is its event boundary.
+
+Schema note: `v: 1` rows predate placeholders and carry `st: "IN_TRANSIT_TO"` with `seq: null`; use
+`seq is null` (or `v == 1`) to identify them. `v: 2` rows carry `pre` and a null status.
+
 Series files are multi-member gzip: each cycle appends one complete member in a single write, so a
 reader (or a crash) never sees a half-written row. A crash _during_ that write can still truncate
 the newest member, so analysis readers should stop at the first bad member rather than assume the
@@ -176,6 +183,7 @@ v0 was stop-level; v1 adds the estimated position along the track graph (`patter
         }
     },
     "scheduled_trips": 58,
+    "predeparture": 82,
     "estimated": 238,
     "trains": [
         {
@@ -195,7 +203,8 @@ v0 was stop-level; v1 adds the estimated position along the track graph (`patter
             "v": 11.2,
             "confidence": 0.95,
             "stale": false,
-            "reset": false
+            "reset": false,
+            "pre": false
         }
     ],
     "alerts": [
@@ -230,6 +239,10 @@ Notes:
 - `edge` names the pattern and the segment (`pattern:index:from>to`); `s` is metres from the start
   of that edge and `v` is metres per second. Lat/lon is the frontend's job: slice `shapes.bin` by
   the pattern's stop distances.
+- `pre: true` means the feed made no position claim for this trip yet: no stop sequence and no
+  status. These are trains that have not started service. They keep their `status`/`stop` for
+  compatibility but have no `edge`, no `confidence` and no events until the first real observation.
+  `predeparture` counts them at the document level.
 - `confidence` folds in match quality, vehicle staleness and whether the observation forced a reset.
   It is not a measure of how far the train moved.
 - `reset: true` means the target jumped further than a train could travel in that cycle (re-route,
@@ -243,19 +256,29 @@ Notes:
 `estimator.py` keys state by NYCT `train_id`, not `trip_id`, so a short-turn (same train, new trip)
 continues instead of jumping. Each cycle it:
 
-1. joins the trip to a pattern by stop sequence;
-2. turns the observation into a target distance along the shape — the stop itself for `STOPPED_AT`,
+1. drops placeholders (no sequence and no status) before doing any work — they get no position, so
+   `estimated` counts only real observations;
+2. joins the trip to a pattern by stop sequence;
+3. turns the observation into a target distance along the shape — the stop itself for `STOPPED_AT`,
    between the previous and next stop for `IN_TRANSIT_TO`, with the ETA implying the speed for the
    rest of the segment;
-3. advances the previous estimate and corrects it towards the target with a 5 s time constant. At
+4. advances the previous estimate and corrects it towards the target with a 5 s time constant. At
    the 30 s poll cadence that constant makes the correction effectively immediate (`α ≈ 0.9975`); it
    only smooths when ticks are closer together. The observation leads, the prediction is a prior;
-4. caps movement at 30 m/s, and re-anchors (with `reset`) only when the error exceeds what a train
+5. caps movement at 30 m/s, and re-anchors (with `reset`) only when the error exceeds what a train
    could cover in the cycle — `600 m + 30 m/s × elapsed`. A train observed `STOPPED_AT` always
    reports `v: 0`; a correction is not current speed.
 
 Lat/lon for a train is `stops[edge_index].dist + s` along its pattern's shape; `s_total` is included
 so a client does not need to re-derive it.
+
+A timestamp more than 60 s ahead of the poll clock halves confidence for observed trains: a future
+claim is not freshness. The `series` row carries the same observation raw, with `pre` marking
+placeholders and `st: null` whenever the feed omitted the status.
+
+Placeholder share and the share not at the trip's first stop are recorded in the per-cycle meta
+(`placeholders`, `placeholder_share`, `placeholders_off_origin`); a share above 0.35 logs a warning,
+because the predicate depends on MTA continuing to omit both fields for pre-departure trains.
 
 ## Track graph
 

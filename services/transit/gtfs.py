@@ -108,6 +108,16 @@ def vehicle_status_name(status: int | None) -> str | None:
     return _VEHICLE_STATUS.get(status)
 
 
+def is_placeholder(vehicle: VehiclePosition) -> bool:
+    """True when the feed made no position claim at all.
+
+    MTA publishes a vehicle for trips that have not started, with no stop
+    sequence and no status; only the scheduled departure echoes in `timestamp`.
+    Absence is meaningful here, so the decoder must not default it away.
+    """
+    return vehicle.current_stop_sequence is None and vehicle.current_status is None
+
+
 def trip_direction(trip: TripDescriptor) -> str | None:
     """Best direction for a trip: the NYCT extension, else its trip id."""
     mapped = _NYCT_DIRECTION.get(trip.nyct_direction)
@@ -349,10 +359,6 @@ def _parse_vehicle(fields: Fields) -> VehiclePosition:
         current_status=_integer(fields, _VEHICLE_CURRENT_STATUS),
         timestamp=_integer(fields, _VEHICLE_TIMESTAMP),
     )
-    # current_status is proto2-optional with a default of IN_TRANSIT_TO (2), so an
-    # absent field still means "between stations", not "unknown".
-    if vehicle.current_status is None:
-        vehicle.current_status = 2
     descriptor = _message(fields, _VEHICLE_DESCRIPTOR)
     if descriptor is not None:
         vehicle.vehicle_id = _text(descriptor, _VEHICLE_DESCRIPTOR_ID)

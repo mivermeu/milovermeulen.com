@@ -12,8 +12,8 @@ def feed(
     trip: str = "T1",
     start: str = "20261027",
     stop: str | None = "X",
-    seq: int = 1,
-    status: int = IN_TRANSIT,
+    seq: int | None = 1,
+    status: int | None = IN_TRANSIT,
     timestamp: int = 1000,
     train: str = "1T",
     relationship: int | None = None,
@@ -212,3 +212,24 @@ def test_one_missed_poll_is_not_a_disappearance():
     assert tracker.observe({"f": gtfs.Feed()}, {}, now=60.0) == []
     rows = tracker.observe({"f": gtfs.Feed()}, {}, now=91.0)
     assert kinds(rows) == [("disappeared", "Y", "absence")]
+
+
+def test_placeholder_to_live_emits_nothing():
+    tracker = events.EventTracker()
+    tracker.observe({"f": feed(status=None, seq=None)}, {}, now=0.0)
+    rows = tracker.observe({"f": feed(status=STOPPED, stop="X", seq=1)}, {}, now=30.0)
+    assert rows == []
+
+
+def test_live_to_placeholder_emits_nothing():
+    tracker = events.EventTracker()
+    tracker.observe({"f": feed(status=STOPPED, stop="X", seq=1)}, {}, now=0.0)
+    rows = tracker.observe({"f": feed(status=None, seq=None)}, {}, now=30.0)
+    assert rows == []
+
+
+def test_a_vanished_placeholder_is_not_a_trip_end():
+    tracker = events.EventTracker()
+    tracker.observe({"f": feed(status=None, seq=None)}, {}, now=0.0)
+    rows = tracker.observe({"f": gtfs.Feed()}, {}, now=400.0)
+    assert rows == []

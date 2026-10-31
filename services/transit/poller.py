@@ -193,6 +193,11 @@ class Poller:
                 "trains": len(document["trains"]),
                 "estimated": document["estimated"],
                 "events": len(transitions),
+                "placeholders": self.estimator.placeholders,
+                "placeholder_share": round(
+                    self.estimator.placeholders / max(1, self.estimator.observed), 3
+                ),
+                "placeholders_off_origin": self.estimator.placeholders_off_origin,
                 "unmatched": self.estimator.unmatched,
                 "alerts": len(document["alerts"]),
                 "ok": len(health) - len(failed),
