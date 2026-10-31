@@ -277,8 +277,9 @@ claim is not freshness. The `series` row carries the same observation raw, with 
 placeholders and `st: null` whenever the feed omitted the status.
 
 Placeholder share and the share not at the trip's first stop are recorded in the per-cycle meta
-(`placeholders`, `placeholder_share`, `placeholders_off_origin`); a share above 0.35 logs a warning,
-because the predicate depends on MTA continuing to omit both fields for pre-departure trains.
+(`placeholders`, `placeholder_share`, `placeholders_off_origin`); a share above 0.55 logs a warning
+(the measured worst is 0.49, overnight), because the predicate depends on MTA continuing to omit
+both fields for pre-departure trains.
 
 ## Track graph
 

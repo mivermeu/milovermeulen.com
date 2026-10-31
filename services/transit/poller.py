@@ -212,6 +212,13 @@ class Poller:
             started,
         )
 
+        share = self.estimator.placeholders / max(1, self.estimator.observed)
+        if share > 0.55:
+            log.warning(
+                "placeholder share %.0f%%; MTA may have changed vehicle semantics",
+                share * 100,
+            )
+
         # Record the cycle outcome before pruning: a prune error is an ops issue,
         # not a reason to treat the next bracket as unbounded.
         self._last_failed = set(failed)
