@@ -6,10 +6,11 @@
 #
 # Requires the pmtiles CLI (Go): `brew install pmtiles`.
 # Output is gitignored; upload it to <site>/transit/tiles/ after building.
+# z14 is required for minor-street geometry and names; z13 only carries major roads.
 set -euo pipefail
 
 REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-OUT="$REPO_ROOT/apps/transit/static/tiles/nyc-basemap-z13.pmtiles"
+OUT="$REPO_ROOT/apps/transit/static/tiles/nyc-basemap-z14.pmtiles"
 BBOX="-74.45,40.40,-73.45,41.05"
 
 command -v pmtiles >/dev/null || { echo "pmtiles CLI missing: brew install pmtiles" >&2; exit 1; }
@@ -30,7 +31,7 @@ mkdir -p "$(dirname "$OUT")"
 for day in "${candidates[@]}"; do
     url="https://build.protomaps.com/${day}.pmtiles"
     echo "extract $url"
-    if pmtiles extract "$url" "$OUT" --bbox="$BBOX" --minzoom=10 --maxzoom=13; then
+    if pmtiles extract "$url" "$OUT" --bbox="$BBOX" --minzoom=10 --maxzoom=14; then
         echo "wrote $OUT ($(du -h "$OUT" | cut -f1))"
         exit 0
     fi

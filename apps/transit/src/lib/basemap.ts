@@ -22,7 +22,7 @@ export function registerPmtilesProtocol(): void {
 // SvelteKit's BASE_URL has no trailing slash (`/transit`), so join explicitly.
 // Bun's test runner does not populate it, hence the fallback.
 const BASE = (import.meta.env.BASE_URL ?? '/').replace(/\/+$/, '');
-const DEFAULT_TILES = `${BASE}/tiles/nyc-basemap-z13.pmtiles`;
+const DEFAULT_TILES = `${BASE}/tiles/nyc-basemap-z14.pmtiles`;
 
 export const TILES_URL =
     (import.meta.env.VITE_TRANSIT_TILES_URL as string | undefined) || DEFAULT_TILES;
@@ -33,6 +33,7 @@ const ATTRIBUTION =
 export function basemapStyle(tilesUrl: string = TILES_URL): StyleSpecification {
     return {
         version: 8,
+        glyphs: `${BASE}/fonts/glyphs/{fontstack}/{range}.pbf`,
         sources: {
             basemap: {
                 type: 'vector',
@@ -248,6 +249,93 @@ export function basemapStyle(tilesUrl: string = TILES_URL): StyleSpecification {
                             0
                         ]
                     ]
+                }
+            },
+            {
+                id: 'places-locality',
+                type: 'symbol',
+                source: 'basemap',
+                'source-layer': 'places',
+                minzoom: 10,
+                filter: ['==', ['get', 'kind'], 'locality'],
+                layout: {
+                    'text-field': ['coalesce', ['get', 'name:en'], ['get', 'name']],
+                    'text-font': ['NotoSansRegular'],
+                    'text-size': ['interpolate', ['linear'], ['zoom'], 10, 11, 12, 14],
+                    'text-letter-spacing': 0.04,
+                    'text-max-width': 8
+                },
+                paint: {
+                    'text-color': '#aeb9c9',
+                    'text-halo-color': '#0b0f1a',
+                    'text-halo-width': 1.2
+                }
+            },
+            {
+                id: 'places-neighbourhood',
+                type: 'symbol',
+                source: 'basemap',
+                'source-layer': 'places',
+                minzoom: 12,
+                filter: ['match', ['get', 'kind'], ['macrohood', 'neighbourhood'], true, false],
+                layout: {
+                    'text-field': ['coalesce', ['get', 'name:en'], ['get', 'name']],
+                    'text-font': ['NotoSansRegular'],
+                    'text-size': ['interpolate', ['linear'], ['zoom'], 12, 9.5, 15, 12],
+                    'text-transform': 'uppercase',
+                    'text-letter-spacing': 0.12,
+                    'text-max-width': 7
+                },
+                paint: {
+                    'text-color': '#7f8ea3',
+                    'text-halo-color': '#0b0f1a',
+                    'text-halo-width': 1.2
+                }
+            },
+            {
+                id: 'roads-label-major',
+                type: 'symbol',
+                source: 'basemap',
+                'source-layer': 'roads',
+                minzoom: 12,
+                filter: ['match', ['get', 'kind'], ['highway', 'major_road'], true, false],
+                layout: {
+                    'symbol-placement': 'line',
+                    'text-field': ['coalesce', ['get', 'name:en'], ['get', 'name']],
+                    'text-font': ['NotoSansRegular'],
+                    'text-size': ['interpolate', ['linear'], ['zoom'], 12, 9.5, 14, 11, 16, 12.5],
+                    'symbol-spacing': 260,
+                    'text-max-angle': 30,
+                    'text-rotation-alignment': 'map',
+                    'text-padding': 2
+                },
+                paint: {
+                    'text-color': '#c7d0dd',
+                    'text-halo-color': '#0b0f1a',
+                    'text-halo-width': 1.4
+                }
+            },
+            {
+                id: 'roads-label-minor',
+                type: 'symbol',
+                source: 'basemap',
+                'source-layer': 'roads',
+                minzoom: 14,
+                filter: ['==', ['get', 'kind'], 'minor_road'],
+                layout: {
+                    'symbol-placement': 'line',
+                    'text-field': ['coalesce', ['get', 'name:en'], ['get', 'name']],
+                    'text-font': ['NotoSansRegular'],
+                    'text-size': ['interpolate', ['linear'], ['zoom'], 14, 9, 16, 10.5],
+                    'symbol-spacing': 200,
+                    'text-max-angle': 30,
+                    'text-rotation-alignment': 'map',
+                    'text-padding': 2
+                },
+                paint: {
+                    'text-color': '#9aa6b8',
+                    'text-halo-color': '#0b0f1a',
+                    'text-halo-width': 1.4
                 }
             },
             {
