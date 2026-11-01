@@ -186,7 +186,8 @@ describe('trainGeoJSON', () => {
             reset: false,
             confidence: 0.8,
             positioned: true,
-            selected: false
+            selected: false,
+            queued: false
         });
     });
 
@@ -197,6 +198,12 @@ describe('trainGeoJSON', () => {
         expect(reset.properties.reset).toBe(true);
         expect(reset.properties.stale).toBe(false);
         expect(reset.properties.positioned).toBe(false);
+    });
+
+    test('marks queued trains', () => {
+        const collection = trainGeoJSON([{ ...trains[0], queued: true }]);
+
+        expect(collection.features[0].properties.queued).toBe(true);
     });
 
     test('handles an empty position list', () => {

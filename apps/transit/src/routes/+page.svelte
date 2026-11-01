@@ -25,14 +25,16 @@
     let stale = $state(0);
     let estimated = $state(0);
     let scheduled = $state(0);
+    let queuedCount = $state(0);
     let feeds = $state<Record<string, FeedHealthData>>({});
     let routes = $state<string[]>([]);
     let activeRoutes = $state<string[]>([]);
     let selectedId = $state<string | null>(null);
     let selectedMotion = $state<TrainMotion | null>(null);
 
-    // Stop ids are platform ids (`G29S`); the graph carries the human names.
+    // Stop ids are platform ids (`G29S`); the graph carries names and coordinates.
     const platformNames: Record<string, string> = {};
+    const platformCoords: Record<string, { lat: number; lon: number }> = {};
 
     function stopName(stop: string | null): string {
         if (!stop) return '—';
@@ -73,6 +75,7 @@
         // so SvelteMap would add overhead for nothing.
         // eslint-disable-next-line svelte/prefer-svelte-reactivity
         let motions = new Map<string, TrainMotion>();
+        let queuedPositions: TrainPosition[] = [];
         let frame = 0;
         let timer: ReturnType<typeof setInterval> | undefined;
         let last = performance.now();
@@ -86,6 +89,26 @@
         const adopt = (snapshot: TransitData['snapshot']) => {
             if (!data) return;
             motions = fromSnapshot(snapshot, data.geometries);
+            queuedPositions = snapshot.trains.flatMap((train) => {
+                const coords =
+                    train.pre === true && train.stop ? platformCoords[train.stop] : undefined;
+                if (!coords) return [];
+                return [
+                    {
+                        id: train.id,
+                        lng: coords.lon,
+                        lat: coords.lat,
+                        route: train.route,
+                        routeColor: routeColor(train.route),
+                        stale: false,
+                        reset: false,
+                        confidence: 0,
+                        positioned: true,
+                        queued: true
+                    }
+                ];
+            });
+            queuedCount = queuedPositions.length;
             feeds = snapshot.feeds;
             estimated = snapshot.estimated;
             scheduled = snapshot.scheduled_trips;
@@ -124,6 +147,8 @@
                 });
             }
 
+            positions.push(...queuedPositions);
+
             // setData re-tiles the source on the worker, so publish at ~12 Hz rather
             // than every frame; the sim still advances at display rate.
             if (now - lastPaint >= 80) {
@@ -133,7 +158,7 @@
                     selectedMotion = motions.get(selectedId) ?? null;
                 }
             }
-            trains = positions.length;
+            trains = positions.length - queuedPositions.length;
             stale = staleCount;
             frame = requestAnimationFrame(paint);
         };
@@ -144,6 +169,7 @@
             data = fresh;
             for (const platform of fresh.graph.platforms) {
                 platformNames[platform.id] = platform.name;
+                platformCoords[platform.id] = { lat: platform.lat, lon: platform.lon };
             }
             routes = sortRoutes(fresh.graph.patterns.map((pattern) => pattern.route));
             adopt(fresh.snapshot);
@@ -234,10 +260,8 @@
             </h1>
             <p class="mt-1 text-[11px] leading-relaxed text-brand-text">
                 {#if status === 'ready'}
-                    {trains} trains{#if activeRoutes.length}&nbsp;· {activeRoutes.length} route{activeRoutes.length ===
-                        1
-                            ? ''
-                            : 's'}{/if}
+                    {trains} live{#if queuedCount}&nbsp;· {queuedCount} queued{/if}{#if activeRoutes.length}&nbsp;·
+                        {activeRoutes.length} route{activeRoutes.length === 1 ? '' : 's'}{/if}
                     {#if stale}&nbsp;· {stale} stale{/if}
                 {:else if status === 'loading'}
                     loading…

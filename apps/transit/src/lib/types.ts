@@ -40,6 +40,8 @@ export interface SnapshotTrain {
     stale: boolean;
     /** The server re-anchored this train; fade it rather than animate a jump. */
     reset: boolean;
+    /** No position claim yet: the train has not started service. Absent on older snapshots. */
+    pre?: boolean;
 }
 
 export interface FeedHealth {
@@ -69,6 +71,8 @@ export interface Snapshot {
     graph: string | null;
     feeds: Record<string, FeedHealth>;
     scheduled_trips: number;
+    /** Trains that have not started service yet. Absent on older snapshots. */
+    predeparture?: number;
     estimated: number;
     trains: SnapshotTrain[];
     alerts: TransitAlert[];
@@ -183,4 +187,6 @@ export interface TrainPosition {
     positioned: boolean;
     /** Highlighted by the inspector. */
     selected?: boolean;
+    /** Waiting at its origin; drawn as a hollow marker. */
+    queued?: boolean;
 }

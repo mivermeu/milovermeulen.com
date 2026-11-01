@@ -27,6 +27,7 @@ export type TrainProperties = {
     confidence: number;
     positioned: boolean;
     selected: boolean;
+    queued: boolean;
 };
 
 const NETWORK_SOURCE = 'network';
@@ -35,6 +36,7 @@ const STATIONS_SOURCE = 'stations';
 const STATIONS_LAYER = 'stations-dots';
 const TRAINS_SOURCE = 'trains';
 const TRAINS_LAYER = 'trains-dots';
+const QUEUED_LAYER = 'trains-queued';
 const SELECTED_LAYER = 'trains-selected';
 
 const NYC_CENTER: [number, number] = [-73.98, 40.73];
@@ -188,7 +190,7 @@ export function installLayers(
         id: TRAINS_LAYER,
         type: 'circle',
         source: TRAINS_SOURCE,
-        filter: ['==', ['get', 'positioned'], true],
+        filter: ['all', ['==', ['get', 'positioned'], true], ['!=', ['get', 'queued'], true]],
         paint: {
             'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 3, 12, 4, 15, 5],
             'circle-color': ['get', 'color'],
@@ -196,6 +198,23 @@ export function installLayers(
             'circle-stroke-color': '#0f172a',
             'circle-stroke-width': ['case', ['get', 'reset'], 0, 1],
             'circle-stroke-opacity': ['case', ['get', 'reset'], 0, ['get', 'stale'], 0.5, 1]
+        }
+    });
+
+    // Not-yet-in-service trains: a hollow ring at the origin platform, so they
+    // read as queued rather than as a live position.
+    map.addLayer({
+        id: QUEUED_LAYER,
+        type: 'circle',
+        source: TRAINS_SOURCE,
+        filter: ['==', ['get', 'queued'], true],
+        paint: {
+            'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 2.5, 13, 3.5, 15, 4.5],
+            'circle-color': '#0b0f1a',
+            'circle-opacity': 0.9,
+            'circle-stroke-color': ['get', 'color'],
+            'circle-stroke-width': 1.5,
+            'circle-stroke-opacity': 0.9
         }
     });
 
@@ -244,6 +263,11 @@ export function applyRouteFilter(map: maplibregl.Map, routes: string[]): void {
         'circle-opacity',
         active ? ['*', visibility, ['case', matches, 1, 0.08]] : visibility
     );
+    const queuedOpacity = active
+        ? (['case', matches, 0.9, 0.08] as maplibregl.ExpressionSpecification)
+        : 0.9;
+    map.setPaintProperty(QUEUED_LAYER, 'circle-opacity', queuedOpacity);
+    map.setPaintProperty(QUEUED_LAYER, 'circle-stroke-opacity', queuedOpacity);
 }
 
 /**
@@ -279,7 +303,8 @@ export function trainGeoJSON(
                 reset: train.reset,
                 confidence: train.confidence,
                 positioned: train.positioned,
-                selected: train.selected === true
+                selected: train.selected === true,
+                queued: train.queued === true
             }
         }))
     };
