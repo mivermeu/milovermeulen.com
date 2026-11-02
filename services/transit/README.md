@@ -65,6 +65,10 @@ curl -s localhost:8082/health
 | `TRANSIT_API_HOST`      | `127.0.0.1`                | API bind address                                  |
 | `TRANSIT_API_PORT`      | `8082`                     | API port (this host's unit overrides to `8083`)   |
 
+The host unit sets `TRANSIT_SERIES_EVERY=1`: the learner's arrival-to-arrival intervals are
+quantised by the sample interval, and 60 s is the same size as the median edge. At 30 s the monthly
+prior is roughly twice as sharp for twice the disk (~2.6 GB per 30 days).
+
 ## Archive layout
 
 ```
@@ -325,7 +329,30 @@ samples are omitted and fall back to the schedule.
 
 The estimator loads the artifact when it appears and keeps the last graph's priors only while the
 hash matches. The learner runs weekly from `transit-learn.timer`; the archive already holds the
-training set, so coverage improves on its own.
+training set, so coverage improves on its own. First fit (8 days, 707k transitions): **2,267 of
+7,376 edges (31%)** met the five-sample threshold; the rest use the schedule. Learned/scheduled
+ratio was p05 0.50, p50 1.00, p95 2.00, and values are clamped to 0.6–2.5× schedule so a bad edge
+cannot produce a five-second run.
+
+The hour multiplier needs at least 20 samples per bucket. At 60 s sampling its ratios quantise to
+1.0 and it is inert; at 30 s it becomes informative after a few weeks. Until then the static
+schedule already carries most time-of-day variation.
+
+### What the result looks like
+
+Measured against the live service (2026-11-01):
+
+| Check                                              | Result                                |
+| -------------------------------------------------- | ------------------------------------- |
+| timeline at `generated_at` vs `s_total`            | p50 4 m, p95 11 m, max 21 m           |
+| snapshot-to-snapshot correction the client absorbs | p50 ~113 m, p90 ~408 m (ETA noise)    |
+| rendered per-second step                           | p50 6 m, p95 35 m, p99 56 m           |
+| corrections above 400 m                            | fade in over 0.7 s instead of gliding |
+| trains stationary over a 30 s cycle                | 12–15% (platform dwell)               |
+
+The correction distribution is the accuracy ceiling: a next-stop ETA is good to ±12 s median and ±30
+s at the 90th percentile, which at 10–15 m/s is 100–400 m. The model cannot do better than the ETA;
+what it can do is never snap, and grow `sigma` honestly when the feed is stale.
 
 ## Track graph
 
