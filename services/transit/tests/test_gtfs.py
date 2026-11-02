@@ -116,14 +116,32 @@ def test_negative_delay_is_sign_extended():
     assert update.stop_time_updates[0].arrival.delay == -138
 
 
-def test_missing_current_status_means_in_transit_to():
+def test_missing_current_status_is_preserved_as_none():
     vehicle = ld(1, ld(1, b"trip-2")) + ld(7, b"A02N") + vi(3, 5)
     feed = gtfs.parse_feed(build_feed([ld(4, vehicle)]))
-    assert feed.vehicles[0].current_status == 2
+    assert feed.vehicles[0].current_status is None
     assert feed.vehicles[0].stop_id == "A02N"
+
+
+def test_placeholder_predicate():
+    assert gtfs.is_placeholder(gtfs.VehiclePosition())
+    assert not gtfs.is_placeholder(gtfs.VehiclePosition(current_status=2))
+    assert not gtfs.is_placeholder(gtfs.VehiclePosition(current_stop_sequence=1))
+    assert not gtfs.is_placeholder(gtfs.VehiclePosition(current_stop_sequence=1, current_status=2))
 
 
 def test_incrementality_is_surfaced():
     feed = gtfs.parse_feed(build_feed([], incrementality=1))
     assert feed.incrementality == 1
     assert not feed.trip_updates
+
+
+def test_schedule_relationship_is_parsed():
+    stop_time = ld(4, b"A01N") + vi(5, 1)
+    trip = ld(1, b"trip-1") + vi(4, 3)
+    trip_update = ld(1, trip) + ld(2, stop_time)
+
+    feed = gtfs.parse_feed(build_feed([ld(3, trip_update)]))
+
+    assert feed.trip_updates[0].trip.schedule_relationship == 3
+    assert feed.trip_updates[0].stop_time_updates[0].schedule_relationship == 1

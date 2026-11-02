@@ -52,11 +52,14 @@ def _train(update: gtfs.TripUpdate, vehicle: gtfs.VehiclePosition) -> dict[str, 
         "route": trip.route_id,
         "dir": gtfs.trip_direction(trip),
         "start_date": trip.start_date,
-        "status": _STATUS.get(vehicle.current_status),
+        # The string is a render-layer concern: absent status still reads as
+        # in-transit for the UI, while `pre` carries the truth.
+        "status": _STATUS.get(vehicle.current_status) or "IN_TRANSIT_TO",
         "stop": vehicle.stop_id or first_stop,
         "seq": vehicle.current_stop_sequence,
         "vehicle_ts": vehicle.timestamp,
         "next": _next_stops(update),
+        "pre": gtfs.is_placeholder(vehicle),
     }
 
 
@@ -122,6 +125,7 @@ def build(
         "feeds": health,
         "graph": graph_hash,
         "scheduled_trips": scheduled,
+        "predeparture": sum(1 for train in trains if train["pre"]),
         "estimated": sum(1 for train in trains if train["edge"]),
         "trains": trains,
         "alerts": alerts,

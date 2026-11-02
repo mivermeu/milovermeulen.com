@@ -30,6 +30,8 @@ TAU_S = 5.0
 RESET_M = 600.0
 # Vehicle timestamps older than this make a position untrustworthy.
 STALE_S = 60.0
+# A timestamp this far ahead of our clock is not a fresh observation.
+FUTURE_SKEW_S = 60.0
 # Typical in-motion speed used to place a train on a segment with no history.
 CRUISE_MPS = 12.0
 MAX_SPEED_MPS = 30.0
@@ -70,6 +72,11 @@ class Estimator:
     unmatched: int = 0
     duplicates: int = 0
     without_vehicle: int = 0
+    placeholders: int = 0
+    placeholders_off_origin: int = 0
+    observed: int = 0
+    duplicates: int = 0
+    without_vehicle: int = 0
 
     def set_graph(self, document: dict[str, Any], graph_hash: str | None = None) -> None:
         self.patterns = {pattern["id"]: pattern for pattern in document.get("patterns", [])}
@@ -92,6 +99,9 @@ class Estimator:
         self.unmatched = 0
         self.duplicates = 0
         self.without_vehicle = 0
+        self.placeholders = 0
+        self.placeholders_off_origin = 0
+        self.observed = 0
 
         for feed in trip_feeds.values():
             for update in feed.trip_updates:
@@ -100,6 +110,18 @@ class Estimator:
                     # The snapshot only renders trains that have a vehicle; keeping
                     # state for the rest would seed positions nothing displays.
                     self.without_vehicle += 1
+                    continue
+                self.observed += 1
+                if gtfs.is_placeholder(vehicle):
+                    # No position claim, no position. MTA publishes these for trips
+                    # that have not started; placing them at a terminal with full
+                    # confidence is how a quarter of the map became fictional.
+                    self.placeholders += 1
+                    first_stop = (
+                        update.stop_time_updates[0].stop_id if update.stop_time_updates else None
+                    )
+                    if vehicle.stop_id != first_stop:
+                        self.placeholders_off_origin += 1
                     continue
                 key = self._key(update, vehicle)
                 stop_ids = [stop.stop_id for stop in update.stop_time_updates if stop.stop_id]
@@ -181,7 +203,7 @@ class Estimator:
         index = next(
             (position for position, (stop, _) in enumerate(stops) if stop == observed_stop), 0
         )
-        status = vehicle.current_status if vehicle else 2
+        status = vehicle.current_status
 
         if status == 1 or index == 0:  # STOPPED_AT, or the first stop of the pattern
             return {
@@ -313,6 +335,9 @@ class Estimator:
         s = min(max(s, 0.0), length)
         stale = bool(vehicle and vehicle.timestamp and stamp - vehicle.timestamp > STALE_S)
         if stale:
+            confidence *= 0.5
+        # A future timestamp is not freshness; it is a claim we cannot use.
+        if vehicle and vehicle.timestamp and vehicle.timestamp - stamp > FUTURE_SKEW_S:
             confidence *= 0.5
         confidence = min(max(confidence, 0.0), 1.0)
 

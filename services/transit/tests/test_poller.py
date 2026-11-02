@@ -125,7 +125,15 @@ def test_differential_feed_is_quarantined(tmp_path):
 
 def test_snapshot_carries_positions_when_a_graph_is_published(tmp_path):
     feed = gtfs.parse_feed(fixture("gtfs-g.pb"))
-    trip = next(update for update in feed.trip_updates if len(update.stop_time_updates) > 4)
+    vehicles = {vehicle.trip_id: vehicle for vehicle in feed.vehicles}
+    trip = next(
+        update
+        for update in feed.trip_updates
+        if len(update.stop_time_updates) > 4
+        and (vehicle := vehicles.get(update.trip.trip_id)) is not None
+        and vehicle.current_stop_sequence is not None
+        and vehicle.current_status is not None
+    )
     stops = [stop.stop_id for stop in trip.stop_time_updates]
     pattern = {
         "id": "G-TEST",
@@ -165,3 +173,78 @@ def test_estimator_failure_still_publishes_a_snapshot(tmp_path, monkeypatch):
     assert document["trains"]
     assert document["estimated"] == 0
     assert (tmp_path / "www" / "snapshot.json").exists()
+
+
+def test_meta_records_boot_and_per_feed_health(tmp_path):
+    poller = poller_for(tmp_path, mapping_ok())
+    poller.tick()
+
+    meta_path = next((tmp_path / "data" / "meta").glob("*.jsonl"))
+    record = json.loads(meta_path.read_text().splitlines()[0])
+    assert record["boot"]
+    assert record["cycle_ok"] is True
+    assert len(record["last_ok"]) == len(feeds.FEED_NAMES)
+    assert record["events"] == 0
+    assert "placeholders" in record
+    assert "placeholder_share" in record
+
+
+def test_series_rows_carry_the_widened_contract(tmp_path):
+    poller = poller_for(tmp_path, mapping_ok())
+    poller.tick()
+
+    path = next((tmp_path / "data" / "series").glob("*.jsonl.gz"))
+    with gzip.open(path, "rt", encoding="utf-8") as handle:
+        rows = [json.loads(line) for line in handle]
+    assert rows
+    row = rows[0]
+    assert row["v"] == 2
+    assert "start" in row
+    assert "vehicle_ts" in row
+    assert "feed" in row
+    assert "graph" in row
+    assert len(row["next"]) <= 6
+
+
+def test_events_are_plumbed_to_the_archive(tmp_path, monkeypatch):
+    poller = poller_for(tmp_path, mapping_ok())
+    monkeypatch.setattr(
+        poller.event_tracker, "observe", lambda *args, **kwargs: [{"v": 1, "kind": "arrive"}]
+    )
+
+    poller.tick()
+
+    path = next((tmp_path / "data" / "events").glob("*.jsonl.gz"))
+    with gzip.open(path, "rt", encoding="utf-8") as handle:
+        assert [json.loads(line) for line in handle] == [{"v": 1, "kind": "arrive"}]
+
+
+def test_gap_flags_are_passed_to_the_event_tracker(tmp_path, monkeypatch):
+    poller = poller_for(tmp_path, mapping_ok())
+    captured = []
+
+    def capture(*args: object, **kwargs: object) -> list:
+        captured.append(kwargs)
+        return []
+
+    monkeypatch.setattr(poller.event_tracker, "observe", capture)
+    poller.tick()
+    poller.tick()
+
+    assert captured[0]["first_cycle"] is True
+    assert captured[1]["first_cycle"] is False
+    assert captured[1]["previous_ok"] is True
+    assert captured[1]["boot"] == poller.boot_id
+    assert captured[1]["gone_after"] >= 90
+
+
+def test_a_feed_that_empties_out_is_treated_as_failed(tmp_path):
+    mapping = mapping_ok()
+    poller = poller_for(tmp_path, mapping)
+    poller.tick()
+
+    mapping["gtfs-g"] = (200, build_feed([]), None, 3)
+    document = poller.tick()
+
+    assert document["feeds"]["gtfs-g"]["ok"] is False
+    assert "empty feed" in document["feeds"]["gtfs-g"]["error"]

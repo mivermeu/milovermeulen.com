@@ -36,27 +36,81 @@ def test_invalid_payload_is_quarantined(tmp_path):
     assert "truncated-varint" in path.name
 
 
-def test_series_appends_readable_rows(tmp_path):
+def test_series_appends_rows_verbatim(tmp_path):
     archive_store = store(tmp_path)
-    train = {
+    row = {
+        "v": 1,
+        "t": int(NOW),
         "id": "1G 2121",
         "trip": "128150_G..S",
+        "start": "20261027",
         "route": "G",
         "dir": "E",
-        "status": "STOPPED_AT",
+        "st": "STOPPED_AT",
         "stop": "G29S",
         "seq": 4,
-        "next": [{"stop": "G24S", "arr": 1792978300, "dep": 1792978320}],
+        "feed": "gtfs-g",
+        "vehicle_ts": int(NOW) - 5,
+        "pattern": "G-abc",
+        "edge": 3,
+        "s": 812.5,
+        "speed": 0.0,
+        "conf": 0.9,
+        "stale": False,
+        "reset": False,
+        "graph": "ae12",
+        "next": [["G24S", 1792978300, 1792978320]],
     }
-    assert archive_store.append_series([train], now=NOW) == 1
-    assert archive_store.append_series([train], now=NOW + 60) == 1
+    assert archive_store.append_series([row], now=NOW) == 1
+    later = {**row, "t": int(NOW + 60)}
+    assert archive_store.append_series([later], now=NOW + 60) == 1
 
     path = tmp_path / "series" / f"{DAY}.jsonl.gz"
     with gzip.open(path, "rt", encoding="utf-8") as handle:
         rows = [json.loads(line) for line in handle]
     assert len(rows) == 2
-    assert rows[0]["next"] == [["G24S", 1792978300, 1792978320]]
+    assert rows[0] == row
     assert rows[1]["t"] == int(NOW + 60)
+
+
+def test_events_are_written_to_their_own_tier(tmp_path):
+    archive_store = store(tmp_path)
+    event = {"v": 1, "kind": "arrive", "t_lo": 1, "t_hi": 2, "id": "1G"}
+    assert archive_store.append_events([event], now=NOW) == 1
+
+    path = tmp_path / "events" / f"{DAY}.jsonl.gz"
+    with gzip.open(path, "rt", encoding="utf-8") as handle:
+        rows = [json.loads(line) for line in handle]
+    assert rows == [event]
+
+
+def test_events_are_never_pruned(tmp_path):
+    archive_store = store(tmp_path)
+    archive_store.append_events([{"v": 1, "kind": "arrive"}], now=NOW)
+    path = tmp_path / "events" / f"{DAY}.jsonl.gz"
+    os.utime(path, (NOW - 800 * 86400, NOW - 800 * 86400))
+
+    archive_store.prune(now=NOW)
+
+    assert path.exists()
+
+
+def test_meta_outlives_the_series(tmp_path):
+    archive_store = store(tmp_path)
+    series = tmp_path / "series" / "2026-04-01.jsonl.gz"
+    series.parent.mkdir(parents=True)
+    series.write_bytes(b"")
+    meta = tmp_path / "meta" / "2026-04-01.jsonl"
+    meta.parent.mkdir(parents=True)
+    meta.write_text("{}\n")
+    old = NOW - 200 * 86400
+    os.utime(series, (old, old))
+    os.utime(meta, (old, old))
+
+    archive_store.prune(now=NOW)
+
+    assert not series.exists()
+    assert meta.exists()
 
 
 def test_series_handles_empty_snapshot(tmp_path):

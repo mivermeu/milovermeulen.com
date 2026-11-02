@@ -14,7 +14,8 @@ service runnable with nothing but `python3.12`, and lets us read the NYCT extens
 2. Validates the protobuf header. Unparseable payloads go to `bad/` and never reach the snapshot.
 3. Archives the raw bytes, byte-exact, gzipped.
 4. Merges trips + vehicles into `snapshot.json` and writes it atomically.
-5. Appends one series row per train and one metadata row per cycle.
+5. Appends one series row per train, one events row per stop transition, and one metadata row per
+   cycle.
 6. Prunes old files by mtime.
 
 A failed feed never aborts the cycle: it is reported per feed in the snapshot, so the frontend can
@@ -55,7 +56,8 @@ curl -s localhost:8082/health
 | `TRANSIT_INTERVAL`      | `30`                       | seconds between cycles (MTA refreshes ~30 s)      |
 | `TRANSIT_HTTP_TIMEOUT`  | `10`                       | per-feed fetch timeout                            |
 | `TRANSIT_RAW_HOURS`     | `48`                       | raw ring retention                                |
-| `TRANSIT_SERIES_DAYS`   | `90`                       | series and metadata retention                     |
+| `TRANSIT_SERIES_DAYS`   | `180`                      | series retention                                  |
+| `TRANSIT_META_DAYS`     | `365`                      | metadata retention                                |
 | `TRANSIT_SERIES_EVERY`  | `2`                        | write series rows every N cycles (2 = 60 s)       |
 | `TRANSIT_BAD_DAYS`      | `7`                        | retention for quarantined payloads                |
 | `TRANSIT_PRUNE_SECONDS` | `3600`                     | prune at most once per hour                       |
@@ -68,22 +70,97 @@ curl -s localhost:8082/health
 ```
 $TRANSIT_DATA_DIR/
   raw/2026-10-26/01/gtfs-g-1792978330000.pb.gz   byte-exact payloads, 48 h
-  series/2026-10-26.jsonl.gz                     one row per train per 60 s, 90 d
-  meta/2026-10-26.jsonl                          one row per cycle: status, latency, bytes
+  series/2026-10-26.jsonl.gz                     one row per train per 60 s, 180 d
+  events/2026-10-26.jsonl.gz                     one row per stop transition, forever
+  meta/2026-10-26.jsonl                          one row per cycle: status, latency, bytes, 365 d
   bad/2026-10-26/gtfs-g-...-truncated-varint.pb  quarantined payloads, 7 d
 ```
 
 Files, not a database: retention is `rm` by mtime, and the day files are directly queryable with
 DuckDB or pandas when analysis starts. The raw tier is the only thing that can re-derive history
-after a parser change; the series tier is what becomes the run-time/dwell training set.
+after a parser change.
+
+**Series row** (`v: 2`) — one per observed train per sample:
+
+```json
+{
+    "v": 2,
+    "t": 1792980000,
+    "id": "1R 2104",
+    "trip": "…",
+    "start": "20261027",
+    "route": "R",
+    "dir": "S",
+    "st": "STOPPED_AT",
+    "stop": "R16N",
+    "seq": 12,
+    "feed": "gtfs-nqrw",
+    "vehicle_ts": 1792979995,
+    "pre": false,
+    "pattern": "R-abc",
+    "edge": 9,
+    "s": 8125.4,
+    "speed": 0.0,
+    "conf": 0.97,
+    "stale": false,
+    "reset": false,
+    "graph": "ae12bb22cb7b",
+    "next": [["R16N", 1792980060, 1792980090], "… up to 6 stops"]
+}
+```
+
+`t` is our poll time and `vehicle_ts` the feed's observation time, stored raw (it can sit ahead of
+our clock). Positions are along-track (`pattern` + `edge` + `s`) rather than lat/lon: comparable
+across trains, and projectable later against the graph named by `graph`. `conf`/`stale`/`reset`
+exist so bad samples can be filtered out of training.
+
+**Events** — one row per stop transition, the label tier:
+
+```json
+{
+    "v": 1,
+    "t_lo": 1792980000,
+    "t_hi": 1792980030,
+    "kind": "arrive",
+    "id": "1R 2104",
+    "trip": "…",
+    "start": "20261027",
+    "route": "R",
+    "stop": "R16N",
+    "seq": 12,
+    "source": "status",
+    "predicted_at": 1792980060,
+    "vehicle_ts": 1792980025,
+    "feed": "gtfs-nqrw",
+    "conf": 0.97
+}
+```
+
+Kinds: `arrive`, `depart`, `skip`, `trip_end`, `disappeared`, `cancel`. `t_lo`/`t_hi` bracket the
+transition between two polls; `source` is `status` (unbiased), `seq` (fallback when the dwell fell
+between polls, biased late by it), `schedule` (a cancellation), `trip_change` or `absence`. Brackets
+spanning a restart, a failed cycle or a feed outage are dropped, and a train absent for more than 90
+s emits exactly one `trip_end`/`disappeared`.
+
+Series and events are never re-derived after the fact: the events tier is the training set, so it is
+kept forever while the series is the bigger, replaceable tier.
+
+Placeholders produce no events: a transition into or out of a placeholder is an observation gap, not
+a movement. The first real observation of a trip is its event boundary.
+
+Schema note: `v: 1` rows predate placeholders and carry `st: "IN_TRANSIT_TO"` with `seq: null`; use
+`seq is null` (or `v == 1`) to identify them. `v: 2` rows carry `pre` and a null status.
 
 Series files are multi-member gzip: each cycle appends one complete member in a single write, so a
 reader (or a crash) never sees a half-written row. A crash _during_ that write can still truncate
 the newest member, so analysis readers should stop at the first bad member rather than assume the
 day file is whole.
 
-Measured steady state is roughly **2.3 GB**: ~0.8 GB of raw for 48 h (alerts are the bulk of each
-cycle), ~1–1.5 GB of series for 90 days at 60 s, and ~65 MB of metadata.
+Measured steady state (gzipped): raw ~0.9 GB per 48 h (alerts are the bulk of each cycle); series
+~62 B/row × ~500 rows/min ≈ **1.3 GB per 30 days** (≈8 GB at 180 days); meta ~505 B/row × 2880/day ≈
+**0.5 GB per year**; events ~24 B/row × ~450k rows/day ≈ **4 GB per year**. Superseded graph
+artifacts are kept (the `graph` field above points at them), ~1.5 MB per weekly rebuild (~78
+MB/year).
 
 ## Snapshot schema (v1)
 
@@ -106,6 +183,7 @@ v0 was stop-level; v1 adds the estimated position along the track graph (`patter
         }
     },
     "scheduled_trips": 58,
+    "predeparture": 82,
     "estimated": 238,
     "trains": [
         {
@@ -125,7 +203,8 @@ v0 was stop-level; v1 adds the estimated position along the track graph (`patter
             "v": 11.2,
             "confidence": 0.95,
             "stale": false,
-            "reset": false
+            "reset": false,
+            "pre": false
         }
     ],
     "alerts": [
@@ -160,6 +239,10 @@ Notes:
 - `edge` names the pattern and the segment (`pattern:index:from>to`); `s` is metres from the start
   of that edge and `v` is metres per second. Lat/lon is the frontend's job: slice `shapes.bin` by
   the pattern's stop distances.
+- `pre: true` means the feed made no position claim for this trip yet: no stop sequence and no
+  status. These are trains that have not started service. They keep their `status`/`stop` for
+  compatibility but have no `edge`, no `confidence` and no events until the first real observation.
+  `predeparture` counts them at the document level.
 - `confidence` folds in match quality, vehicle staleness and whether the observation forced a reset.
   It is not a measure of how far the train moved.
 - `reset: true` means the target jumped further than a train could travel in that cycle (re-route,
@@ -173,19 +256,30 @@ Notes:
 `estimator.py` keys state by NYCT `train_id`, not `trip_id`, so a short-turn (same train, new trip)
 continues instead of jumping. Each cycle it:
 
-1. joins the trip to a pattern by stop sequence;
-2. turns the observation into a target distance along the shape — the stop itself for `STOPPED_AT`,
+1. drops placeholders (no sequence and no status) before doing any work — they get no position, so
+   `estimated` counts only real observations;
+2. joins the trip to a pattern by stop sequence;
+3. turns the observation into a target distance along the shape — the stop itself for `STOPPED_AT`,
    between the previous and next stop for `IN_TRANSIT_TO`, with the ETA implying the speed for the
    rest of the segment;
-3. advances the previous estimate and corrects it towards the target with a 5 s time constant. At
+4. advances the previous estimate and corrects it towards the target with a 5 s time constant. At
    the 30 s poll cadence that constant makes the correction effectively immediate (`α ≈ 0.9975`); it
    only smooths when ticks are closer together. The observation leads, the prediction is a prior;
-4. caps movement at 30 m/s, and re-anchors (with `reset`) only when the error exceeds what a train
+5. caps movement at 30 m/s, and re-anchors (with `reset`) only when the error exceeds what a train
    could cover in the cycle — `600 m + 30 m/s × elapsed`. A train observed `STOPPED_AT` always
    reports `v: 0`; a correction is not current speed.
 
 Lat/lon for a train is `stops[edge_index].dist + s` along its pattern's shape; `s_total` is included
 so a client does not need to re-derive it.
+
+A timestamp more than 60 s ahead of the poll clock halves confidence for observed trains: a future
+claim is not freshness. The `series` row carries the same observation raw, with `pre` marking
+placeholders and `st: null` whenever the feed omitted the status.
+
+Placeholder share and the share not at the trip's first stop are recorded in the per-cycle meta
+(`placeholders`, `placeholder_share`, `placeholders_off_origin`); a share above 0.55 logs a warning
+(the measured worst is 0.49, overnight), because the predicate depends on MTA continuing to omit
+both fields for pre-departure trains.
 
 ## Track graph
 

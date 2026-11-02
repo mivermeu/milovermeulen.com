@@ -345,12 +345,9 @@ def write_artifacts(
     }
     _write_atomic(www_dir / "audit.json", (json.dumps(audit, indent=2) + "\n").encode())
 
-    for stale in www_dir.glob("graph-*.json"):
-        if stale.name != graph_name:
-            stale.unlink(missing_ok=True)
-    for stale in www_dir.glob("shapes-*.bin"):
-        if stale.name != shapes_name:
-            stale.unlink(missing_ok=True)
+    # Superseded artifacts are kept: historical series/events rows name the graph
+    # they were computed against, and a hash without the artifact is decorative.
+    # Each pair is ~1.4 MB per weekly rebuild.
 
     log.info(
         "artifacts: %s (%.0f KB), %s (%.0f KB), audit %d rows over %.0f m",
