@@ -1,0 +1,12 @@
+[Unit]
+Description=Weekly transit run-time prior fit
+
+[Timer]
+# After transit-graph.timer (Mon 04:30 + up to 30 min jitter): the learner keys
+# its output to the graph hash, so it must run against the fresh graph.
+OnCalendar=Mon 05:45
+Persistent=true
+RandomizedDelaySec=900
+
+[Install]
+WantedBy=timers.target

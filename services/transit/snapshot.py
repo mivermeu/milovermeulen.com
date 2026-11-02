@@ -12,8 +12,8 @@ from typing import Any
 
 from . import gtfs
 
-SCHEMA_VERSION = 1
-MAX_NEXT_STOPS = 3
+SCHEMA_VERSION = 2
+MAX_NEXT_STOPS = 6
 
 # GTFS-realtime VehicleStopStatus.
 _STATUS = {0: "INCOMING_AT", 1: "STOPPED_AT", 2: "IN_TRANSIT_TO"}
@@ -23,15 +23,23 @@ def _event_time(event: gtfs.StopTimeEvent | None) -> int | None:
     return event.time if event is not None and event.time else None
 
 
-def _next_stops(update: gtfs.TripUpdate) -> list[dict[str, Any]]:
-    return [
-        {
-            "stop": stop.stop_id,
-            "arr": _event_time(stop.arrival),
-            "dep": _event_time(stop.departure),
-        }
-        for stop in update.stop_time_updates[:MAX_NEXT_STOPS]
-    ]
+def _next_stops(update: gtfs.TripUpdate, now: int | None = None) -> list[dict[str, Any]]:
+    """Stops the train has not reached yet.
+
+    The feed usually keeps the current stop first, with its arrival already in
+    the past; shipping that as "next" wastes a slot and confuses the timeline.
+    """
+    rows = []
+    for stop in update.stop_time_updates:
+        arrival = _event_time(stop.arrival)
+        departure = _event_time(stop.departure)
+        when = arrival or departure
+        if now is not None and when is not None and when < now - 5:
+            continue
+        rows.append({"stop": stop.stop_id, "arr": arrival, "dep": departure})
+        if len(rows) >= MAX_NEXT_STOPS:
+            break
+    return rows
 
 
 def _vehicles_by_trip(feeds: dict[str, gtfs.Feed]) -> dict[str, gtfs.VehiclePosition]:
@@ -43,7 +51,9 @@ def _vehicles_by_trip(feeds: dict[str, gtfs.Feed]) -> dict[str, gtfs.VehiclePosi
     return vehicles
 
 
-def _train(update: gtfs.TripUpdate, vehicle: gtfs.VehiclePosition) -> dict[str, Any]:
+def _train(
+    update: gtfs.TripUpdate, vehicle: gtfs.VehiclePosition, now: int | None = None
+) -> dict[str, Any]:
     trip = update.trip
     first_stop = update.stop_time_updates[0].stop_id if update.stop_time_updates else None
     return {
@@ -58,7 +68,7 @@ def _train(update: gtfs.TripUpdate, vehicle: gtfs.VehiclePosition) -> dict[str, 
         "stop": vehicle.stop_id or first_stop,
         "seq": vehicle.current_stop_sequence,
         "vehicle_ts": vehicle.timestamp,
-        "next": _next_stops(update),
+        "next": _next_stops(update, now),
         "pre": gtfs.is_placeholder(vehicle),
     }
 
@@ -87,7 +97,7 @@ def build(
                 # observable position, so it is counted rather than rendered.
                 scheduled += 1
                 continue
-            trains.append(_train(update, vehicle))
+            trains.append(_train(update, vehicle, int(stamp)))
     trains.sort(key=lambda train: (train["route"] or "", train["trip"] or ""))
     for train in trains:
         position = (positions or {}).get(train["id"])
@@ -101,6 +111,8 @@ def build(
                     "confidence": 0.0,
                     "stale": False,
                     "reset": False,
+                    "depart_at": None,
+                    "sigma": None,
                 }
             )
         else:

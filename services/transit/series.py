@@ -89,6 +89,8 @@ def rows(
                     "edge": edge_index(position.get("edge")),
                     "s": position.get("s_total"),
                     "speed": position.get("v"),
+                    "depart_at": position.get("depart_at"),
+                    "sigma": position.get("sigma"),
                     "conf": position.get("confidence"),
                     "stale": position.get("stale"),
                     "reset": position.get("reset"),

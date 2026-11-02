@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import archive, estimator, events, feeds, graph, gtfs, series, snapshot
+from . import archive, estimator, events, feeds, graph, gtfs, learn, series, snapshot
 
 log = logging.getLogger("transit.poller")
 
@@ -82,6 +82,7 @@ class Poller:
         self._last_failed: set[str] = set()
         self._last_tick_ok = True
         self._graph_warned = False
+        self._runtime_stamp = -1.0
         self.cycles = 0
         self._last_prune = 0.0
         self._stop = threading.Event()
@@ -252,14 +253,37 @@ class Poller:
                 self._graph_warned = True
             return
         if manifest.get("hash") == self.estimator.graph_hash:
+            self._refresh_runtime(manifest.get("hash"))
             return
         document = graph.load_graph(self.config.www_dir)
         if document:
             self.estimator.set_graph(document, manifest.get("hash"))
+            self._runtime_stamp = -1.0
+            self._refresh_runtime(manifest.get("hash"))
             log.info(
                 "graph loaded: %s (%d patterns)", manifest.get("hash"), len(document["patterns"])
             )
             self._graph_warned = False
+
+    def _refresh_runtime(self, graph_hash: str | None) -> None:
+        """Pick up a runtime artifact written after the graph was loaded."""
+        if not graph_hash:
+            return
+        path = self.config.www_dir / f"runtime-{graph_hash}.json"
+        try:
+            stamp = path.stat().st_mtime
+        except OSError:
+            stamp = 0.0
+        if stamp == self._runtime_stamp:
+            return
+        runtime = learn.load(self.config.www_dir, graph_hash)
+        self.estimator.set_runtime(runtime)
+        self._runtime_stamp = stamp
+        if runtime:
+            covered = sum(
+                1 for row in runtime.get("edges", {}).values() for run, _ in row if run is not None
+            )
+            log.info("runtime priors loaded: %d edges", covered)
 
     def _write_snapshot(self, document: dict[str, Any]) -> None:
         payload = json.dumps(document, separators=(",", ":"), ensure_ascii=False).encode("utf-8")

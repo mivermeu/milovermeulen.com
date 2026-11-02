@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { PatternGeometry, Snapshot, SnapshotTrain, TrainMotion } from './types';
-import { advance, fromSnapshot, haversine, positionAt } from './sim';
+import { advance, fromSnapshot, haversine, positionAt, profile, timelineAt } from './sim';
 
 const EARTH_RADIUS_M = 6371008.8;
 const LAT = 40.7;
@@ -64,13 +64,15 @@ function train(overrides: Partial<SnapshotTrain> = {}): SnapshotTrain {
         confidence: 0.9,
         stale: false,
         reset: false,
+        depart_at: 1060,
+        sigma: 30,
         ...overrides
     };
 }
 
 function snapshot(trains: SnapshotTrain[], generatedAt = 1000): Snapshot {
     return {
-        v: 1,
+        v: 2,
         generated_at: generatedAt,
         header_ts: 999,
         graph: 'deadbeef',
@@ -89,15 +91,17 @@ function motion(overrides: Partial<TrainMotion> = {}): TrainMotion {
         edge: 0,
         s: 0,
         sTotal: 0,
-        v: 10,
+        v: 0,
         confidence: 0.9,
         stale: false,
         reset: false,
         route: 'A',
         dir: 'N',
-        status: 'IN_TRANSIT_TO',
-        stop: 'S1',
-        next: [],
+        status: 'STOPPED_AT',
+        stop: 'S0',
+        next: [{ stop: 'S1', arr: 1010, dep: 1015 }],
+        departAt: 1000,
+        sigma: 25,
         observedAt: 1000,
         ...overrides
     };
@@ -162,6 +166,31 @@ describe('haversine', () => {
     });
 });
 
+describe('profile', () => {
+    test('is continuous, monotone and bounded', () => {
+        for (const run of [30, 60, 180]) {
+            let previous = 0;
+            for (let step = 0; step <= 100; step++) {
+                const [fraction, speed] = profile((run * step) / 100, run);
+                expect(fraction).toBeGreaterThanOrEqual(0);
+                expect(fraction).toBeLessThanOrEqual(1);
+                expect(fraction).toBeGreaterThanOrEqual(previous - 1e-9);
+                expect(speed).toBeGreaterThanOrEqual(0);
+                previous = fraction;
+            }
+            expect(profile(0, run)).toEqual([0, 0]);
+            expect(profile(run, run)).toEqual([1, 0]);
+        }
+    });
+
+    test('matches the backend trapezoid shape', () => {
+        // 10 s into a 60 s edge: past the 10.8 s acceleration ramp.
+        const [fraction] = profile(10, 60);
+        expect(fraction).toBeGreaterThan(0.08);
+        expect(fraction).toBeLessThan(0.2);
+    });
+});
+
 describe('fromSnapshot', () => {
     test('converts a positioned train and carries its metadata', () => {
         const trains = fromSnapshot(snapshot([train()]), new Map([['pA', straightGeometry()]]));
@@ -182,6 +211,8 @@ describe('fromSnapshot', () => {
             status: 'IN_TRANSIT_TO',
             stop: 'S1',
             next: [{ stop: 'S2', arr: 1100, dep: 1120 }],
+            departAt: 1060,
+            sigma: 30,
             observedAt: 1000
         });
     });
@@ -200,6 +231,14 @@ describe('fromSnapshot', () => {
             new Map([['pA', straightGeometry()]])
         );
         expect(trains.get('T1')?.v).toBe(0);
+    });
+
+    test('carries an absent departure as null instead of inventing one', () => {
+        const trains = fromSnapshot(
+            snapshot([train({ depart_at: null })]),
+            new Map([['pA', straightGeometry()]])
+        );
+        expect(trains.get('T1')?.departAt).toBeNull();
     });
 
     test('keeps reset and stale flags set', () => {
@@ -281,75 +320,154 @@ describe('fromSnapshot', () => {
     });
 });
 
+describe('timelineAt', () => {
+    const geometry = straightGeometry();
+
+    test('waits at the platform until departure', () => {
+        const state = motion({ edge: 0, departAt: 1000 });
+        expect(timelineAt(state, geometry, 995)).toEqual({ sTotal: 0, v: 0 });
+        expect(timelineAt(state, geometry, 1000)).toEqual({ sTotal: 0, v: 0 });
+    });
+
+    test('accelerates, cruises and arrives at the next stop', () => {
+        const state = motion({
+            edge: 0,
+            departAt: 1000,
+            next: [{ stop: 'S1', arr: 1060, dep: 1070 }]
+        });
+        const quarter = timelineAt(state, geometry, 1015);
+        const half = timelineAt(state, geometry, 1030);
+        const arrival = timelineAt(state, geometry, 1060);
+        expect(quarter.sTotal).toBeGreaterThan(0);
+        expect(quarter.sTotal).toBeLessThan(half.sTotal);
+        expect(half.sTotal).toBeGreaterThan(30);
+        expect(half.sTotal).toBeLessThan(70);
+        expect(arrival.sTotal).toBeCloseTo(100, 9);
+    });
+
+    test('dwells at the stop and then runs to the following one', () => {
+        const state = motion({
+            edge: 0,
+            departAt: 1000,
+            next: [
+                { stop: 'S1', arr: 1060, dep: 1075 },
+                { stop: 'S2', arr: 1135, dep: 1145 }
+            ]
+        });
+        const dwell = timelineAt(state, geometry, 1068);
+        const running = timelineAt(state, geometry, 1100);
+        expect(dwell.sTotal).toBeCloseTo(100, 9);
+        expect(running.sTotal).toBeGreaterThan(100);
+        expect(running.sTotal).toBeLessThan(200);
+    });
+
+    test('does not overshoot the last planned stop', () => {
+        const state = motion({
+            edge: 0,
+            departAt: 1000,
+            next: [
+                { stop: 'S1', arr: 1060, dep: 1070 },
+                { stop: 'S2', arr: 1130, dep: 1140 }
+            ]
+        });
+        expect(timelineAt(state, geometry, 10_000).sTotal).toBe(200);
+    });
+
+    test('a terminal train with no timeline stays put', () => {
+        const state = motion({ edge: 2, departAt: 900, sTotal: 300, next: [] });
+        expect(timelineAt(state, geometry, 1200)).toEqual({ sTotal: 300, v: 0 });
+    });
+});
+
 describe('advance', () => {
-    test('rolls over to the next edge when passing a stop', () => {
-        const next = advance(motion({ edge: 0, s: 95, sTotal: 95 }), 1, straightGeometry());
-        expect(next.edge).toBe(1);
-        expect(next.s).toBeCloseTo(5, 9);
-        expect(next.sTotal).toBeCloseTo(105, 9);
-        expect(next.v).toBe(10);
+    const geometry = straightGeometry();
+
+    test('eases toward the timeline instead of jumping to it', () => {
+        // 300 m correction, one 60 fps frame: the step is bounded.
+        const current = motion({ edge: 0, sTotal: 0, departAt: 1000 });
+        const next = advance(current, 1 / 60, geometry, 1000);
+        expect(next.sTotal).toBeGreaterThanOrEqual(0);
+        expect(next.sTotal).toBeLessThanOrEqual(80 / 60);
+    });
+
+    test('converges on the timeline over a second', () => {
+        const current = motion({
+            edge: 0,
+            sTotal: 0,
+            departAt: 1000,
+            next: [{ stop: 'S1', arr: 1060, dep: 1070 }]
+        });
+        let state = current;
+        for (let frame = 0; frame < 180; frame++) {
+            state = advance(state, 1 / 60, geometry, 1030);
+        }
+        const target = timelineAt(current, geometry, 1030).sTotal;
+        expect(state.sTotal).toBeCloseTo(target, 0);
+    });
+
+    test('adopts a reset immediately', () => {
+        const current = motion({
+            edge: 0,
+            sTotal: 0,
+            departAt: 1000,
+            reset: true,
+            next: [{ stop: 'S1', arr: 1060, dep: 1070 }]
+        });
+        const next = advance(current, 1 / 60, geometry, 1030);
+        expect(next.sTotal).toBeCloseTo(timelineAt(current, geometry, 1030).sTotal, 9);
     });
 
     test('stops at the terminal with v = 0', () => {
-        const next = advance(motion({ edge: 2, s: 95, sTotal: 295, v: 10 }), 2, straightGeometry());
-        expect(next.sTotal).toBe(300);
-        expect(next.edge).toBe(2);
-        expect(next.s).toBe(100);
-        expect(next.v).toBe(0);
-    });
-
-    test('crosses several edges in one step without overshooting', () => {
-        const next = advance(motion({ edge: 0, s: 10, sTotal: 10, v: 60 }), 10, straightGeometry());
-        expect(next.sTotal).toBe(300);
-        expect(next.edge).toBe(2);
-        expect(next.v).toBe(0);
-    });
-
-    test('leaves a stopped train alone and does not mutate it', () => {
-        const parked = motion({ edge: 1, s: 40, sTotal: 140, v: 0 });
-        expect(advance(parked, 5, straightGeometry())).toBe(parked);
-    });
-
-    test('ignores non-finite and negative dt', () => {
-        const current = motion({ edge: 1, s: 40, sTotal: 140, v: 8 });
-        expect(advance(current, Number.NaN, straightGeometry())).toBe(current);
-        expect(advance(current, Number.POSITIVE_INFINITY, straightGeometry())).toBe(current);
-        expect(advance(current, Number.NEGATIVE_INFINITY, straightGeometry())).toBe(current);
-        expect(advance(current, -5, straightGeometry())).toBe(current);
-        expect(advance(current, 0, straightGeometry())).toBe(current);
-    });
-
-    test('treats a non-finite velocity as stopped', () => {
-        const current = motion({ edge: 1, s: 40, sTotal: 140, v: Number.POSITIVE_INFINITY });
-        expect(advance(current, 1, straightGeometry())).toBe(current);
-    });
-
-    test('parks a train that is already at the terminal', () => {
-        const next = advance(motion({ edge: 2, s: 100, sTotal: 300, v: 5 }), 1, straightGeometry());
+        const current = motion({ edge: 2, departAt: 1000, sTotal: 300, next: [] });
+        const next = advance(current, 1, geometry, 1200);
         expect(next.sTotal).toBe(300);
         expect(next.v).toBe(0);
+    });
+
+    test('a terminal train without a timeline does not invent motion', () => {
+        const current = motion({ edge: 2, departAt: 1000, sTotal: 295, next: [] });
+        const next = advance(current, 1, geometry, 1200);
+        expect(next.sTotal).toBe(295);
+    });
+
+    test('ignores non-finite and non-positive dt', () => {
+        const current = motion({ sTotal: 40 });
+        for (const dt of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, -1, 0]) {
+            expect(advance(current, dt, geometry, 1000)).toBe(current);
+        }
     });
 
     test('does not mutate the motion it was given', () => {
-        const current = motion({ edge: 0, s: 95, sTotal: 95, v: 10 });
-        advance(current, 1, straightGeometry());
+        const current = motion({ sTotal: 40, departAt: 1000 });
+        advance(current, 1, geometry, 1010);
+        expect(current.sTotal).toBe(40);
         expect(current.edge).toBe(0);
-        expect(current.sTotal).toBe(95);
     });
 
     test('preserves reset and stale flags while moving', () => {
         const next = advance(
-            motion({ edge: 0, s: 95, sTotal: 95, reset: true, stale: true }),
+            motion({ sTotal: 40, departAt: 1000, reset: true, stale: true }),
             1,
-            straightGeometry()
+            geometry,
+            1010
         );
         expect(next.reset).toBe(true);
         expect(next.stale).toBe(true);
     });
 
-    test('keeps moving trains behind the terminal', () => {
-        const next = advance(motion({ edge: 2, s: 90, sTotal: 290, v: 5 }), 1, straightGeometry());
-        expect(next.sTotal).toBe(295);
-        expect(next.v).toBe(5);
+    test('never steps further than the blend cap, even against a wild timeline', () => {
+        const current = motion({
+            edge: 0,
+            sTotal: 0,
+            departAt: 1000,
+            next: [{ stop: 'S3', arr: 1001, dep: 1002 }]
+        });
+        let state = current;
+        let previous = state.sTotal;
+        for (let frame = 0; frame < 240; frame++) {
+            state = advance(state, 1 / 60, geometry, 1000 + frame / 60);
+            expect(Math.abs(state.sTotal - previous)).toBeLessThanOrEqual(80 / 60 + 1e-6);
+            previous = state.sTotal;
+        }
     });
 });

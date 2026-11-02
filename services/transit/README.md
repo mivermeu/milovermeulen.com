@@ -162,14 +162,15 @@ Measured steady state (gzipped): raw ~0.9 GB per 48 h (alerts are the bulk of ea
 artifacts are kept (the `graph` field above points at them), ~1.5 MB per weekly rebuild (~78
 MB/year).
 
-## Snapshot schema (v1)
+## Snapshot schema (v2)
 
-v0 was stop-level; v1 adds the estimated position along the track graph (`pattern`, `edge`, `s`,
-`v`, `confidence`) additively, so a v0 reader keeps working.
+v0 was stop-level; v1 added the estimated position along the track graph (`pattern`, `edge`, `s`,
+`v`, `confidence`); v2 adds the trajectory the client evaluates between polls (`depart_at`, `sigma`,
+and a future-only `next` timeline). Every field is additive, so a v1 reader keeps working.
 
 ```json
 {
-    "v": 1,
+    "v": 2,
     "generated_at": 1792978330,
     "header_ts": 1792978300,
     "feeds": {
@@ -196,11 +197,17 @@ v0 was stop-level; v1 adds the estimated position along the track graph (`patter
             "stop": "G29S",
             "seq": 4,
             "vehicle_ts": 1792978290,
-            "next": [{ "stop": "G24S", "arr": 1792978362, "dep": 1792978382 }],
+            "next": [
+                { "stop": "G24S", "arr": 1792978362, "dep": 1792978382 },
+                { "stop": "G22S", "arr": 1792978450, "dep": 1792978470 }
+            ],
             "pattern": "G-4f2a1c9b3e",
             "edge": "G-4f2a1c9b3e:4:G29S>G24S",
             "s": 0.0,
-            "v": 11.2,
+            "s_total": 4021.4,
+            "v": 0.0,
+            "depart_at": 1792978340,
+            "sigma": 38,
             "confidence": 0.95,
             "stale": false,
             "reset": false,
@@ -222,36 +229,48 @@ v0 was stop-level; v1 adds the estimated position along the track graph (`patter
 
 Notes:
 
-- `status` comes from the vehicle entity (`INCOMING_AT` / `STOPPED_AT` / `IN_TRANSIT_TO`) and is the
-  authority on where a train is now. When MTA omits it, GTFS-RT's default applies, so it reads
-  `IN_TRANSIT_TO` rather than `null`.
+- `status` comes from the vehicle entity (`INCOMING_AT` / `STOPPED_AT` / `IN_TRANSIT_TO`), but it is
+  **not** a position. In a 48 h sample, 45.4% of vehicle entities omitted it entirely (those are
+  placeholders, `pre: true`), and of the rest 97.6% were `STOPPED_AT` a platform, 1.7%
+  `IN_TRANSIT_TO` and 0.7% `INCOMING_AT`. The snapshot keeps rendering an absent status as
+  `IN_TRANSIT_TO` for v0 readers; use `pre` to tell a placeholder from a moving train.
 - `dir` prefers the NYCT `direction` extension (1=N, 2=E, 3=S, 4=W) but MTA omits it for northbound
   trips, so we fall back to the direction marker in the trip id (`128150_G..S15X004` → S). EAST/WEST
   are documented as unused.
 - `trains` holds only trips that have a vehicle entity — an observed position to place. Trips in the
   feed that are scheduled but not assigned are counted in `scheduled_trips` instead; rendering those
   would park them at the origin terminal.
-- `next` is capped at three stops for the render path. The first entry is often the stop the train
-  is currently at, so its time can be a few seconds in the past: it is the feed's timeline, not a
-  set of strictly future stops. Per-train detail belongs in a separate endpoint later.
+- `next` is the **future** timeline, capped at six stops: the current/just-passed stop is filtered
+  out, and each entry carries absolute `arr`/`dep` unix seconds. The client evaluates a trapezoidal
+  profile from `depart_at` through `next`, so the 30 s poll cadence never touches the render path.
 - `effect`/`cause` are usually `null`: MTA leaves them unset, so alert severity has to be derived
   from text. `routes`/`stops` (from `informed_entity`) are the reliable structure.
 - `edge` names the pattern and the segment (`pattern:index:from>to`); `s` is metres from the start
-  of that edge and `v` is metres per second. Lat/lon is the frontend's job: slice `shapes.bin` by
-  the pattern's stop distances.
+  of that edge, `s_total` metres from the start of the pattern, and `v` the model's instantaneous
+  speed in m/s. Lat/lon is the frontend's job: slice `shapes.bin` by the pattern's stop distances.
 - `pre: true` means the feed made no position claim for this trip yet: no stop sequence and no
   status. These are trains that have not started service. They keep their `status`/`stop` for
   compatibility but have no `edge`, no `confidence` and no events until the first real observation.
   `predeparture` counts them at the document level.
+- `depart_at` is when the train left — or, while it is still dwelling, will leave — the start of
+  `edge`. It is the anchor the client timeline starts from.
+- `sigma` is one-sigma position uncertainty in metres, derived from observation age and confidence;
+  it grows while the feed is stale and is the honest width of "where is it".
 - `confidence` folds in match quality, vehicle staleness and whether the observation forced a reset.
   It is not a measure of how far the train moved.
-- `reset: true` means the target jumped further than a train could travel in that cycle (re-route,
-  restart, bad placement), so the position was re-anchored. Fade it rather than animating the jump.
-  A _pattern_ change (short-turn) re-anchors silently with `reset: false`.
+- `reset: true` means the new estimate is further from the extrapolated old one than a train could
+  travel in the cycle (re-route, restart, bad placement), so the position was re-anchored. Fade it
+  rather than animating the jump. A _pattern_ change (short-turn) re-anchors silently with
+  `reset: false`, and small corrections are eased by the client rather than flagged.
 - Trains with `edge: null` had no pattern match; they still carry `status`/`stop`, so the map can
   show them at the platform with `confidence: 0`.
 
 ## Position estimation
+
+The feed does not report positions. Across 48 h and all nine feeds, 45.4% of vehicle entities were
+placeholders (no stop sequence, no status) and, of the rest, **97.6% were `STOPPED_AT`**, 1.7%
+`IN_TRANSIT_TO` and 0.7% `INCOMING_AT`. An observation is therefore a _station event_, not a point
+between stations; treating it as a position is what makes a map snap.
 
 `estimator.py` keys state by NYCT `train_id`, not `trip_id`, so a short-turn (same train, new trip)
 continues instead of jumping. Each cycle it:
@@ -259,27 +278,54 @@ continues instead of jumping. Each cycle it:
 1. drops placeholders (no sequence and no status) before doing any work — they get no position, so
    `estimated` counts only real observations;
 2. joins the trip to a pattern by stop sequence;
-3. turns the observation into a target distance along the shape — the stop itself for `STOPPED_AT`,
-   between the previous and next stop for `IN_TRANSIT_TO`, with the ETA implying the speed for the
-   rest of the segment;
-4. advances the previous estimate and corrects it towards the target with a 5 s time constant. At
-   the 30 s poll cadence that constant makes the correction effectively immediate (`α ≈ 0.9975`); it
-   only smooths when ticks are closer together. The observation leads, the prediction is a prior;
-5. caps movement at 30 m/s, and re-anchors (with `reset`) only when the error exceeds what a train
-   could cover in the cycle — `600 m + 30 m/s × elapsed`. A train observed `STOPPED_AT` always
-   reports `v: 0`; a correction is not current speed.
+3. converts the observation into a **phase anchor** `(edge, departed_at)`. `STOPPED_AT` means
+   "dwelling at this stop until at least now + scheduled dwell"; `IN_TRANSIT_TO`/`INCOMING_AT` means
+   "on the edge before this stop", with `departed_at = predicted arrival − edge run time` (the
+   midpoint when the feed carries no prediction);
+4. advances that anchor with a **trapezoidal profile** (accelerate, cruise, brake) rather than a
+   constant velocity. Run time prefers the trip's own realtime arrival, then the learned median in
+   `runtime-<graph>.json`, then the static schedule's per-edge median (`edge_times` in the graph),
+   then a 12 m/s fallback. Dwell comes from the schedule, so a train leaves the platform even if the
+   next poll still says `STOPPED_AT`;
+5. publishes `depart_at` plus the next six arrivals, so the client evaluates the same profile and
+   motion stays continuous between polls. `s_total` is the position at `generated_at`;
+6. re-anchors with `reset` only when the new estimate is further from the extrapolated old one than
+   a train could travel in the cycle — `600 m + 30 m/s × elapsed` — and leaves smaller corrections
+   to the client's easing.
 
-Lat/lon for a train is `stops[edge_index].dist + s` along its pattern's shape; `s_total` is included
-so a client does not need to re-derive it.
+The old 5 s correction constant is gone: at a 30 s cadence it applied 99.75% of the correction in
+one cycle, which is a teleport with a smoother name.
 
 A timestamp more than 60 s ahead of the poll clock halves confidence for observed trains: a future
-claim is not freshness. The `series` row carries the same observation raw, with `pre` marking
-placeholders and `st: null` whenever the feed omitted the status.
+claim is not freshness. A timestamp up to 4 × 60 s in the past anchors the phase at the moment the
+vehicle was actually observed, then extrapolates to the poll clock, so feed lag does not push every
+train forward.
 
 Placeholder share and the share not at the trip's first stop are recorded in the per-cycle meta
 (`placeholders`, `placeholder_share`, `placeholders_off_origin`); a share above 0.55 logs a warning
 (the measured worst is 0.49, overnight), because the predicate depends on MTA continuing to omit
 both fields for pre-departure trains.
+
+### Learned run times
+
+`learn.py` streams the series tier (14 days by default), collapses each train into stop visits, and
+publishes a content-addressed prior:
+
+```bash
+python3.12 -m services.transit.learn --days 14   # writes runtime-<graph>.json
+```
+
+Each sample is an **arrival-to-arrival** interval: first seen at stop A, then first seen at stop B.
+Both ends carry the same sampling error, so the expectation is unbiased even though a single 30–60 s
+sample is coarse; pooling ~100 observations per edge per day is what makes the median useful. Visits
+longer than 4 minutes are layovers and are dropped, as are jumps that skip a stop. The learned value
+is stored as run time by subtracting the scheduled dwell, and a weekday/weekend × hour multiplier
+captures peak-hour running without smearing it into an all-day average. Edges with fewer than five
+samples are omitted and fall back to the schedule.
+
+The estimator loads the artifact when it appears and keeps the last graph's priors only while the
+hash matches. The learner runs weekly from `transit-learn.timer`; the archive already holds the
+training set, so coverage improves on its own.
 
 ## Track graph
 
@@ -298,12 +344,12 @@ python3.12 -m services.transit.diagnose      # live join report
 — versions every download by checksum under `$TRANSIT_DATA_DIR/static/`, and refuses to build when
 the service window has expired (`--allow-expired` overrides).
 
-| File                | Contents                                                                                                         |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `graph.json`        | manifest: current hash, feed version, counts                                                                     |
-| `graph-<hash>.json` | 496 stations, 992 platforms, 257 patterns with ordered stops and distance along the shape                        |
-| `shapes-<hash>.bin` | little-endian float32 lat/lon pairs; `offset` in the graph is a **float index** — ×4 for bytes, ×8 for one point |
-| `audit.json`        | worst platform-to-shape distances, ranked                                                                        |
+| File                | Contents                                                                                                                        |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `graph.json`        | manifest: current hash, feed version, counts                                                                                    |
+| `graph-<hash>.json` | 496 stations, 992 platforms, 261 patterns with ordered stops, distance along the shape, and median scheduled run/dwell per edge |
+| `shapes-<hash>.bin` | little-endian float32 lat/lon pairs; `offset` in the graph is a **float index** — ×4 for bytes, ×8 for one point                |
+| `audit.json`        | worst platform-to-shape distances, ranked                                                                                       |
 
 Hashed files are served `immutable`; the manifest is short-cached, so a rebuild is picked up without
 a redeploy.

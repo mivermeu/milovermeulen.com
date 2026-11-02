@@ -28,7 +28,7 @@ def build_snapshot() -> dict:
 
 def test_identity_and_stamp():
     document = build_snapshot()
-    assert document["v"] == 1
+    assert document["v"] == 2
     assert document["generated_at"] == 1792978330
     assert document["header_ts"] is not None
 

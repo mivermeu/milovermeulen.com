@@ -1,15 +1,15 @@
 /**
- * Client-side train simulation.
+ * Client-side train motion.
  *
- * Snapshots arrive every ~30 s; between them the map has to keep moving. Each
- * train carries an `s_total` (metres from the start of its pattern) and a
- * velocity, so extrapolating is just `s_total += v * dt` — re-deriving which
- * stop-to-stop edge that lands on, and stopping at the terminal instead of
- * sliding past it.
+ * The server ships a trajectory, not a position: the edge the train is on, the
+ * time it leaves that edge's start, and the arrival/departure times of the next
+ * few stops. Between 30 s polls the map evaluates that timeline, so motion is a
+ * function of wall-clock time rather than a velocity integrated per frame.
  *
- * `s_total` is measured against the pattern's stop distances, not the shape
- * length: the server's pattern length is the distance to the last stop, and a
- * shape often runs a little past it.
+ * A new snapshot replaces the timeline, not the dot. The displayed `sTotal` eases
+ * toward the new timeline's value at the current instant, so a correction reads
+ * as a brief change of speed instead of a teleport. `reset` (a genuinely large
+ * re-anchor) skips the ease and is faded by the renderer.
  *
  * All coordinates here are WGS84. `positionAt` returns MapLibre's `[lng, lat]`
  * order even though the shape buffer stores lat/lon pairs.
@@ -19,6 +19,22 @@ import type { PatternGeometry, Snapshot, TrainMotion } from './types';
 
 /** Must match `services/transit/geo.py`, or shipped distances will disagree. */
 const EARTH_RADIUS_M = 6371008.8;
+
+/** Must match `services/transit/estimator.py`: trapezoid acceleration fraction. */
+const ACCEL_FRACTION = 0.18;
+
+/**
+ * Time constant for blending a corrected timeline back onto the displayed dot.
+ * Small enough to hide a correction, large enough not to look like a cut.
+ */
+const BLEND_TAU_S = 0.45;
+
+/**
+ * Corrections are motion too: never move the dot faster than this to absorb one.
+ * It is above any train speed on purpose — the cap exists to bound visual jumps,
+ * not to model traction.
+ */
+const MAX_BLEND_MPS = 80;
 
 const DEG = Math.PI / 180;
 
@@ -30,7 +46,7 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 /** Distance in metres to the end of a pattern's last real stop. */
-function terminalS(geometry: PatternGeometry): number {
+export function terminalS(geometry: PatternGeometry): number {
     const stops = geometry.stops;
     const last = stops.length > 0 ? stops[stops.length - 1].dist : geometry.length;
     return Number.isFinite(last) ? last : 0;
@@ -42,6 +58,26 @@ function edgeLength(geometry: PatternGeometry, index: number): number {
     if (index < 0 || index + 1 >= stops.length) return 0;
     const span = stops[index + 1].dist - stops[index].dist;
     return Number.isFinite(span) && span > 0 ? span : 0;
+}
+
+/**
+ * Trapezoidal speed profile: accelerate, cruise, brake. Returns the fraction of
+ * the edge covered and the normalised speed at `elapsed` seconds into `run`.
+ * Mirrors `estimator.profile`, so server and client agree on where a train is.
+ */
+export function profile(elapsed: number, run: number): [fraction: number, speed: number] {
+    if (!(run > 0) || elapsed <= 0) return [0, 0];
+    if (elapsed >= run) return [1, 0];
+    const taper = Math.max(1e-6, run * ACCEL_FRACTION);
+    const cruise = 1 / (run - taper);
+    if (elapsed < taper) {
+        return [(0.5 * cruise * elapsed * elapsed) / taper, (cruise * elapsed) / taper];
+    }
+    if (elapsed < run - taper) {
+        return [0.5 * cruise * taper + cruise * (elapsed - taper), cruise];
+    }
+    const remaining = run - elapsed;
+    return [1 - (0.5 * cruise * remaining * remaining) / taper, (cruise * remaining) / taper];
 }
 
 /**
@@ -88,18 +124,18 @@ export function fromSnapshot(
         if (edge === null || edge > geometry.stops.length - 2) continue;
 
         const sTotal = clamp(train.s_total, 0, terminalS(geometry));
-        const start = geometry.stops[edge].dist;
-        const s = clamp(sTotal - start, 0, edgeLength(geometry, edge));
-        const v =
-            typeof train.v === 'number' && Number.isFinite(train.v) ? Math.max(0, train.v) : 0;
+        const departAt =
+            typeof train.depart_at === 'number' && Number.isFinite(train.depart_at)
+                ? train.depart_at
+                : null;
 
         trains.set(train.id, {
             id: train.id,
             pattern: train.pattern,
             edge,
-            s,
+            s: clamp(sTotal - geometry.stops[edge].dist, 0, edgeLength(geometry, edge)),
             sTotal,
-            v,
+            v: typeof train.v === 'number' && Number.isFinite(train.v) ? Math.max(0, train.v) : 0,
             confidence: clamp(train.confidence, 0, 1),
             stale: train.stale === true,
             reset: train.reset === true,
@@ -108,6 +144,9 @@ export function fromSnapshot(
             status: train.status,
             stop: train.stop,
             next: train.next ?? [],
+            departAt,
+            sigma:
+                typeof train.sigma === 'number' && Number.isFinite(train.sigma) ? train.sigma : 0,
             observedAt
         });
     }
@@ -115,44 +154,112 @@ export function fromSnapshot(
     return trains;
 }
 
+interface TimelinePoint {
+    sTotal: number;
+    v: number;
+}
+
 /**
- * Extrapolate a train by `dt` seconds along its pattern.
+ * Where the timeline puts the train at `at` seconds (unix time).
  *
- * Returns the same object when there is nothing to do (non-positive or
- * non-finite `dt`, a stopped train), so callers can skip re-rendering.
+ * The current edge runs from the server's `edge` start at `departAt` to the
+ * first `next` arrival; later entries are dwell + run pairs. A missing timeline
+ * (no `next`) pins the train to its last known distance rather than guessing.
  */
-export function advance(motion: TrainMotion, dt: number, geometry: PatternGeometry): TrainMotion {
-    if (!Number.isFinite(dt) || dt <= 0) return motion;
-
+export function timelineAt(
+    motion: TrainMotion,
+    geometry: PatternGeometry,
+    at: number
+): TimelinePoint {
     const stops = geometry.stops;
-    const terminal = terminalS(geometry);
-    const velocity = Number.isFinite(motion.v) && motion.v > 0 ? motion.v : 0;
-    if (velocity === 0) return motion;
+    if (stops.length < 2) return { sTotal: motion.sTotal, v: 0 };
 
-    if (stops.length < 2) {
-        // Nothing to place the train on: park it at the end of the pattern.
-        return { ...motion, sTotal: terminal, v: 0 };
+    const edge = clamp(motion.edge, 0, stops.length - 2);
+    const start = stops[edge].dist;
+    const startAt = motion.departAt ?? motion.observedAt;
+
+    if (motion.next.length === 0) {
+        // Terminal, or a server that could not project a timeline.
+        return { sTotal: Math.min(motion.sTotal, terminalS(geometry)), v: 0 };
     }
 
-    // Never backwards, never past the terminal.
-    const base = clamp(motion.sTotal, 0, terminal);
-    const sTotal = Math.min(base + velocity * dt, terminal);
-    const lastEdge = stops.length - 2;
+    if (at <= startAt) return { sTotal: start, v: 0 };
 
-    let edge = clamp(Math.floor(motion.edge), 0, lastEdge);
-    while (edge < lastEdge && stops[edge + 1].dist <= sTotal) edge += 1;
+    let fromIndex = edge;
+    let fromAt = startAt;
+    for (let index = 0; index < motion.next.length; index += 1) {
+        const arrival = motion.next[index].arr;
+        if (arrival === null || !Number.isFinite(arrival)) break;
+        const toIndex = Math.min(edge + 1 + index, stops.length - 1);
+        const span = Math.max(0, stops[toIndex].dist - stops[fromIndex].dist);
 
-    const start = stops[edge].dist;
-    const s = clamp(sTotal - start, 0, edgeLength(geometry, edge));
-    const atTerminal = sTotal >= terminal;
+        if (at <= arrival) {
+            const run = Math.max(1, arrival - fromAt);
+            const [fraction, speed] = profile(at - fromAt, run);
+            return { sTotal: stops[fromIndex].dist + fraction * span, v: speed * span };
+        }
+        const departure = motion.next[index].dep;
+        if (departure !== null && Number.isFinite(departure) && at <= departure) {
+            return { sTotal: stops[toIndex].dist, v: 0 };
+        }
+        if (departure === null || !Number.isFinite(departure)) {
+            // No dwell information: continue from the arrival.
+            fromIndex = toIndex;
+            fromAt = arrival;
+        } else {
+            fromIndex = toIndex;
+            fromAt = departure;
+        }
+    }
 
-    return {
-        ...motion,
-        edge,
-        s,
-        sTotal,
-        v: atTerminal ? 0 : velocity
-    };
+    return { sTotal: stops[Math.min(fromIndex, stops.length - 1)].dist, v: 0 };
+}
+
+/** Edge and local distance for an absolute `sTotal`. */
+function locate(geometry: PatternGeometry, sTotal: number): { edge: number; s: number } {
+    const stops = geometry.stops;
+    const terminal = terminalS(geometry);
+    const value = clamp(sTotal, 0, terminal);
+    let edge = 0;
+    while (edge + 1 < stops.length - 1 && stops[edge + 1].dist <= value) edge += 1;
+    return { edge, s: clamp(value - stops[edge].dist, 0, edgeLength(geometry, edge)) };
+}
+
+/**
+ * Advance the displayed dot by `dt` seconds, at wall-clock `at`.
+ *
+ * The target comes from the timeline; the displayed position follows it with a
+ * first-order lag, capped so a correction cannot teleport. Returns the same
+ * object when there is nothing to do.
+ */
+export function advance(
+    motion: TrainMotion,
+    dt: number,
+    geometry: PatternGeometry,
+    at: number
+): TrainMotion {
+    if (!Number.isFinite(dt) || dt <= 0) return motion;
+    const target = timelineAt(motion, geometry, at);
+    const terminal = terminalS(geometry);
+
+    let sTotal: number;
+    if (motion.reset) {
+        // A genuine re-anchor: adopt it. The renderer fades the marker.
+        sTotal = target.sTotal;
+    } else {
+        const error = target.sTotal - motion.sTotal;
+        const blend = 1 - Math.exp(-dt / BLEND_TAU_S);
+        const maxStep = MAX_BLEND_MPS * dt;
+        const step = clamp(error * blend, -maxStep, maxStep);
+        sTotal = motion.sTotal + step;
+    }
+
+    if (!Number.isFinite(sTotal)) sTotal = target.sTotal;
+    sTotal = clamp(sTotal, 0, terminal);
+    const display = locate(geometry, sTotal);
+    // `edge` stays the server's timeline anchor; `s` is the display-local
+    // distance and may briefly sit on the neighbouring edge while easing.
+    return { ...motion, s: display.s, sTotal, v: target.v };
 }
 
 /**

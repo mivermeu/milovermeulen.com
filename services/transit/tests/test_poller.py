@@ -45,7 +45,7 @@ def test_tick_publishes_snapshot(tmp_path):
     assert path.exists()
     saved = json.loads(path.read_text())
     assert saved == document
-    assert saved["v"] == 1
+    assert saved["v"] == 2
     # gtfs-g contributes 20 trains, gtfs-si 7; the other feeds are empty.
     assert len(saved["trains"]) == 27
     assert saved["alerts"]

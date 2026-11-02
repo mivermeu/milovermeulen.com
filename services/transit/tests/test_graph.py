@@ -45,6 +45,18 @@ def test_stop_distances_are_monotonic_and_measured(tmp_path):
     assert north.length_m == distances[-1]
 
 
+def test_scheduled_run_and_dwell_are_carried_through(tmp_path):
+    built = build(tmp_path)
+    north = next(pattern for pattern in built.patterns if pattern.direction == "N")
+    # The fixture runs every edge in two minutes and has no dwell.
+    assert north.runs == [120.0, 120.0, 120.0]
+    assert north.dwells == [0.0, 0.0, 0.0]
+
+    document = graph.to_dict(built)
+    serialised = next(row for row in document["patterns"] if row["id"] == north.key)
+    assert serialised["edge_times"] == [[120.0, 0.0], [120.0, 0.0], [120.0, 0.0]]
+
+
 def test_serialisation_offsets_match_binary(tmp_path):
     built = build(tmp_path)
     document = graph.to_dict(built)

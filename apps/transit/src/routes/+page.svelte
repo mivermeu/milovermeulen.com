@@ -80,6 +80,10 @@
         let timer: ReturnType<typeof setInterval> | undefined;
         let last = performance.now();
         let lastPaint = 0;
+        // Wall-clock anchor: server time at the last snapshot, paired with the
+        // monotonic clock. Timeline evaluation never depends on device time.
+        let serverAnchor = 0;
+        let clockAnchor = performance.now();
 
         lookup = (id) => motions.get(id) ?? null;
         applyFilter = (routes) => {
@@ -88,7 +92,19 @@
 
         const adopt = (snapshot: TransitData['snapshot']) => {
             if (!data) return;
-            motions = fromSnapshot(snapshot, data.geometries);
+            const previous = motions;
+            const fresh = fromSnapshot(snapshot, data.geometries);
+            // A snapshot replaces the timeline, not the dot. Keep the displayed
+            // position and let advance() ease toward the new timeline.
+            for (const [id, motion] of fresh) {
+                const old = previous.get(id);
+                if (old && old.pattern === motion.pattern && !motion.reset) {
+                    motion.sTotal = old.sTotal;
+                }
+            }
+            motions = fresh;
+            serverAnchor = snapshot.generated_at;
+            clockAnchor = performance.now();
             queuedPositions = snapshot.trains.flatMap((train) => {
                 const coords =
                     train.pre === true && train.stop ? platformCoords[train.stop] : undefined;
@@ -122,13 +138,14 @@
             // do not leap across the map when the user comes back.
             const dt = Math.min((now - last) / 1000, 0.25);
             last = now;
+            const at = serverAnchor + (now - clockAnchor) / 1000;
 
             const positions: TrainPosition[] = [];
             let staleCount = 0;
             for (const [id, motion] of motions) {
                 const geometry = data.geometries.get(motion.pattern);
                 if (!geometry) continue;
-                const next = advance(motion, dt, geometry);
+                const next = advance(motion, dt, geometry, at);
                 motions.set(id, next);
                 const point = positionAt(geometry, next.sTotal);
                 if (!Number.isFinite(point.lat) || !Number.isFinite(point.lng)) continue;

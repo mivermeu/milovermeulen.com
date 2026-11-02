@@ -67,7 +67,8 @@
     <footer
         class="mt-3 flex items-center justify-between border-t border-brand-secondary pt-2 text-[10px] text-brand-text"
     >
-        <span>{formatConfidence(motion.confidence)} confidence</span>
+        <span>{formatConfidence(motion.confidence)} confidence · ±{Math.round(motion.sigma)} m</span
+        >
         <span class="truncate">{motion.pattern.slice(0, 10)}</span>
     </footer>
 </aside>

@@ -19,6 +19,7 @@ import hashlib
 import json
 import logging
 import os
+import statistics
 import sys
 import time
 from array import array
@@ -30,8 +31,12 @@ from . import geo, gtfs_static
 
 log = logging.getLogger("transit.graph")
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 AUDIT_THRESHOLD_M = 25.0
+# Scheduled values outside these bounds are feed noise, not train movements.
+MIN_RUN_S = 3.0
+MAX_RUN_S = 3600.0
+MAX_DWELL_S = 1800.0
 
 
 @dataclass(slots=True)
@@ -49,6 +54,11 @@ class Pattern:
     direction: str
     shape_id: str
     stops: list[tuple[str, float]] = field(default_factory=list)
+    # Per edge: median scheduled run seconds (departure -> next arrival) and
+    # scheduled dwell seconds at the edge's starting stop. These are the prior
+    # the estimator uses instead of a single global cruise speed.
+    runs: list[float] = field(default_factory=list)
+    dwells: list[float] = field(default_factory=list)
 
     @property
     def length_m(self) -> float:
@@ -109,15 +119,36 @@ def _build_shapes(rows: list[dict[str, str]]) -> dict[str, Shape]:
     return shapes
 
 
-def _build_trip_stops(rows: list[dict[str, str]]) -> dict[str, list[str]]:
-    grouped: dict[str, list[tuple[int, str]]] = {}
+def _seconds(value: str | None) -> float | None:
+    """Parse a GTFS ``HH:MM:SS`` time; hours may exceed 24 for after-midnight trips."""
+    if not value:
+        return None
+    parts = value.split(":")
+    if len(parts) != 3:
+        return None
+    try:
+        hours, minutes, seconds = (int(part) for part in parts)
+    except ValueError:
+        return None
+    return hours * 3600 + minutes * 60 + seconds
+
+
+def _build_trip_stops(
+    rows: list[dict[str, str]],
+) -> dict[str, list[tuple[int, str, float | None, float | None]]]:
+    grouped: dict[str, list[tuple[int, str, float | None, float | None]]] = {}
     for row in rows:
         trip_id = sys.intern(row["trip_id"])
         stop_id = sys.intern(row["stop_id"])
-        grouped.setdefault(trip_id, []).append((int(row["stop_sequence"]), stop_id))
-    return {
-        trip_id: [stop_id for _, stop_id in sorted(stops)] for trip_id, stops in grouped.items()
-    }
+        grouped.setdefault(trip_id, []).append(
+            (
+                int(row["stop_sequence"]),
+                stop_id,
+                _seconds(row.get("arrival_time")),
+                _seconds(row.get("departure_time")),
+            )
+        )
+    return {trip_id: sorted(stops) for trip_id, stops in grouped.items()}
 
 
 def build(
@@ -170,12 +201,15 @@ def build(
     trip_stops = _build_trip_stops(stop_time_rows)
 
     patterns: dict[tuple[str, str, str], Pattern] = {}
+    # signature -> per edge: raw scheduled run/dwell samples across every trip
+    # that uses this pattern. Medians are taken after all trips are read.
+    edge_samples: dict[tuple[str, str, tuple[str, ...]], list[dict[str, list[float]]]] = {}
     audit: list[dict[str, Any]] = []
     missing_stops = 0
     shapeless_trips = 0
-    for trip_id, stops in trip_stops.items():
+    for trip_id, entries in trip_stops.items():
         meta = trips.get(trip_id)
-        if not meta or not stops:
+        if not meta or not entries:
             continue
         route, _direction_id, shape_id = meta
         shape = shapes.get(shape_id)
@@ -184,40 +218,74 @@ def build(
             # counted rather than guessed at with a straight line through platforms.
             shapeless_trips += 1
             continue
-        signature = (route, shape_id, tuple(stops))
-        if signature in patterns:
-            continue
-        pattern = Pattern(
-            key=_pattern_key(route, shape_id, tuple(stops)),
-            route=route,
-            direction=_direction(stops[0]),
-            shape_id=shape_id,
-        )
-        previous = 0.0
-        for stop_id in stops:
-            platform = platforms.get(stop_id)
-            if platform is None:
-                missing_stops += 1
-                audit.append(
-                    {"pattern": pattern.key, "route": route, "stop": stop_id, "issue": "unknown"}
-                )
-                pattern.stops.append((stop_id, previous))
-                continue
-            along, lateral = geo.project_point(
-                shape.points, shape.distances, platform["lat"], platform["lon"], previous
+        stop_ids = tuple(stop_id for _, stop_id, _, _ in entries)
+        signature = (route, shape_id, stop_ids)
+        pattern = patterns.get(signature)
+        if pattern is None:
+            pattern = Pattern(
+                key=_pattern_key(route, shape_id, stop_ids),
+                route=route,
+                direction=_direction(stop_ids[0]),
+                shape_id=shape_id,
             )
-            if lateral is None or lateral > AUDIT_THRESHOLD_M:
-                audit.append(
-                    {
-                        "pattern": pattern.key,
-                        "route": route,
-                        "stop": stop_id,
-                        "lateral_m": round(float(lateral), 1),
-                    }
+            previous = 0.0
+            for stop_id in stop_ids:
+                platform = platforms.get(stop_id)
+                if platform is None:
+                    missing_stops += 1
+                    audit.append(
+                        {
+                            "pattern": pattern.key,
+                            "route": route,
+                            "stop": stop_id,
+                            "issue": "unknown",
+                        }
+                    )
+                    pattern.stops.append((stop_id, previous))
+                    continue
+                along, lateral = geo.project_point(
+                    shape.points, shape.distances, platform["lat"], platform["lon"], previous
                 )
-            pattern.stops.append((stop_id, along))
-            previous = along
-        patterns[signature] = pattern
+                if lateral is None or lateral > AUDIT_THRESHOLD_M:
+                    audit.append(
+                        {
+                            "pattern": pattern.key,
+                            "route": route,
+                            "stop": stop_id,
+                            "lateral_m": round(float(lateral), 1),
+                        }
+                    )
+                pattern.stops.append((stop_id, along))
+                previous = along
+            patterns[signature] = pattern
+            edge_samples[signature] = [
+                {"run": [], "dwell": []} for _ in range(max(0, len(stop_ids) - 1))
+            ]
+
+        buffer = edge_samples[signature]
+        for index in range(min(len(entries) - 1, len(buffer))):
+            _, _, arrival, departure = entries[index]
+            _, _, next_arrival, _ = entries[index + 1]
+            leave = departure if departure is not None else arrival
+            if leave is not None and next_arrival is not None:
+                run = next_arrival - leave
+                if MIN_RUN_S <= run <= MAX_RUN_S:
+                    buffer[index]["run"].append(run)
+            if arrival is not None and departure is not None:
+                dwell = departure - arrival
+                if 0.0 <= dwell <= MAX_DWELL_S:
+                    buffer[index]["dwell"].append(dwell)
+
+    for signature, pattern in patterns.items():
+        buffer = edge_samples.get(signature, [])
+        for index in range(max(0, len(pattern.stops) - 1)):
+            sample = buffer[index] if index < len(buffer) else {"run": [], "dwell": []}
+            pattern.runs.append(
+                float(statistics.median(sample["run"])) if sample["run"] else 0.0
+            )
+            pattern.dwells.append(
+                float(statistics.median(sample["dwell"])) if sample["dwell"] else 0.0
+            )
 
     ordered = sorted(patterns.values(), key=lambda item: (item.route, item.shape_id, item.key))
     log.info(
@@ -271,6 +339,12 @@ def to_dict(graph: Graph) -> dict[str, Any]:
                 "shape": pattern.shape_id,
                 "length_m": round(pattern.length_m, 1),
                 "stops": [[stop_id, round(dist, 1)] for stop_id, dist in pattern.stops],
+                # Aligned with the edges (len(stops) - 1): scheduled run and
+                # dwell seconds, medians over the trips that use this pattern.
+                "edge_times": [
+                    [round(run, 1), round(dwell, 1)]
+                    for run, dwell in zip(pattern.runs, pattern.dwells, strict=False)
+                ],
             }
             for pattern in graph.patterns
         ],

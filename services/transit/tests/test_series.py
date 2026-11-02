@@ -120,11 +120,11 @@ def test_edge_index_parsing():
     assert series.edge_index("p:not-a-number:A>B") is None
 
 
-def test_horizon_is_six_while_the_snapshot_stays_at_three():
+def test_both_horizons_are_six():
     from .. import snapshot
 
     assert series.NEXT_STOPS == 6
-    assert snapshot.MAX_NEXT_STOPS == 3
+    assert snapshot.MAX_NEXT_STOPS == 6
 
 
 def test_duplicate_train_ids_across_feeds_keep_the_first_row():

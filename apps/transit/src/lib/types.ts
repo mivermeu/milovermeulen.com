@@ -38,6 +38,10 @@ export interface SnapshotTrain {
     v: number | null;
     confidence: number;
     stale: boolean;
+    /** Unix seconds when the train leaves the current edge's start stop. */
+    depart_at?: number | null;
+    /** Metres of one-sigma position uncertainty, from observation age. */
+    sigma?: number | null;
     /** The server re-anchored this train; fade it rather than animate a jump. */
     reset: boolean;
     /** No position claim yet: the train has not started service. Absent on older snapshots. */
@@ -169,6 +173,10 @@ export interface TrainMotion {
     status: VehicleStatus | null;
     stop: string | null;
     next: NextStop[];
+    /** Unix seconds when the train leaves the current edge's start stop. */
+    departAt: number | null;
+    /** Metres of one-sigma position uncertainty. */
+    sigma: number;
     /** Snapshot time this motion was derived from. */
     observedAt: number;
 }
