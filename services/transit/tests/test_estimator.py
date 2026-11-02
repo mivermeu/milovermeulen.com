@@ -87,12 +87,13 @@ def test_position_advances_after_dwell_without_a_new_observation():
     instance = make_estimator()
     instance.update({"t": build_feed(status=1, stop_id="T2N")}, now=1000.0)
     # Still within the 10 s dwell.
-    edge, s, speed = instance._place("T-N", 1, 1010.0, 1005.0)
-    assert (edge, s, speed) == (1, 0.0, 0.0)
+    edge, s, speed, depart = instance._place("T-N", 1, 1010.0, 1005.0)
+    assert (edge, s, speed, depart) == (1, 0.0, 0.0, 1010.0)
     # Half-way through the 60 s run to T3N: the simulator must have moved even
     # though the feed said nothing new.
-    edge, s, speed = instance._place("T-N", 1, 1010.0, 1040.0)
+    edge, s, speed, depart = instance._place("T-N", 1, 1010.0, 1040.0)
     assert edge == 1
+    assert depart == 1010.0
     assert 150 < s < 250
     assert speed > 0
 

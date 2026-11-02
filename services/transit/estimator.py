@@ -284,30 +284,37 @@ class Estimator:
 
     def _place(
         self, pattern_id: str, edge: int, departed_at: float, at: float
-    ) -> tuple[int, float, float]:
-        """Walk edges from a phase anchor to ``at``. Returns (edge, s, speed)."""
+    ) -> tuple[int, float, float, float]:
+        """Walk edges from a phase anchor to ``at``.
+
+        Returns the edge the train is on **now**, its distance along that edge,
+        its speed, and the time it left (or will leave) that edge's start stop.
+        The last value is the timeline anchor: for a dwelling train it is in the
+        future, and it moves forward as the phase advances.
+        """
         stops = self.patterns.get(pattern_id, {}).get("stops") or []
         last_edge = max(0, len(stops) - 2)
         edge = min(max(edge, 0), last_edge)
-        if at <= departed_at:
-            return edge, 0.0, 0.0
-        elapsed = at - departed_at
+        current_departure = departed_at
+        if at <= current_departure:
+            return edge, 0.0, 0.0, current_departure
+        remaining = at - current_departure
         while True:
             span = self._edge_span(pattern_id, edge)
             run = self._run_seconds(pattern_id, edge, at, span)
-            if elapsed < run or edge >= last_edge:
-                fraction, speed = profile(elapsed, run)
-                return edge, fraction * span, speed * span
-            elapsed -= run
+            if remaining < run or edge >= last_edge:
+                fraction, speed = profile(remaining, run)
+                return edge, fraction * span, speed * span, current_departure
+            remaining -= run
             edge += 1
             if edge > last_edge:
-                return last_edge, self._edge_span(pattern_id, last_edge), 0.0
+                return last_edge, self._edge_span(pattern_id, last_edge), 0.0, current_departure
             dwell = self._dwell_seconds(pattern_id, edge - 1, at)
-            if elapsed < dwell:
-                # Arrived at the stop and still there: it is the start of the
-                # next edge, so report the arrival edge at its far end.
-                return edge - 1, self._edge_span(pattern_id, edge - 1), 0.0
-            elapsed -= dwell
+            current_departure = current_departure + run + dwell
+            if remaining < dwell:
+                # Dwelling at the stop that starts `edge`.
+                return edge, 0.0, 0.0, current_departure
+            remaining -= dwell
 
     def _locate(self, pattern_id: str, s_total: float) -> tuple[str, float]:
         stops = self.patterns[pattern_id]["stops"]
@@ -328,28 +335,30 @@ class Estimator:
         edge: int,
         departed_at: float,
         stamp: float,
+        first_arrival: float,
     ) -> list[dict[str, Any]]:
         """Future stop timeline: ``[{stop, arr, dep}]`` the client can evaluate."""
         stops = self.patterns.get(pattern_id, {}).get("stops") or []
         last_edge = max(0, len(stops) - 2)
         edge = min(max(edge, 0), last_edge)
-        span = self._edge_span(pattern_id, edge)
-        arrival = departed_at + self._run_seconds(pattern_id, edge, stamp, span)
-        if edge >= last_edge and arrival <= stamp + 1:
+        if edge >= last_edge and first_arrival <= stamp + 1:
             # Already at the terminal: there is nothing left to predict.
             return []
+        arrival = first_arrival
         rows: list[dict[str, Any]] = []
         while len(rows) < PLAN_STOPS:
             next_index = edge + 1
             if next_index >= len(stops):
                 break
             stop_id = stops[next_index][0]
-            # The first arrival is derived from the same run time that placed
-            # the train, so `s_total` and the timeline agree at `generated_at`.
-            # Later stops may use the feed's own predictions.
-            predicted = self._predicted_arrival(update, stop_id, stamp) if rows else None
-            if predicted is not None and arrival - 90 <= predicted <= arrival + 900:
-                arrival = predicted
+            if rows:
+                # The first arrival is fixed by the caller so the position and
+                # the timeline agree at `generated_at`; later stops may use the
+                # feed's own predictions.
+                predicted = self._predicted_arrival(update, stop_id, stamp)
+                prior = arrival
+                if predicted is not None and prior - 90 <= predicted <= prior + 900:
+                    arrival = predicted
             arrival = max(arrival, stamp - 5)
             dwell = self._dwell_seconds(pattern_id, next_index, arrival)
             rows.append({"stop": stop_id, "arr": int(arrival), "dep": int(arrival + dwell)})
@@ -457,7 +466,23 @@ class Estimator:
         if stale:
             confidence *= 0.5
 
-        edge, s, speed = self._place(pattern_id, edge, departed_at, stamp)
+        edge, s, speed, depart_at = self._place(pattern_id, edge, departed_at, stamp)
+        span = self._edge_span(pattern_id, edge)
+        next_stop = stops[edge + 1][0] if edge + 1 < len(stops) else None
+        eta = self._predicted_arrival(update, next_stop, stamp) if next_stop else None
+        prior_run = self._run_seconds(pattern_id, edge, stamp, span)
+        first_arrival = depart_at + prior_run
+        if eta is not None and depart_at + 0.4 * prior_run <= eta <= depart_at + 3.0 * prior_run:
+            # The trip's own prediction is a better run time than any prior,
+            # but only inside a band where it cannot be a stale hold-over.
+            first_arrival = eta
+        if stamp > depart_at:
+            run = max(1.0, first_arrival - depart_at)
+            fraction, speed = profile(stamp - depart_at, run)
+            s = fraction * span
+        else:
+            s = 0.0
+            speed = 0.0
         s_total = stops[edge][1] + s
         length = self.lengths.get(pattern_id, 0.0)
 
@@ -468,7 +493,7 @@ class Estimator:
             # without a reset fade; the client can carry the dot across.
             previous = None
         if previous is not None:
-            old_edge, old_s, _ = self._place(
+            old_edge, old_s, _, _ = self._place(
                 previous.pattern, previous.edge, previous.departed_at, stamp
             )
             old_total = (
@@ -483,19 +508,13 @@ class Estimator:
             500.0,
             6.0 * max(0.0, stamp - observed_at) + 25.0 + (1.0 - confidence) * 80.0,
         )
-        depart_at = None
-        if edge < len(stops) - 1:
-            # The client starts its segment at the current edge. For a train
-            # already running this is in the past; while dwelling it is the
-            # expected departure.
-            depart_at = departed_at
         confidence = min(max(confidence, 0.0), 1.0)
 
         self.states[key] = TrainState(
             key=key,
             pattern=pattern_id,
             edge=edge,
-            departed_at=departed_at,
+            departed_at=depart_at,
             last_seen=stamp,
             observed_at=observed_at,
             confidence=confidence,
@@ -514,5 +533,5 @@ class Estimator:
             reset=reset,
             depart_at=depart_at,
             sigma=sigma,
-            next_stops=self._plan(update, pattern_id, edge, departed_at, stamp),
+            next_stops=self._plan(update, pattern_id, edge, depart_at, stamp, first_arrival),
         )
