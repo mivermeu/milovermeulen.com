@@ -25,16 +25,17 @@ const ACCEL_FRACTION = 0.18;
 
 /**
  * Time constant for blending a corrected timeline back onto the displayed dot.
- * Small enough to hide a correction, large enough not to look like a cut.
+ * ETA noise is ±100-400 m, so this is deliberately multi-second: a correction
+ * should read as the train briefly speeding up, not as a cut.
  */
-const BLEND_TAU_S = 0.35;
+const BLEND_TAU_S = 4.0;
 
 /**
  * Corrections are motion too: never move the dot faster than this to absorb one.
- * It is above any train speed on purpose — the cap exists to bound visual jumps,
- * not to model traction.
+ * Twice a train's top speed, so a 100 m correction takes under two seconds while
+ * a missed stop (hundreds of metres) takes the fade path instead.
  */
-const MAX_BLEND_MPS = 240;
+const MAX_BLEND_MPS = 60;
 
 /**
  * Above this the displayed dot is simply in the wrong place (a skipped stop, a

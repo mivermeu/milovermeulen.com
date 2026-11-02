@@ -335,7 +335,7 @@
                 ><span class="h-2 w-2 rounded-full bg-white/40"></span>stale</span
             >
             <span class="flex items-center gap-1"
-                ><span class="h-2 w-2 rounded-full border border-white/40"></span>re-anchored</span
+                ><span class="h-2 w-2 rounded-full border border-white/40"></span>queued</span
             >
             <a
                 class="pointer-events-auto underline decoration-dotted"

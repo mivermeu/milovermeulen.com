@@ -417,7 +417,7 @@ describe('advance', () => {
         const current = motion({ edge: 0, sTotal: 0, departAt: 1000 });
         const next = advance(current, 1 / 60, geometry, 1000);
         expect(next.sTotal).toBeGreaterThanOrEqual(0);
-        expect(next.sTotal).toBeLessThanOrEqual(240 / 60);
+        expect(next.sTotal).toBeLessThanOrEqual(60 / 60);
     });
 
     test('converges on the timeline over a second', () => {
@@ -428,7 +428,7 @@ describe('advance', () => {
             next: [{ stop: 'S1', arr: 1060, dep: 1070 }]
         });
         let state = current;
-        for (let frame = 0; frame < 180; frame++) {
+        for (let frame = 0; frame < 1200; frame++) {
             state = advance(state, 1 / 60, geometry, 1030);
         }
         const target = timelineAt(current, geometry, 1030).sTotal;
@@ -520,7 +520,7 @@ describe('advance', () => {
         let previous = state.sTotal;
         for (let frame = 0; frame < 240; frame++) {
             state = advance(state, 1 / 60, geometry, 1000 + frame / 60);
-            expect(Math.abs(state.sTotal - previous)).toBeLessThanOrEqual(240 / 60 + 1e-6);
+            expect(Math.abs(state.sTotal - previous)).toBeLessThanOrEqual(60 / 60 + 1e-6);
             previous = state.sTotal;
         }
     });
