@@ -187,9 +187,12 @@
                     const geometry = motion ? data.geometries.get(motion.pattern) : null;
                     const coordinates =
                         motion && geometry ? bracketSlice(motion, geometry, at) : [];
+                    const visible =
+                        activeRoutes.length === 0 ||
+                        (motion?.route != null && activeRoutes.includes(motion.route));
                     paintBracket(
                         map,
-                        motion && coordinates.length >= 2
+                        motion && visible && coordinates.length >= 2
                             ? { color: routeColor(motion.route), coordinates }
                             : null
                     );
