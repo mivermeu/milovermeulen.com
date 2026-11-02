@@ -344,7 +344,10 @@ class Estimator:
             if next_index >= len(stops):
                 break
             stop_id = stops[next_index][0]
-            predicted = self._predicted_arrival(update, stop_id, stamp)
+            # The first arrival is derived from the same run time that placed
+            # the train, so `s_total` and the timeline agree at `generated_at`.
+            # Later stops may use the feed's own predictions.
+            predicted = self._predicted_arrival(update, stop_id, stamp) if rows else None
             if predicted is not None and arrival - 90 <= predicted <= arrival + 900:
                 arrival = predicted
             arrival = max(arrival, stamp - 5)
