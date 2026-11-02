@@ -1,6 +1,15 @@
 import { describe, expect, test } from 'bun:test';
 import type { PatternGeometry, Snapshot, SnapshotTrain, TrainMotion } from './types';
-import { advance, fromSnapshot, haversine, positionAt, profile, timelineAt } from './sim';
+import {
+    advance,
+    bracketSlice,
+    fromSnapshot,
+    haversine,
+    positionAt,
+    profile,
+    sliceAlong,
+    timelineAt
+} from './sim';
 
 const EARTH_RADIUS_M = 6371008.8;
 const LAT = 40.7;
@@ -523,5 +532,69 @@ describe('advance', () => {
             expect(Math.abs(state.sTotal - previous)).toBeLessThanOrEqual(60 / 60 + 1e-6);
             previous = state.sTotal;
         }
+    });
+});
+
+describe('sliceAlong', () => {
+    const geometry = straightGeometry();
+
+    test('returns exact endpoints for a stop-to-stop slice', () => {
+        expect(sliceAlong(geometry, 0, 100)).toEqual([
+            [lonAt(0), latAt(0)],
+            [lonAt(1), latAt(1)]
+        ]);
+    });
+
+    test('includes intermediate vertices', () => {
+        const points = sliceAlong(geometry, 50, 150);
+        expect(points).toHaveLength(3);
+        expect(points[1]).toEqual([lonAt(1), latAt(1)]);
+        expect(points[0][0]).toBeGreaterThan(lonAt(0));
+        expect(points[2][0]).toBeLessThan(lonAt(2));
+    });
+
+    test('normalises a reversed range', () => {
+        expect(sliceAlong(geometry, 150, 50)).toEqual(sliceAlong(geometry, 50, 150));
+    });
+
+    test('returns nothing for an empty or out-of-range slice', () => {
+        expect(sliceAlong(geometry, 100, 100)).toEqual([]);
+        expect(sliceAlong(geometry, 400, 500)).toEqual([]);
+    });
+
+    test('clamps to the pattern length', () => {
+        const points = sliceAlong(geometry, 250, 10_000);
+        expect(points[points.length - 1]).toEqual([lonAt(3), latAt(3)]);
+    });
+});
+
+describe('bracketSlice', () => {
+    const geometry = straightGeometry();
+
+    test('covers the current edge while running', () => {
+        const state = motion({
+            edge: 1,
+            departAt: 1000,
+            next: [{ stop: 'S2', arr: 1060, dep: 1070 }]
+        });
+        expect(bracketSlice(state, geometry, 1030)).toEqual(sliceAlong(geometry, 100, 200));
+    });
+
+    test('is empty while dwelling: the platform is the position', () => {
+        const state = motion({
+            edge: 1,
+            departAt: 1040,
+            next: [{ stop: 'S2', arr: 1100, dep: 1110 }]
+        });
+        expect(bracketSlice(state, geometry, 1000)).toEqual([]);
+    });
+
+    test('is empty without a timeline or at the terminal', () => {
+        expect(bracketSlice(motion({ edge: 1, departAt: 1000, next: [] }), geometry, 1030)).toEqual(
+            []
+        );
+        expect(bracketSlice(motion({ edge: 2, departAt: 1000, next: [] }), geometry, 1030)).toEqual(
+            []
+        );
     });
 });

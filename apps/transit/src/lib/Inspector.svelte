@@ -5,11 +5,13 @@
 
     interface Props {
         motion: TrainMotion;
+        /** Seconds until the model expects the train to leave its platform. */
+        departIn: number;
         stopName: (stop: string | null) => string;
         onclose: () => void;
     }
 
-    let { motion, stopName, onclose }: Props = $props();
+    let { motion, departIn, stopName, onclose }: Props = $props();
 </script>
 
 <aside
@@ -27,6 +29,7 @@
             <p class="truncate text-xs text-brand-text-highlight">{motion.id}</p>
             <p class="text-[10px] text-brand-text">
                 {phaseLabel(motion.status, motion.v)} · {formatSpeed(motion.v)}
+                {#if departIn > 1}&nbsp;· departs in ~{Math.round(departIn)} s{/if}
             </p>
         </div>
         <button

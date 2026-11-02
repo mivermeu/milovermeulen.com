@@ -49,6 +49,22 @@ warning. OSM attribution is shown in the legend.
 - The map container needs an explicit height: MapLibre sets `position: relative` on it, which
   defeats `absolute inset-0` sizing.
 
+## Motion and uncertainty
+
+The client does not integrate a velocity. The server ships a timeline (`depart_at` plus the next six
+stop arrivals) and `sim.ts` evaluates a trapezoidal profile against wall-clock time, so the 30 s
+poll cadence never enters the render path. A snapshot replaces the timeline, not the dot; the
+displayed position eases toward the new estimate (4 s time constant, 60 m/s cap). Corrections above
+400 m — a skipped stop or a feed gap — are adopted immediately and faded in over 0.7 s, because
+gliding half a kilometre is worse than a blink.
+
+Uncertainty is **along the track, never radial**. A circle would imply lateral freedom a train does
+not have and would overlap neighbouring lines. For the selected train only, the map draws the
+current edge as a translucent bracket — the stretch between the stop it left and the stop it has not
+reached. While the train is dwelling the bracket is empty, because its position is the platform; the
+inspector shows `departs in ~Ns` instead. `sigma` (metres) is the numeric estimate and is shown in
+the inspector, not as a halo.
+
 ## Tests
 
 `bun test` covers the data contract, the sim/projection maths, the GeoJSON builders, the route

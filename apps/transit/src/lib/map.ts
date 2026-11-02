@@ -35,6 +35,8 @@ const NETWORK_SOURCE = 'network';
 const NETWORK_LAYER = 'network-lines';
 const STATIONS_SOURCE = 'stations';
 const STATIONS_LAYER = 'stations-dots';
+const BRACKET_SOURCE = 'train-bracket';
+const BRACKET_LAYER = 'train-bracket';
 const TRAINS_SOURCE = 'trains';
 const TRAINS_LAYER = 'trains-dots';
 const QUEUED_LAYER = 'trains-queued';
@@ -180,6 +182,24 @@ export function installLayers(
             'circle-color': '#cbd5e1',
             'circle-stroke-color': '#0f172a',
             'circle-stroke-width': 1
+        }
+    });
+
+    // The selected train's uncertainty bracket: the stretch of track it is
+    // known to be on. Below the dots, above the route lines.
+    map.addSource(BRACKET_SOURCE, {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] }
+    });
+    map.addLayer({
+        id: BRACKET_LAYER,
+        type: 'line',
+        source: BRACKET_SOURCE,
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+            'line-color': ['get', 'color'],
+            'line-width': ['interpolate', ['linear'], ['zoom'], 10, 6, 14, 9, 16, 12],
+            'line-opacity': 0.28
         }
     });
 
@@ -331,4 +351,30 @@ function lngLatPairs(buffer: Float32Array): Position[] {
         pairs.push([buffer[i + 1], buffer[i]]);
     }
     return pairs;
+}
+
+/**
+ * Highlight the selected train's on-track uncertainty bracket, or clear it.
+ *
+ * It is intentionally a line along the pattern rather than a radius around the
+ * train: the train cannot leave the track, so a circle would claim freedom it
+ * does not have and overlap neighbouring lines.
+ */
+export function paintBracket(
+    map: maplibregl.Map,
+    bracket: { color: string; coordinates: [number, number][] } | null
+): void {
+    const source = map.getSource(BRACKET_SOURCE) as maplibregl.GeoJSONSource | undefined;
+    if (!source || typeof source.setData !== 'function') return;
+    const features: Feature<LineString, { color: string }>[] =
+        bracket && bracket.coordinates.length >= 2
+            ? [
+                  {
+                      type: 'Feature',
+                      geometry: { type: 'LineString', coordinates: bracket.coordinates },
+                      properties: { color: bracket.color }
+                  }
+              ]
+            : [];
+    source.setData({ type: 'FeatureCollection', features });
 }

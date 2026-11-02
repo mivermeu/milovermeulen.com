@@ -11,11 +11,12 @@
         applyRouteFilter,
         createMap,
         installLayers,
+        paintBracket,
         paintTrains,
         updateNetwork
     } from '$lib/map';
     import { routeColor } from '$lib/palette';
-    import { advance, fromSnapshot, positionAt } from '$lib/sim';
+    import { advance, bracketSlice, fromSnapshot, positionAt } from '$lib/sim';
     import type { FeedHealth as FeedHealthData, TrainMotion, TrainPosition } from '$lib/types';
 
     let container: HTMLDivElement;
@@ -31,6 +32,7 @@
     let activeRoutes = $state<string[]>([]);
     let selectedId = $state<string | null>(null);
     let selectedMotion = $state<TrainMotion | null>(null);
+    let selectedDepartIn = $state(0);
 
     // Stop ids are platform ids (`G29S`); the graph carries names and coordinates.
     const platformNames: Record<string, string> = {};
@@ -178,7 +180,22 @@
                 paintTrains(map, positions);
                 lastPaint = now;
                 if (selectedId !== null) {
-                    selectedMotion = motions.get(selectedId) ?? null;
+                    const motion = motions.get(selectedId) ?? null;
+                    selectedMotion = motion;
+                    selectedDepartIn =
+                        motion && motion.departAt ? Math.max(0, motion.departAt - at) : 0;
+                    const geometry = motion ? data.geometries.get(motion.pattern) : null;
+                    const coordinates =
+                        motion && geometry ? bracketSlice(motion, geometry, at) : [];
+                    paintBracket(
+                        map,
+                        motion && coordinates.length >= 2
+                            ? { color: routeColor(motion.route), coordinates }
+                            : null
+                    );
+                } else {
+                    selectedDepartIn = 0;
+                    paintBracket(map, null);
                 }
             }
             trains = positions.length - queuedPositions.length;
@@ -346,7 +363,12 @@
         </div>
 
         {#if selectedMotion}
-            <Inspector motion={selectedMotion} {stopName} onclose={clearSelection} />
+            <Inspector
+                motion={selectedMotion}
+                departIn={selectedDepartIn}
+                {stopName}
+                onclose={clearSelection}
+            />
         {/if}
     {/if}
 </div>

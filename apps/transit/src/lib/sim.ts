@@ -275,6 +275,78 @@ export function advance(
 }
 
 /**
+ * Slice a pattern's shape between two along-track distances.
+ *
+ * Returns ``[lng, lat]`` pairs including exact endpoints and every shape vertex
+ * between them. Used for the selected train's uncertainty bracket: the stretch
+ * of track it is known to be on, not a radius around it.
+ */
+export function sliceAlong(
+    geometry: PatternGeometry,
+    from: number,
+    to: number
+): [number, number][] {
+    const line = geometry.line;
+    const cumulative = geometry.cumulative;
+    const count = Math.min(Math.floor(line.length / 2), cumulative.length);
+    if (count < 2) return [];
+
+    const total = cumulative[count - 1];
+    const limit = geometry.length > 0 ? Math.min(geometry.length, total) : total;
+    const low = clamp(Math.min(from, to), 0, limit);
+    const high = clamp(Math.max(from, to), 0, limit);
+    if (!(high - low > 0.01)) return [];
+
+    const pointAt = (target: number): [number, number] => {
+        const first = [line[1], line[0]] as [number, number];
+        if (target <= 0) return first;
+        const last = [line[(count - 1) * 2 + 1], line[(count - 1) * 2]] as [number, number];
+        if (target >= total) return last;
+        let a = 0;
+        let b = count - 1;
+        while (a + 1 < b) {
+            const mid = (a + b) >> 1;
+            if (cumulative[mid] <= target) a = mid;
+            else b = mid;
+        }
+        const span = cumulative[b] - cumulative[a];
+        const t = span > 0 ? (target - cumulative[a]) / span : 0;
+        const lat = line[a * 2] + (line[b * 2] - line[a * 2]) * t;
+        const lng = line[a * 2 + 1] + (line[b * 2 + 1] - line[a * 2 + 1]) * t;
+        return [lng, lat];
+    };
+
+    const points: [number, number][] = [pointAt(low)];
+    for (let index = 0; index < count; index += 1) {
+        const distance = cumulative[index];
+        if (distance > low && distance < high) {
+            points.push([line[index * 2 + 1], line[index * 2]]);
+        }
+    }
+    points.push(pointAt(high));
+    return points;
+}
+
+/**
+ * The selected train's uncertainty bracket: the current edge, from the stop it
+ * left to the next stop it has not reached.
+ *
+ * Empty while the train is dwelling — its position *is* the platform, and the
+ * uncertainty is in the departure time, not in space. Empty at a terminal.
+ */
+export function bracketSlice(
+    motion: TrainMotion,
+    geometry: PatternGeometry,
+    at: number
+): [number, number][] {
+    const stops = geometry.stops;
+    if (stops.length < 2 || motion.next.length === 0) return [];
+    if (motion.departAt === null || at <= motion.departAt) return [];
+    const edge = clamp(motion.edge, 0, stops.length - 2);
+    return sliceAlong(geometry, stops[edge].dist, stops[edge + 1].dist);
+}
+
+/**
  * Interpolate a lat/lon along a pattern shape at `sTotal` metres.
  *
  * The shape buffer is lat/lon pairs, but MapLibre wants `[lng, lat]`, so the
