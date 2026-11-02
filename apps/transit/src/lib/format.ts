@@ -45,6 +45,16 @@ export function statusLabel(status: VehicleStatus | null): string {
     }
 }
 
+/**
+ * The status is the feed's last claim; the speed is the model's. They disagree
+ * whenever a train was reported at a platform and has since left it, so say
+ * "departing" rather than "at platform" while it is moving.
+ */
+export function phaseLabel(status: VehicleStatus | null, speed: number): string {
+    if (status === 'STOPPED_AT' && speed > 0.5) return 'departing';
+    return statusLabel(status);
+}
+
 /** "now" / "3 min" / "—" for an absolute unix timestamp. */
 export function formatEta(arrival: number | null, nowSeconds: number = Date.now() / 1000): string {
     if (arrival === null || !Number.isFinite(arrival)) return '—';

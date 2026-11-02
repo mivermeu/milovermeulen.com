@@ -7,6 +7,7 @@ import {
     formatConfidence,
     formatEta,
     formatSpeed,
+    phaseLabel,
     routeSortKey,
     sortRoutes,
     statusLabel
@@ -100,5 +101,13 @@ describe('small formatters', () => {
         expect(formatConfidence(0.945)).toBe('95%');
         expect(formatConfidence(1.4)).toBe('100%');
         expect(formatConfidence(-1)).toBe('0%');
+    });
+});
+
+describe('phaseLabel', () => {
+    test('a stopped report with model speed reads as departing', () => {
+        expect(phaseLabel('STOPPED_AT', 20)).toBe('departing');
+        expect(phaseLabel('STOPPED_AT', 0)).toBe('at platform');
+        expect(phaseLabel('IN_TRANSIT_TO', 20)).toBe('in transit');
     });
 });

@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { formatConfidence, formatEta, formatSpeed, statusLabel } from './format';
+    import { formatConfidence, formatEta, formatSpeed, phaseLabel } from './format';
     import { routeColor } from './palette';
     import type { TrainMotion } from './types';
 
@@ -26,7 +26,7 @@
         <div class="min-w-0 flex-1">
             <p class="truncate text-xs text-brand-text-highlight">{motion.id}</p>
             <p class="text-[10px] text-brand-text">
-                {statusLabel(motion.status)} · {formatSpeed(motion.v)}
+                {phaseLabel(motion.status, motion.v)} · {formatSpeed(motion.v)}
             </p>
         </div>
         <button
