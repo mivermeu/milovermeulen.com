@@ -141,6 +141,8 @@ def test_in_transit_with_an_eta_places_by_remaining_time():
     )["1T 1200"]
     assert "T1N>T2N" in position["edge"]
     assert 80 < position["s"] < 200
+    # The wire speed is metres per second, not the normalised profile value.
+    assert 4 < position["v"] < estimator.MAX_SPEED_MPS
 
 
 def test_next_is_a_future_monotone_timeline():

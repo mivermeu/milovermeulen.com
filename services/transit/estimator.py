@@ -478,8 +478,9 @@ class Estimator:
             first_arrival = eta
         if stamp > depart_at:
             run = max(1.0, first_arrival - depart_at)
-            fraction, speed = profile(stamp - depart_at, run)
+            fraction, normalised = profile(stamp - depart_at, run)
             s = fraction * span
+            speed = normalised * span
         else:
             s = 0.0
             speed = 0.0
