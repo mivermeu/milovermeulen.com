@@ -100,6 +100,10 @@
                 const old = previous.get(id);
                 if (old && old.pattern === motion.pattern && !motion.reset) {
                     motion.sTotal = old.sTotal;
+                } else if (old && old.pattern !== motion.pattern) {
+                    // A short-turn moves the dot into a new coordinate space:
+                    // fade it in rather than carrying the old distance across.
+                    motion.fade = 0;
                 }
             }
             motions = fresh;

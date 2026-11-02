@@ -36,6 +36,12 @@ const BLEND_TAU_S = 0.35;
  */
 const MAX_BLEND_MPS = 240;
 
+/**
+ * Above this the displayed dot is simply in the wrong place (a skipped stop, a
+ * feed gap). Adopt and fade instead of gliding half a kilometre.
+ */
+const HARD_RESET_M = 400;
+
 const DEG = Math.PI / 180;
 
 function clamp(value: number, min: number, max: number): number {
@@ -243,12 +249,13 @@ export function advance(
     const target = timelineAt(motion, geometry, at);
     const terminal = terminalS(geometry);
 
+    const error = target.sTotal - motion.sTotal;
+    const adopt = motion.reset || Math.abs(error) > HARD_RESET_M;
     let sTotal: number;
-    if (motion.reset) {
+    if (adopt) {
         // A genuine re-anchor: adopt it. The renderer fades the marker.
         sTotal = target.sTotal;
     } else {
-        const error = target.sTotal - motion.sTotal;
         const blend = 1 - Math.exp(-dt / BLEND_TAU_S);
         const maxStep = MAX_BLEND_MPS * dt;
         const step = clamp(error * blend, -maxStep, maxStep);
@@ -260,7 +267,7 @@ export function advance(
     const display = locate(geometry, sTotal);
     // A reset marker fades in from transparent over ~0.7 s, so a skipped-stop
     // re-anchor reads as a blink rather than a teleport.
-    const fade = Math.min(1, motion.fade + dt / 0.7);
+    const fade = Math.min(1, (adopt ? 0 : motion.fade) + dt / 0.7);
     // `edge` stays the server's timeline anchor; `s` is the display-local
     // distance and may briefly sit on the neighbouring edge while easing.
     return { ...motion, s: display.s, sTotal, v: target.v, fade };

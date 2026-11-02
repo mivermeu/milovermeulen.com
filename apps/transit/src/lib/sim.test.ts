@@ -44,6 +44,34 @@ function straightGeometry(): PatternGeometry {
     };
 }
 
+/** A 500 m line, long enough to exercise the hard-reset threshold. */
+function longGeometry(): PatternGeometry {
+    const points = 6;
+    const line = new Float32Array(points * 2);
+    const cumulative = new Float32Array(points);
+    for (let i = 0; i < points; i++) {
+        line[i * 2] = latAt(i);
+        line[i * 2 + 1] = lonAt(i);
+        cumulative[i] = i * STEP_M;
+    }
+    return {
+        id: 'pB',
+        route: 'B',
+        dir: 'N',
+        length: 500,
+        stops: [
+            { stop: 'L0', dist: 0 },
+            { stop: 'L1', dist: 100 },
+            { stop: 'L2', dist: 200 },
+            { stop: 'L3', dist: 300 },
+            { stop: 'L4', dist: 400 },
+            { stop: 'L5', dist: 500 }
+        ],
+        line,
+        cumulative
+    };
+}
+
 function train(overrides: Partial<SnapshotTrain> = {}): SnapshotTrain {
     return {
         id: 'T1',
@@ -405,6 +433,30 @@ describe('advance', () => {
         }
         const target = timelineAt(current, geometry, 1030).sTotal;
         expect(state.sTotal).toBeCloseTo(target, 0);
+    });
+
+    test('adopts a hard correction and fades it in', () => {
+        const line = longGeometry();
+        const current = motion({
+            edge: 0,
+            sTotal: 500,
+            departAt: 2000,
+            next: [{ stop: 'L1', arr: 2060, dep: 2070 }]
+        });
+        const next = advance(current, 1 / 60, line, 1000);
+        expect(next.sTotal).toBeCloseTo(timelineAt(current, line, 1000).sTotal, 6);
+        expect(next.fade).toBeLessThan(0.1);
+    });
+
+    test('eases a small correction without a fade', () => {
+        const current = motion({
+            edge: 0,
+            sTotal: 90,
+            departAt: 1000,
+            next: [{ stop: 'S1', arr: 1010, dep: 1015 }]
+        });
+        const next = advance(current, 1 / 60, geometry, 1000);
+        expect(next.fade).toBeGreaterThan(0.9);
     });
 
     test('adopts a reset immediately', () => {
