@@ -53,6 +53,10 @@ MAX_EDGE_S = 1800
 # The hour multiplier is a correction, not a rewrite.
 MIN_FACTOR = 0.85
 MAX_FACTOR = 1.2
+# A learned edge may disagree with the schedule, but not by an implausible
+# factor: quantization noise and skipped samples both widen the tail.
+MIN_SCHEDULE_RATIO = 0.6
+MAX_SCHEDULE_RATIO = 2.5
 
 LOCAL_ZONE = ZoneInfo("America/New_York")
 
@@ -83,14 +87,14 @@ def _stop_indexes(document: dict[str, Any]) -> dict[str, dict[str, int]]:
     }
 
 
-def _scheduled_dwell(document: dict[str, Any], pattern: str, edge: int) -> float:
+def _scheduled_times(document: dict[str, Any], pattern: str, edge: int) -> tuple[float, float]:
     for row in document.get("patterns", []):
         if row["id"] != pattern:
             continue
         times = row.get("edge_times") or []
         if edge < len(times):
-            return float(times[edge][1])
-    return 0.0
+            return float(times[edge][0]), float(times[edge][1])
+    return 0.0, 0.0
 
 
 def collect(
@@ -179,7 +183,13 @@ def fit(
                 row.append([None, len(values)])
                 continue
             median = _median(values)
-            run = max(5.0, median - _scheduled_dwell(document, pattern_id, edge))
+            scheduled_run, scheduled_dwell = _scheduled_times(document, pattern_id, edge)
+            run = max(5.0, median - scheduled_dwell)
+            if scheduled_run > 0:
+                run = min(
+                    max(run, MIN_SCHEDULE_RATIO * scheduled_run),
+                    MAX_SCHEDULE_RATIO * scheduled_run,
+                )
             row.append([round(run, 1), len(values)])
             for capture, value in zip(times, values, strict=False):
                 local = datetime.fromtimestamp(capture, LOCAL_ZONE)

@@ -17,6 +17,9 @@ WorkingDirectory=/opt/milovermeulen
 ExecStart=/usr/bin/python3.12 -m services.transit.poller
 Environment=TRANSIT_DATA_DIR=/var/lib/transit-archive
 Environment=TRANSIT_WWW_DIR=/var/www/transit-api
+# Two samples per poll: the learner's arrival-to-arrival intervals are quantised
+# by this, and a 60 s sample is the same size as the median edge.
+Environment=TRANSIT_SERIES_EVERY=1
 # ProtectSystem=strict leaves the install read-only; be explicit about bytecode.
 Environment=PYTHONDONTWRITEBYTECODE=1
 Restart=always
