@@ -120,7 +120,8 @@
                         reset: false,
                         confidence: 0,
                         positioned: true,
-                        queued: true
+                        queued: true,
+                        opacity: 1
                     }
                 ];
             });
@@ -160,7 +161,8 @@
                     reset: next.reset,
                     confidence: next.confidence,
                     positioned: true,
-                    selected: id === selectedId
+                    selected: id === selectedId,
+                    opacity: next.fade
                 });
             }
 

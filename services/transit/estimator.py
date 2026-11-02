@@ -500,7 +500,10 @@ class Estimator:
                 self.patterns[previous.pattern]["stops"][old_edge][1] + old_s
             )
             elapsed = max(stamp - previous.last_seen, 0.0)
-            if abs(s_total - old_total) > RESET_M + MAX_SPEED_MPS * elapsed:
+            # A jump larger than a train could physically cover is a skipped
+            # stop or a re-route, not motion to glide through: adopt it and let
+            # the client fade the marker.
+            if abs(s_total - old_total) > max(RESET_M, MAX_SPEED_MPS * elapsed):
                 reset = True
                 confidence *= 0.5
 

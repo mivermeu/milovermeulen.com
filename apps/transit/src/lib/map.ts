@@ -28,6 +28,7 @@ export type TrainProperties = {
     positioned: boolean;
     selected: boolean;
     queued: boolean;
+    opacity: number;
 };
 
 const NETWORK_SOURCE = 'network';
@@ -194,10 +195,11 @@ export function installLayers(
         paint: {
             'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 3, 12, 4, 15, 5],
             'circle-color': ['get', 'color'],
-            'circle-opacity': ['case', ['get', 'reset'], 0.3, ['get', 'stale'], 0.55, 1],
+            // `opacity` carries the reset fade-in; `stale` dims persistently.
+            'circle-opacity': ['*', ['get', 'opacity'], ['case', ['get', 'stale'], 0.55, 1]],
             'circle-stroke-color': '#0f172a',
-            'circle-stroke-width': ['case', ['get', 'reset'], 0, 1],
-            'circle-stroke-opacity': ['case', ['get', 'reset'], 0, ['get', 'stale'], 0.5, 1]
+            'circle-stroke-width': 1,
+            'circle-stroke-opacity': ['*', ['get', 'opacity'], ['case', ['get', 'stale'], 0.5, 1]]
         }
     });
 
@@ -251,12 +253,9 @@ export function applyRouteFilter(map: maplibregl.Map, routes: string[]): void {
         active ? ['case', matches, 0.9, 0.08] : 0.9
     );
     const visibility: maplibregl.ExpressionSpecification = [
-        'case',
-        ['get', 'reset'],
-        0.3,
-        ['get', 'stale'],
-        0.55,
-        1
+        '*',
+        ['get', 'opacity'],
+        ['case', ['get', 'stale'], 0.55, 1]
     ];
     map.setPaintProperty(
         TRAINS_LAYER,
@@ -304,7 +303,8 @@ export function trainGeoJSON(
                 confidence: train.confidence,
                 positioned: train.positioned,
                 selected: train.selected === true,
-                queued: train.queued === true
+                queued: train.queued === true,
+                opacity: train.opacity ?? 1
             }
         }))
     };

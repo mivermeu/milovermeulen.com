@@ -27,14 +27,14 @@ const ACCEL_FRACTION = 0.18;
  * Time constant for blending a corrected timeline back onto the displayed dot.
  * Small enough to hide a correction, large enough not to look like a cut.
  */
-const BLEND_TAU_S = 0.45;
+const BLEND_TAU_S = 0.35;
 
 /**
  * Corrections are motion too: never move the dot faster than this to absorb one.
  * It is above any train speed on purpose — the cap exists to bound visual jumps,
  * not to model traction.
  */
-const MAX_BLEND_MPS = 80;
+const MAX_BLEND_MPS = 240;
 
 const DEG = Math.PI / 180;
 
@@ -147,6 +147,7 @@ export function fromSnapshot(
             departAt,
             sigma:
                 typeof train.sigma === 'number' && Number.isFinite(train.sigma) ? train.sigma : 0,
+            fade: train.reset === true ? 0 : 1,
             observedAt
         });
     }
@@ -257,9 +258,12 @@ export function advance(
     if (!Number.isFinite(sTotal)) sTotal = target.sTotal;
     sTotal = clamp(sTotal, 0, terminal);
     const display = locate(geometry, sTotal);
+    // A reset marker fades in from transparent over ~0.7 s, so a skipped-stop
+    // re-anchor reads as a blink rather than a teleport.
+    const fade = Math.min(1, motion.fade + dt / 0.7);
     // `edge` stays the server's timeline anchor; `s` is the display-local
     // distance and may briefly sit on the neighbouring edge while easing.
-    return { ...motion, s: display.s, sTotal, v: target.v };
+    return { ...motion, s: display.s, sTotal, v: target.v, fade };
 }
 
 /**

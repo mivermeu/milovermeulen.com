@@ -177,6 +177,8 @@ export interface TrainMotion {
     departAt: number | null;
     /** Metres of one-sigma position uncertainty. */
     sigma: number;
+    /** Render opacity, ramped from 0 after a reset. */
+    fade: number;
     /** Snapshot time this motion was derived from. */
     observedAt: number;
 }
@@ -197,4 +199,6 @@ export interface TrainPosition {
     selected?: boolean;
     /** Waiting at its origin; drawn as a hollow marker. */
     queued?: boolean;
+    /** Render opacity, 0..1. Defaults to 1 when absent. */
+    opacity?: number;
 }
