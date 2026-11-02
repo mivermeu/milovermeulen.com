@@ -231,7 +231,7 @@ export function installLayers(
             'circle-color': 'transparent',
             'circle-stroke-color': '#ffffff',
             'circle-stroke-width': 2,
-            'circle-stroke-opacity': 0.9
+            'circle-stroke-opacity': ['*', ['get', 'opacity'], 0.9]
         }
     });
 }
