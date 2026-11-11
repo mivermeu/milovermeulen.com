@@ -1,17 +1,24 @@
 <script lang="ts">
+    import ProgressChart from './ProgressChart.svelte';
     import { formatConfidence, formatEta, formatSpeed, phaseLabel } from './format';
     import { routeColor } from './palette';
-    import type { TrainMotion } from './types';
+    import type { PatternGeometry, PatternHistory, TrainMotion } from './types';
 
     interface Props {
         motion: TrainMotion;
         /** Seconds until the model expects the train to leave its platform. */
         departIn: number;
+        history: PatternHistory | null;
+        geometry: PatternGeometry | null;
+        /** Server time used to evaluate the projection. */
+        now: number;
+        /** The selected train's own recent positions. */
+        past: { t: number; s: number; v: number }[];
         stopName: (stop: string | null) => string;
         onclose: () => void;
     }
 
-    let { motion, departIn, stopName, onclose }: Props = $props();
+    let { motion, departIn, history, geometry, now, past, stopName, onclose }: Props = $props();
 </script>
 
 <aside
@@ -65,6 +72,10 @@
         </ol>
     {:else}
         <p class="mt-3 text-[11px] text-brand-text">No upcoming stops in the feed.</p>
+    {/if}
+
+    {#if geometry}
+        <ProgressChart {motion} {geometry} {history} {now} {past} />
     {/if}
 
     <footer

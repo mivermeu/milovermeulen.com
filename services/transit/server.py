@@ -28,7 +28,8 @@ STALE_AFTER_S = int(os.environ.get("TRANSIT_STALE_AFTER", "120"))
 # Content-addressed artifacts only. Anything else in the directory stays private,
 # and the pattern is also what keeps path traversal out.
 _STATIC_NAME = re.compile(
-    r"^(graph\.json|audit\.json|graph-[0-9a-f]{12}\.json|shapes-[0-9a-f]{12}\.bin)$"
+    r"^(graph\.json|audit\.json|graph-[0-9a-f]{12}\.json|shapes-[0-9a-f]{12}\.bin"
+    r"|history-[0-9a-f]{12}-[A-Za-z0-9-]+\.json)$"
 )
 
 

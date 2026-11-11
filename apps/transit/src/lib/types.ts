@@ -67,6 +67,28 @@ export interface TransitAlert {
     stops: string[];
 }
 
+/** One recent run of a pattern, resampled onto a fixed grid. */
+export interface HistoryRun {
+    /** Unix start of the run. */
+    start: number;
+    /** Local hour in New York at the start. */
+    h: number;
+    /** 0 = weekday, 1 = weekend. */
+    w: 0 | 1;
+    /** Seconds between samples. */
+    dt: number;
+    /** Distance along the pattern in metres at each sample. */
+    s: number[];
+}
+
+export interface PatternHistory {
+    v: number;
+    pattern: string;
+    graph?: string;
+    built_at?: number;
+    runs: HistoryRun[];
+}
+
 export interface Snapshot {
     v: number;
     generated_at: number;

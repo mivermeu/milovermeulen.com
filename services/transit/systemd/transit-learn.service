@@ -16,3 +16,5 @@ Environment=TRANSIT_DATA_DIR=/var/lib/transit-archive
 Environment=TRANSIT_WWW_DIR=/var/www/transit-api
 Environment=PYTHONDONTWRITEBYTECODE=1
 ExecStart=/usr/bin/python3.12 -m services.transit.learn --days 14
+# Trajectory history for the inspector chart, keyed to the same graph hash.
+ExecStart=/usr/bin/python3.12 -m services.transit.history --days 21

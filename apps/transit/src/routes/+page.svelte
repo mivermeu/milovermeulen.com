@@ -5,7 +5,7 @@
     import FeedHealth from '$lib/FeedHealth.svelte';
     import Inspector from '$lib/Inspector.svelte';
     import RouteFilter from '$lib/RouteFilter.svelte';
-    import { fetchSnapshot, loadTransitData, type TransitData } from '$lib/data';
+    import { fetchHistory, fetchSnapshot, loadTransitData, type TransitData } from '$lib/data';
     import { sortRoutes } from '$lib/format';
     import {
         applyRouteFilter,
@@ -17,7 +17,13 @@
     } from '$lib/map';
     import { routeColor } from '$lib/palette';
     import { advance, bracketSlice, fromSnapshot, positionAt } from '$lib/sim';
-    import type { FeedHealth as FeedHealthData, TrainMotion, TrainPosition } from '$lib/types';
+    import type {
+        FeedHealth as FeedHealthData,
+        PatternGeometry,
+        PatternHistory,
+        TrainMotion,
+        TrainPosition
+    } from '$lib/types';
 
     let container: HTMLDivElement;
     let status = $state<'loading' | 'ready' | 'error'>('loading');
@@ -33,6 +39,11 @@
     let selectedId = $state<string | null>(null);
     let selectedMotion = $state<TrainMotion | null>(null);
     let selectedDepartIn = $state(0);
+    let selectedGeometry = $state<PatternGeometry | null>(null);
+    let selectedNow = $state(0);
+    let selectedPast = $state<{ t: number; s: number; v: number }[]>([]);
+    let history = $state<PatternHistory | null>(null);
+    let historyPattern = '';
 
     // Stop ids are platform ids (`G29S`); the graph carries names and coordinates.
     const platformNames: Record<string, string> = {};
@@ -46,15 +57,29 @@
     // Set inside onMount; the handlers below run after the map exists.
     let lookup = (_id: string): TrainMotion | null => null;
     let applyFilter = (_routes: string[]): void => {};
+    let loadHistoryFor = (_pattern: string): void => {};
 
     function selectTrain(id: string) {
+        const motion = lookup(id);
         selectedId = id;
-        selectedMotion = lookup(id);
+        selectedMotion = motion;
+        selectedNow = motion?.observedAt ?? 0;
+        selectedPast = [];
+        selectedGeometry = null;
+        history = null;
+        historyPattern = '';
+        if (motion) loadHistoryFor(motion.pattern);
     }
 
     function clearSelection() {
         selectedId = null;
         selectedMotion = null;
+        selectedDepartIn = 0;
+        selectedGeometry = null;
+        selectedNow = 0;
+        selectedPast = [];
+        history = null;
+        historyPattern = '';
     }
 
     function toggleRoute(route: string) {
@@ -86,10 +111,33 @@
         // monotonic clock. Timeline evaluation never depends on device time.
         let serverAnchor = 0;
         let clockAnchor = performance.now();
+        // Cached per pattern; not reactive because only the chart reads it.
+        // eslint-disable-next-line svelte/prefer-svelte-reactivity
+        const historyCache = new Map<string, PatternHistory | null>();
+        let historyToken = 0;
+        let lastChart = 0;
+        let lastPast = 0;
 
         lookup = (id) => motions.get(id) ?? null;
         applyFilter = (routes) => {
             if (map) applyRouteFilter(map, routes);
+        };
+
+        const loadHistory = async (pattern: string) => {
+            if (!data) return;
+            const token = ++historyToken;
+            if (historyCache.has(pattern)) {
+                if (token === historyToken) history = historyCache.get(pattern) ?? null;
+                return;
+            }
+            const result = await fetchHistory(data.manifest.hash, pattern);
+            historyCache.set(pattern, result);
+            if (token !== historyToken || selectedId === null) return;
+            const motion = motions.get(selectedId);
+            if (motion?.pattern === pattern) history = result;
+        };
+        loadHistoryFor = (pattern) => {
+            void loadHistory(pattern);
         };
 
         const adopt = (snapshot: TransitData['snapshot']) => {
@@ -184,6 +232,30 @@
                     selectedMotion = motion;
                     selectedDepartIn =
                         motion && motion.departAt ? Math.max(0, motion.departAt - at) : 0;
+                    if (motion) {
+                        if (motion.pattern !== historyPattern) {
+                            historyPattern = motion.pattern;
+                            history = null;
+                            selectedPast = [];
+                            lastPast = 0;
+                            void loadHistory(motion.pattern);
+                        }
+                        selectedGeometry = data.geometries.get(motion.pattern) ?? null;
+                        if (now - lastChart >= 500) {
+                            selectedNow = at;
+                            lastChart = now;
+                        }
+                        if (at - lastPast >= 5) {
+                            selectedPast = [
+                                ...selectedPast,
+                                { t: at, s: motion.sTotal, v: motion.v }
+                            ].slice(-120);
+                            lastPast = at;
+                        }
+                    } else {
+                        selectedGeometry = null;
+                        selectedNow = 0;
+                    }
                     const geometry = motion ? data.geometries.get(motion.pattern) : null;
                     const coordinates =
                         motion && geometry ? bracketSlice(motion, geometry, at) : [];
@@ -218,7 +290,12 @@
             adopt(fresh.snapshot);
             if (map) {
                 applyRouteFilter(map, activeRoutes);
-                if (rolled) updateNetwork(map, fresh.graph, fresh.geometries);
+                if (rolled) {
+                    updateNetwork(map, fresh.graph, fresh.geometries);
+                    historyCache.clear();
+                    history = null;
+                    historyPattern = '';
+                }
             }
         };
 
@@ -369,6 +446,10 @@
             <Inspector
                 motion={selectedMotion}
                 departIn={selectedDepartIn}
+                {history}
+                geometry={selectedGeometry}
+                now={selectedNow || selectedMotion.observedAt}
+                past={selectedPast}
                 {stopName}
                 onclose={clearSelection}
             />

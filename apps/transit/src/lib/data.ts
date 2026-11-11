@@ -6,7 +6,7 @@
  * arrays) so it can run under `bun test`.
  */
 
-import type { Graph, GraphManifest, PatternGeometry, Snapshot } from './types';
+import type { Graph, GraphManifest, PatternGeometry, PatternHistory, Snapshot } from './types';
 
 const DEFAULT_API_BASE = 'https://thehuis.tail4fbfb1.ts.net/transit';
 
@@ -88,6 +88,25 @@ export async function fetchSnapshot(
     signal?: AbortSignal
 ): Promise<Snapshot> {
     return getJson<Snapshot>(endpoint(base, 'snapshot.json'), signal);
+}
+
+/**
+ * Fetch one pattern's recent trajectory history, or null when the current graph
+ * has no history artifact (old graph, or the exporter has not run yet).
+ */
+export async function fetchHistory(
+    hash: string,
+    pattern: string,
+    base: string = API_BASE,
+    signal?: AbortSignal
+): Promise<PatternHistory | null> {
+    try {
+        const response = await fetch(endpoint(base, `history-${hash}-${pattern}.json`), { signal });
+        if (!response.ok) return null;
+        return (await response.json()) as PatternHistory;
+    } catch {
+        return null;
+    }
 }
 
 /**
