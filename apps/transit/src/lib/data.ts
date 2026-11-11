@@ -101,7 +101,11 @@ export async function fetchHistory(
     signal?: AbortSignal
 ): Promise<PatternHistory | null> {
     try {
-        const response = await fetch(endpoint(base, `history-${hash}-${pattern}.json`), { signal });
+        // Must match services/transit/history.py SCHEMA_VERSION: changed payload
+        // shapes need a new URL or the immutable cache serves the old band.
+        const response = await fetch(endpoint(base, `history-v2-${hash}-${pattern}.json`), {
+            signal
+        });
         if (!response.ok) return null;
         return (await response.json()) as PatternHistory;
     } catch {

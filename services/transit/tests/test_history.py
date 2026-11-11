@@ -81,14 +81,14 @@ def test_build_reads_rows_and_caps(monkeypatch):
 
 
 def test_write_is_content_addressed_and_prunes_old_hashes(tmp_path):
-    (tmp_path / "history-old-aaaaaaaaaaaa-P-abc.json").write_text("{}")
+    (tmp_path / "history-v1-old-aaaaaaaaaaaa-P-abc.json").write_text("{}")
     documents = {
         "P-abc": {"v": 1, "pattern": "P-abc", "graph": "new", "runs": []},
         "P-def": {"v": 1, "pattern": "P-def", "graph": "new", "runs": []},
     }
     written = history.write_artifacts(documents, tmp_path, "new")
     assert written == 2
-    assert (tmp_path / "history-new-P-abc.json").exists()
-    assert (tmp_path / "history-new-P-def.json").exists()
-    assert not (tmp_path / "history-old-aaaaaaaaaaaa-P-abc.json").exists()
-    assert json.loads((tmp_path / "history-new-P-abc.json").read_text())["pattern"] == "P-abc"
+    assert (tmp_path / "history-v2-new-P-abc.json").exists()
+    assert (tmp_path / "history-v2-new-P-def.json").exists()
+    assert not (tmp_path / "history-v1-old-aaaaaaaaaaaa-P-abc.json").exists()
+    assert json.loads((tmp_path / "history-v2-new-P-abc.json").read_text())["pattern"] == "P-abc"

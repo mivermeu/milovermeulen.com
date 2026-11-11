@@ -100,7 +100,7 @@ def test_serves_graph_manifest_and_artifacts(tmp_path):
     (tmp_path / "graph.json").write_text(json.dumps({"hash": "abcdefabcdef"}))
     (tmp_path / "graph-abcdefabcdef.json").write_text("{}")
     (tmp_path / "shapes-abcdefabcdef.bin").write_bytes(b"\x00" * 8)
-    (tmp_path / "history-abcdefabcdef-L-7f681a06faba.json").write_text("{}")
+    (tmp_path / "history-v2-abcdefabcdef-L-7f681a06faba.json").write_text("{}")
 
     with running_server(tmp_path) as base:
         with urllib.request.urlopen(f"{base}/graph.json") as resp:
@@ -112,7 +112,7 @@ def test_serves_graph_manifest_and_artifacts(tmp_path):
         with urllib.request.urlopen(f"{base}/shapes-abcdefabcdef.bin") as resp:
             assert resp.headers["Content-Type"] == "application/octet-stream"
             assert resp.read() == b"\x00" * 8
-        with urllib.request.urlopen(f"{base}/history-abcdefabcdef-L-7f681a06faba.json") as resp:
+        with urllib.request.urlopen(f"{base}/history-v2-abcdefabcdef-L-7f681a06faba.json") as resp:
             assert resp.status == 200
             assert "immutable" in resp.headers["Cache-Control"]
 

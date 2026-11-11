@@ -344,7 +344,7 @@ The inspector compares one train with how trains on the same pattern actually ra
 too coarse for that, so `history.py` exports whole runs:
 
 ```bash
-python3.12 -m services.transit.history --days 21   # history-<graph>-<pattern>.json
+python3.12 -m services.transit.history --days 21   # history-v2-<graph>-<pattern>.json
 ```
 
 It streams the series tier, collapses each train into a run (split on a new `trip_id`, a pattern

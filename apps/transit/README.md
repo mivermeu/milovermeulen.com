@@ -70,7 +70,7 @@ against time, with the observed past (up to 5 minutes), the projected next 15 mi
 band from recent runs of the same pattern. The band is aligned at the train's current distance and
 filtered to the same day type and a similar hour, so it answers "trains that were here at this time
 usually took 4-6 minutes to the next stop". History is fetched lazily from
-`history-<graph>-<pattern>.json` and cached per pattern; when the file is absent the chart still
+`history-v2-<graph>-<pattern>.json` and cached per pattern; when the file is absent the chart still
 shows the projection.
 
 ## Tests

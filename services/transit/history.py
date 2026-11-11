@@ -8,7 +8,7 @@ train's current position.
 So this streams the series tier, collapses each train into a run, resamples it
 onto a 30 s grid, and writes one small file per pattern:
 
-    history-<graph>-<pattern>.json
+    history-v2-<graph>-<pattern>.json
     {"v":1,"pattern":"L-...","runs":[{"start":…,"h":14,"w":0,"dt":30,"s":[…]}]}
 
 The client fetches only the selected train's pattern, filters runs by
@@ -34,7 +34,7 @@ from . import learn
 
 log = logging.getLogger("transit.history")
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 DEFAULT_DAYS = 21
 SAMPLE_DT = 30
 # A run shorter than this says nothing about progression.
@@ -284,16 +284,16 @@ def write_artifacts(
     www_dir.mkdir(parents=True, exist_ok=True)
     written = 0
     for pattern, document in documents.items():
-        path = www_dir / f"history-{graph_hash}-{pattern}.json"
+        path = www_dir / f"history-v{SCHEMA_VERSION}-{graph_hash}-{pattern}.json"
         payload = json.dumps(document, separators=(",", ":")).encode("utf-8")
         temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
         temporary.write_bytes(payload)
         os.replace(temporary, path)
         written += 1
-    # History is derived and only the current graph's files are useful.
-    keep = f"-{graph_hash}-"
+    # History is derived; only the current schema and graph are useful.
+    keep = f"history-v{SCHEMA_VERSION}-{graph_hash}-"
     for stale in www_dir.glob("history-*.json"):
-        if keep not in stale.name:
+        if not stale.name.startswith(keep):
             stale.unlink(missing_ok=True)
     return written
 
