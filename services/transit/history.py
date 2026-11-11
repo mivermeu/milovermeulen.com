@@ -43,8 +43,9 @@ MIN_DURATION_S = 300
 MIN_SPAN_M = 600
 # A gap longer than this is a new run, not the same train.
 GAP_S = 300
-# A backwards jump larger than this is a reversal or a new trip.
-REVERSAL_M = 200
+# A backwards jump larger than this is a reversal or a new trip. Smaller
+# corrections are position noise and must not split a run.
+REVERSAL_M = 1500
 # Enough to fill a band without shipping every run ever seen.
 MAX_RUNS = 40
 LOCAL_ZONE = ZoneInfo("America/New_York")
@@ -101,12 +102,14 @@ def runs_from_rows(rows: Iterator[dict[str, Any]]) -> list[dict[str, Any]]:
 
     for row in rows:
         if row.get("pre") or row.get("pattern") is None or row.get("s") is None:
-            flush(row.get("id"))
+            # A missing position in the middle of a trip is an observation gap,
+            # not a trip boundary; the gap check below closes it if it persists.
             continue
         train = row.get("id")
         if not train:
             continue
         pattern = row["pattern"]
+        trip = row.get("trip")
         stamp = row.get("t")
         distance = row.get("s")
         if not isinstance(stamp, int) or not isinstance(distance, (int, float)):
@@ -116,12 +119,18 @@ def runs_from_rows(rows: Iterator[dict[str, Any]]) -> list[dict[str, Any]]:
         if (
             state is None
             or state["pattern"] != pattern
+            or (
+                trip is not None
+                and state["trip"] is not None
+                and trip != state["trip"]
+            )
             or stamp - state["last"] > GAP_S
             or distance < state["last_s"] - REVERSAL_M
         ):
             flush(train)
             active[train] = {
                 "pattern": pattern,
+                "trip": trip,
                 "points": [(stamp, float(distance))],
                 "last": stamp,
                 "last_s": float(distance),

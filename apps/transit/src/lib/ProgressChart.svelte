@@ -124,6 +124,11 @@
         <text x={LEFT - 2} y={DIST_BOTTOM} text-anchor="end" font-size="7" fill="#64748b"
             >{km(chart.minDs)}</text
         >
+        {#if Math.abs(chart.minDs) > 120 && Math.abs(chart.maxDs) > 120}
+            <text x={LEFT - 2} y={yDist(0) + 2.5} text-anchor="end" font-size="7" fill="#64748b"
+                >0</text
+            >
+        {/if}
         <line
             x1={LEFT}
             y1={yDist(0)}
@@ -134,7 +139,21 @@
         />
 
         {#if chart.hasHistory}
-            <path d={bandPath(distHigh, distLow)} fill={color} fill-opacity="0.14" />
+            <path d={bandPath(distHigh, distLow)} fill={color} fill-opacity="0.18" />
+            <path
+                d={linePath(distHigh)}
+                fill="none"
+                stroke={color}
+                stroke-opacity="0.25"
+                stroke-width="0.7"
+            />
+            <path
+                d={linePath(distLow)}
+                fill="none"
+                stroke={color}
+                stroke-opacity="0.25"
+                stroke-width="0.7"
+            />
             <path
                 d={linePath(distMedian)}
                 fill="none"
@@ -178,7 +197,7 @@
         >
 
         {#if chart.hasHistory}
-            <path d={bandPath(velHigh, velLow)} fill={color} fill-opacity="0.14" />
+            <path d={bandPath(velHigh, velLow)} fill={color} fill-opacity="0.16" />
             <path
                 d={linePath(velMedian)}
                 fill="none"

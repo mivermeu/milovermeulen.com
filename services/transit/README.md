@@ -338,6 +338,26 @@ The hour multiplier needs at least 20 samples per bucket. At 60 s sampling its r
 1.0 and it is inert; at 30 s it becomes informative after a few weeks. Until then the static
 schedule already carries most time-of-day variation.
 
+### Trajectory history
+
+The inspector compares one train with how trains on the same pattern actually ran. Edge medians are
+too coarse for that, so `history.py` exports whole runs:
+
+```bash
+python3.12 -m services.transit.history --days 21   # history-<graph>-<pattern>.json
+```
+
+It streams the series tier, collapses each train into a run (split on a new `trip_id`, a pattern
+change, a gap over 5 minutes, or a backwards jump over 1.5 km), resamples onto a 30 s grid, and
+keeps the 40 most recent runs per pattern with their local hour and weekday/weekend flag. The files
+are content-addressed by the graph hash, served immutable, and old hashes are pruned. Runs shorter
+than 5 minutes or 600 m are dropped; a missing position in the middle of a trip is treated as an
+observation gap, not a trip boundary.
+
+The client fetches only the selected train's pattern, filters runs to the same day type and ±2
+hours, and aligns each at the train's current distance. The chart shows the p10-p90 band around the
+projection; when fewer than five runs cover the current position, it draws the projection alone.
+
 ### What the result looks like
 
 Measured against the live service (2026-11-01):

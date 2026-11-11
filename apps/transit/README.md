@@ -65,6 +65,14 @@ reached. While the train is dwelling the bracket is empty, because its position 
 inspector shows `departs in ~Ns` instead. `sigma` (metres) is the numeric estimate and is shown in
 the inspector, not as a halo.
 
+The details pane also carries a **progress chart** for the selected train: distance and speed
+against time, with the observed past (up to 5 minutes), the projected next 15 minutes, and a p10-p90
+band from recent runs of the same pattern. The band is aligned at the train's current distance and
+filtered to the same day type and a similar hour, so it answers "trains that were here at this time
+usually took 4-6 minutes to the next stop". History is fetched lazily from
+`history-<graph>-<pattern>.json` and cached per pattern; when the file is absent the chart still
+shows the projection.
+
 ## Tests
 
 `bun test` covers the data contract, the sim/projection maths, the GeoJSON builders, the route

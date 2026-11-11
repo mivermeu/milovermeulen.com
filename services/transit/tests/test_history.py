@@ -7,8 +7,15 @@ import json
 from .. import history
 
 
-def row(t: int, s: float, train: str = "A", pattern: str = "P-abc", pre: bool = False) -> dict:
-    return {"t": t, "id": train, "pattern": pattern, "s": s, "pre": pre}
+def row(
+    t: int,
+    s: float,
+    train: str = "A",
+    pattern: str = "P-abc",
+    pre: bool = False,
+    trip: str | None = None,
+) -> dict:
+    return {"t": t, "id": train, "pattern": pattern, "s": s, "pre": pre, "trip": trip}
 
 
 def leg(train: str = "A", start: int = 1_000_000, steps: int = 40, pattern: str = "P-abc"):
@@ -32,9 +39,16 @@ def test_a_gap_starts_a_new_run():
 
 
 def test_a_reversal_starts_a_new_run():
-    # A new trip on the same pattern restarts at the first stop.
-    rows = leg(steps=20) + [row(1_000_000 + 600 + i * 30, i * 40.0) for i in range(20)]
-    assert len(history.runs_from_rows(iter(rows))) == 2
+    # A restart at the origin, far enough back to be unambiguous.
+    first = [row(1_000_000 + i * 30, i * 40.0) for i in range(80)]
+    second = [row(1_000_000 + 2400 + i * 30, i * 40.0) for i in range(20)]
+    assert len(history.runs_from_rows(iter(first + second))) == 2
+
+
+def test_a_new_trip_id_starts_a_new_run():
+    first = [row(1_000_000 + i * 30, i * 40.0, trip="t1") for i in range(20)]
+    second = [row(1_000_000 + 600 + i * 30, i * 40.0, trip="t2") for i in range(20)]
+    assert len(history.runs_from_rows(iter(first + second))) == 2
 
 
 def test_short_or_static_runs_are_dropped():
