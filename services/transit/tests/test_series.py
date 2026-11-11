@@ -124,7 +124,7 @@ def test_both_horizons_are_six():
     from .. import snapshot
 
     assert series.NEXT_STOPS == 6
-    assert snapshot.MAX_NEXT_STOPS == 6
+    assert snapshot.MAX_NEXT_STOPS == 12
 
 
 def test_duplicate_train_ids_across_feeds_keep_the_first_row():

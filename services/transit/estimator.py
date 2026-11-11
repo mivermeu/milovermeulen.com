@@ -50,8 +50,12 @@ MAX_EDGE_S = 1800.0
 # Fraction of an edge spent accelerating, and the same braking. The trapezoid
 # peaks at ``span / (run * (1 - accel))``, so 0.18 gives a 1.22x cruise.
 ACCEL_FRACTION = 0.18
-# Future stops shipped for the client's timeline.
-PLAN_STOPS = 6
+# Future stops shipped for the client's timeline. The chart's 15-minute
+# horizon needs more than six stops on a slow local.
+PLAN_STOPS = 12
+# Recent positions carried in the snapshot, so the chart's observed line does
+# not start when the pane opens. 30 s apart: six minutes of history.
+PATH_POINTS = 12
 LOCAL_ZONE = ZoneInfo("America/New_York")
 
 
@@ -68,6 +72,7 @@ class Position:
     depart_at: float | None
     sigma: float
     next_stops: list[dict[str, Any]]
+    path: list[list[float]]
 
 
 @dataclass(slots=True)
@@ -81,6 +86,7 @@ class TrainState:
     confidence: float
     trip_id: str | None = None
     status: int | None = None
+    path: list[tuple[int, float, float]] = field(default_factory=list)
 
 
 def profile(elapsed: float, run: float) -> tuple[float, float]:
@@ -432,6 +438,7 @@ class Estimator:
                     "depart_at": int(position.depart_at) if position.depart_at else None,
                     "sigma": round(position.sigma, 0),
                     "next": position.next_stops,
+                    "path": position.path,
                 }
 
         for key in list(self.states):
@@ -514,6 +521,10 @@ class Estimator:
         )
         confidence = min(max(confidence, 0.0), 1.0)
 
+        path = list(previous.path) if previous is not None else []
+        path.append((int(stamp), s_total, speed))
+        path = path[-PATH_POINTS:]
+
         self.states[key] = TrainState(
             key=key,
             pattern=pattern_id,
@@ -524,6 +535,7 @@ class Estimator:
             confidence=confidence,
             trip_id=update.trip.trip_id,
             status=vehicle.current_status,
+            path=path,
         )
         edge_id, local = self._locate(pattern_id, min(s_total, length))
         return Position(
@@ -538,4 +550,5 @@ class Estimator:
             depart_at=depart_at,
             sigma=sigma,
             next_stops=self._plan(update, pattern_id, edge, depart_at, stamp, first_arrival),
+            path=[[time, distance, speed] for time, distance, speed in path],
         )

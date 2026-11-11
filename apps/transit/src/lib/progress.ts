@@ -47,11 +47,20 @@ export interface ChartStop {
     stop: string;
 }
 
+/** Where comparable trains could be at a platform, from earliest arrival to latest departure. */
+export interface ChartStation {
+    ds: number;
+    xLow: number;
+    xMedian: number;
+    xHigh: number;
+}
+
 export interface ProgressChartData {
     past: ChartPoint[];
     projection: ChartPoint[];
     band: ChartBandPoint[];
     stops: ChartStop[];
+    stations: ChartStation[];
     minDs: number;
     maxDs: number;
     velMax: number;
@@ -113,8 +122,9 @@ function buildEdgeBand(
     edges: (number[] | null)[],
     dwells: number[],
     now: number
-): ChartBandPoint[] {
+): { band: ChartBandPoint[]; stations: ChartStation[] } {
     const stops = geometry.stops;
+    const stations: ChartStation[] = [];
     const startEdge = Math.min(Math.max(motion.edge, 0), Math.max(0, stops.length - 2));
     // Negative while dwelling: the time still to wait at the platform.
     const phase = motion.departAt !== null ? now - motion.departAt : 0;
@@ -132,11 +142,14 @@ function buildEdgeBand(
     for (let index = startEdge + 1; index < stops.length && index <= startEdge + 12; index += 1) {
         const row = edges[index - 1];
         if (!row || row.length < 3) break;
+        const arrivals: number[] = [];
+        const departures: number[] = [];
         for (let quantile = 0; quantile < 3; quantile += 1) {
             const total = row[quantile];
             const remaining =
                 index === startEdge + 1 && phase >= 0 ? Math.max(0, total - phase) : total;
             cursors[quantile] += remaining;
+            arrivals.push(cursors[quantile]);
             arrivalTimes[quantile].push(cursors[quantile]);
             distances[quantile].push(stops[index].dist);
             const dwell = dwells[index] ?? 0;
@@ -145,9 +158,16 @@ function buildEdgeBand(
                 arrivalTimes[quantile].push(cursors[quantile]);
                 distances[quantile].push(stops[index].dist);
             }
+            departures.push(cursors[quantile]);
         }
+        stations.push({
+            ds: stops[index].dist - base,
+            xLow: Math.min(arrivals[0], arrivals[2]) - now,
+            xMedian: arrivals[1] - now,
+            xHigh: Math.max(departures[0], departures[2]) - now
+        });
     }
-    if (arrivalTimes[0].length === 0) return [];
+    if (arrivalTimes[0].length === 0) return { band: [], stations: [] };
 
     const band: ChartBandPoint[] = [];
     for (let x = 0; x <= HORIZON_S; x += STEP_S) {
@@ -175,7 +195,7 @@ function buildEdgeBand(
             vHigh: Math.max(speed[0], speed[2])
         });
     }
-    return band;
+    return { band, stations };
 }
 
 function samplePast(
@@ -218,13 +238,25 @@ export function buildProgressChart(
         const sample = timelineAt(motion, geometry, now + x);
         // At x = 0 the chart starts at the dot the user can see, not at the
         // timeline's unfiltered value; they differ by the current easing error.
-        projection.push({ x, ds: x === 0 ? 0 : sample.sTotal - base, v: sample.v });
+        // At "now" the speed must describe the dot, not the unfiltered
+        // timeline; the dot may be easing and the panel would disagree.
+        projection.push({
+            x,
+            ds: x === 0 ? 0 : sample.sTotal - base,
+            v: x === 0 ? motion.v : sample.v
+        });
     }
 
     const weekend = newYorkClock(now).weekend;
     const table =
         (weekend ? history?.edges?.weekend : history?.edges?.weekday) ?? history?.edges?.all ?? [];
-    const band = buildEdgeBand(motion, geometry, table, history?.dwells ?? [], now);
+    const { band, stations } = buildEdgeBand(
+        motion,
+        geometry,
+        table,
+        history?.dwells ?? [],
+        now
+    );
 
     const stops: ChartStop[] = [];
     for (let index = 0; index < motion.next.length; index += 1) {
@@ -266,6 +298,7 @@ export function buildProgressChart(
         projection,
         band,
         stops,
+        stations,
         minDs,
         maxDs,
         velMax,

@@ -42,6 +42,8 @@ export interface SnapshotTrain {
     depart_at?: number | null;
     /** Metres of one-sigma position uncertainty, from observation age. */
     sigma?: number | null;
+    /** Recent server-side positions: [unix time, s_total, speed]. */
+    path?: [number, number, number][];
     /** The server re-anchored this train; fade it rather than animate a jump. */
     reset: boolean;
     /** No position claim yet: the train has not started service. Absent on older snapshots. */
@@ -205,6 +207,8 @@ export interface TrainMotion {
     sigma: number;
     /** Render opacity, ramped from 0 after a reset. */
     fade: number;
+    /** Recent positions carried by the snapshot, for the observed chart line. */
+    path: { t: number; s: number; v: number }[];
     /** Snapshot time this motion was derived from. */
     observedAt: number;
 }

@@ -155,6 +155,7 @@ export function fromSnapshot(
             sigma:
                 typeof train.sigma === 'number' && Number.isFinite(train.sigma) ? train.sigma : 0,
             fade: train.reset === true ? 0 : 1,
+            path: (train.path ?? []).map(([t, s, v]) => ({ t, s, v })),
             observedAt
         });
     }
@@ -250,20 +251,28 @@ export function advance(
     const target = timelineAt(motion, geometry, at);
     const terminal = terminalS(geometry);
 
+    const previous = timelineAt(motion, geometry, at - dt);
+    const targetMotion = Math.max(0, target.sTotal - previous.sTotal);
     const error = target.sTotal - motion.sTotal;
     const adopt = motion.reset || Math.abs(error) > HARD_RESET_M;
     let sTotal: number;
+    let speed: number;
     if (adopt) {
         // A genuine re-anchor: adopt it. The renderer fades the marker.
         sTotal = target.sTotal;
+        speed = 0;
     } else {
-        const blend = 1 - Math.exp(-dt / BLEND_TAU_S);
+        // Always follow the timeline forward; a positive error closes quickly.
+        // A negative error only cancels the correction, never the motion, so
+        // the dot slows instead of freezing in the middle of the track.
+        const correction = Math.max(
+            0,
+            error * (1 - Math.exp(-dt / BLEND_TAU_S))
+        );
         const maxStep = MAX_BLEND_MPS * dt;
-        // Corrections may pull the estimate backwards, but the dot must not:
-        // a train that visibly reverses and then races forward reads as broken.
-        // Hold until the estimate catches up; a large backward error is a reset.
-        const step = Math.max(0, clamp(error * blend, -maxStep, maxStep));
+        const step = Math.min(maxStep, targetMotion + correction);
         sTotal = motion.sTotal + step;
+        speed = step / dt;
     }
 
     if (!Number.isFinite(sTotal)) sTotal = target.sTotal;
@@ -274,7 +283,7 @@ export function advance(
     const fade = Math.min(1, (adopt ? 0 : motion.fade) + dt / 0.7);
     // `edge` stays the server's timeline anchor; `s` is the display-local
     // distance and may briefly sit on the neighbouring edge while easing.
-    return { ...motion, s: display.s, sTotal, v: target.v, fade };
+    return { ...motion, s: display.s, sTotal, v: speed, fade };
 }
 
 /**

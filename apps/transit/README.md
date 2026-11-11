@@ -51,12 +51,12 @@ warning. OSM attribution is shown in the legend.
 
 ## Motion and uncertainty
 
-The client does not integrate a velocity. The server ships a timeline (`depart_at` plus the next six
+The client does not integrate a velocity. The server ships a timeline (`depart_at` plus up to twelve
 stop arrivals) and `sim.ts` evaluates a trapezoidal profile against wall-clock time, so the 30 s
 poll cadence never enters the render path. A snapshot replaces the timeline, not the dot; the
-displayed position eases toward the new estimate (4 s time constant, 60 m/s cap). Corrections above
-400 m — a skipped stop or a feed gap — are adopted immediately and faded in over 0.7 s, because
-gliding half a kilometre is worse than a blink.
+displayed position follows the timeline forward, and a correction may speed it up or slow it down
+but never reverse it. Corrections above 400 m — a skipped stop or a feed gap — are adopted
+immediately and faded in over 0.7 s, because gliding half a kilometre is worse than a blink.
 
 Uncertainty is **along the track, never radial**. A circle would imply lateral freedom a train does
 not have and would overlap neighbouring lines. For the selected train only, the map draws a
@@ -66,12 +66,18 @@ empty, because its position is the platform; the inspector shows `departs in ~Ns
 (metres) is the numeric estimate and is shown in the inspector, not as a halo.
 
 The details pane also carries a **progress chart** for the selected train: distance and speed
-against time, with the observed past (up to 5 minutes), the projected next 15 minutes, and a p10-p90
-band from recent runs of the same pattern. The band is aligned at the train's current distance and
-filtered to the same day type and a similar hour, so it answers "trains that were here at this time
-usually took 4-6 minutes to the next stop". History is fetched lazily from
-`history-v2-<graph>-<pattern>.json` and cached per pattern; when the file is absent the chart still
-shows the projection.
+against time, with the observed past, the projected next 15 minutes, and a p10-p90 band. The band is
+built from per-edge departure-to-arrival quantiles plus median dwell at each stop, accumulated from
+the current edge minus the phase already elapsed. Edges, not whole trajectories: aligning
+trajectories at a distance mixes trains that are arriving, dwelling and departing at that point.
+Each upcoming stop is drawn as a **station window** from the earliest arrival to the latest
+departure, so dwell does not average away. The wheel zooms the shared time range around the cursor
+and a double-click resets it. History is fetched lazily from `history-v2-<graph>-<pattern>.json` and
+cached per pattern; when the file is absent the chart still shows the projection.
+
+The observed line starts with the server's last six minutes of positions (the `path` field in the
+snapshot), then continues with the live samples. The archive holds the full 21-day series, but the
+UI does not query per-train archive history; only the pattern totals are served.
 
 ## Tests
 

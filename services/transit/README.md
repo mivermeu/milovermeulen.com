@@ -244,9 +244,10 @@ Notes:
 - `trains` holds only trips that have a vehicle entity — an observed position to place. Trips in the
   feed that are scheduled but not assigned are counted in `scheduled_trips` instead; rendering those
   would park them at the origin terminal.
-- `next` is the **future** timeline, capped at six stops: the current/just-passed stop is filtered
-  out, and each entry carries absolute `arr`/`dep` unix seconds. The client evaluates a trapezoidal
-  profile from `depart_at` through `next`, so the 30 s poll cadence never touches the render path.
+- `next` is the **future** timeline, capped at twelve stops: the current/just-passed stop is
+  filtered out, and each entry carries absolute `arr`/`dep` unix seconds. The client evaluates a
+  trapezoidal profile from `depart_at` through `next`, so the 30 s poll cadence never touches the
+  render path.
 - `effect`/`cause` are usually `null`: MTA leaves them unset, so alert severity has to be derived
   from text. `routes`/`stops` (from `informed_entity`) are the reliable structure.
 - `edge` names the pattern and the segment (`pattern:index:from>to`); `s` is metres from the start
@@ -258,6 +259,8 @@ Notes:
   `predeparture` counts them at the document level.
 - `depart_at` is when the train left — or, while it is still dwelling, will leave — the start of
   `edge`. It is the anchor the client timeline starts from.
+- `path` is the last six minutes of server positions for this train (`[unix, s_total, speed]`), so
+  the chart's observed line does not start when the pane opens.
 - `sigma` is one-sigma position uncertainty in metres, derived from observation age and confidence;
   it grows while the feed is stale and is the honest width of "where is it".
 - `confidence` folds in match quality, vehicle staleness and whether the observation forced a reset.
@@ -291,7 +294,7 @@ continues instead of jumping. Each cycle it:
    `runtime-<graph>.json`, then the static schedule's per-edge median (`edge_times` in the graph),
    then a 12 m/s fallback. Dwell comes from the schedule, so a train leaves the platform even if the
    next poll still says `STOPPED_AT`;
-5. publishes `depart_at` plus the next six arrivals, so the client evaluates the same profile and
+5. publishes `depart_at` plus the next twelve arrivals, so the client evaluates the same profile and
    motion stays continuous between polls. `s_total` is the position at `generated_at`;
 6. re-anchors with `reset` only when the new estimate is further from the extrapolated old one than
    a train could travel in the cycle — `600 m + 30 m/s × elapsed` — and leaves smaller corrections

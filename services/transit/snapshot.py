@@ -13,7 +13,7 @@ from typing import Any
 from . import gtfs
 
 SCHEMA_VERSION = 2
-MAX_NEXT_STOPS = 6
+MAX_NEXT_STOPS = 12
 
 # GTFS-realtime VehicleStopStatus.
 _STATUS = {0: "INCOMING_AT", 1: "STOPPED_AT", 2: "IN_TRANSIT_TO"}
@@ -113,6 +113,7 @@ def build(
                     "reset": False,
                     "depart_at": None,
                     "sigma": None,
+                    "path": [],
                 }
             )
         else:

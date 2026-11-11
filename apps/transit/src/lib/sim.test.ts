@@ -140,6 +140,7 @@ function motion(overrides: Partial<TrainMotion> = {}): TrainMotion {
         departAt: 1000,
         sigma: 25,
         fade: 1,
+        path: [],
         observedAt: 1000,
         ...overrides
     };
@@ -252,6 +253,7 @@ describe('fromSnapshot', () => {
             departAt: 1060,
             sigma: 30,
             fade: 1,
+            path: [],
             observedAt: 1000
         });
     });
@@ -429,7 +431,7 @@ describe('advance', () => {
         expect(next.sTotal).toBeLessThanOrEqual(60 / 60);
     });
 
-    test('converges on the timeline over a second', () => {
+    test('converges on the moving timeline', () => {
         const current = motion({
             edge: 0,
             sTotal: 0,
@@ -437,10 +439,12 @@ describe('advance', () => {
             next: [{ stop: 'S1', arr: 1060, dep: 1070 }]
         });
         let state = current;
+        let at = 1000;
         for (let frame = 0; frame < 1200; frame++) {
-            state = advance(state, 1 / 60, geometry, 1030);
+            at += 1 / 60;
+            state = advance(state, 1 / 60, geometry, at);
         }
-        const target = timelineAt(current, geometry, 1030).sTotal;
+        const target = timelineAt(current, geometry, at).sTotal;
         expect(state.sTotal).toBeCloseTo(target, 0);
     });
 

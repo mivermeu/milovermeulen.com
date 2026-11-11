@@ -64,7 +64,7 @@
         selectedId = id;
         selectedMotion = motion;
         selectedNow = motion?.observedAt ?? 0;
-        selectedPast = [];
+        selectedPast = motion?.path ? motion.path.map((point) => ({ ...point })) : [];
         selectedGeometry = null;
         history = null;
         historyPattern = '';
@@ -236,7 +236,7 @@
                         if (motion.pattern !== historyPattern) {
                             historyPattern = motion.pattern;
                             history = null;
-                            selectedPast = [];
+                            selectedPast = motion.path.map((point) => ({ ...point }));
                             lastPast = 0;
                             void loadHistory(motion.pattern);
                         }

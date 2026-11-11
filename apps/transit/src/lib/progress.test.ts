@@ -46,6 +46,7 @@ function motion(overrides: Partial<TrainMotion> = {}): TrainMotion {
         departAt: NOW - 30,
         sigma: 50,
         fade: 1,
+        path: [],
         observedAt: NOW,
         ...overrides
     };
@@ -106,6 +107,12 @@ describe('buildProgressChart', () => {
         expect(later).toBeDefined();
         expect(later!.high).toBeGreaterThan(later!.median);
         expect(later!.median).toBeGreaterThan(later!.low);
+
+        expect(chart.stations.length).toBe(2);
+        for (const station of chart.stations) {
+            expect(station.xLow).toBeLessThanOrEqual(station.xMedian);
+            expect(station.xMedian).toBeLessThanOrEqual(station.xHigh);
+        }
     });
 
     test('uses the day-type table', () => {

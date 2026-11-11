@@ -20,18 +20,69 @@
     const DIST_BOTTOM = 78;
     const VEL_TOP = 104;
     const VEL_BOTTOM = 158;
-    const SPAN = LOOKBACK_S + HORIZON_S;
 
     const chart = $derived(buildProgressChart(motion, geometry, history, now, past));
     const color = $derived(routeColor(motion.route));
 
+    // Shared time window for both panels; the wheel zooms around the cursor.
+    let view = $state({ from: -LOOKBACK_S, to: HORIZON_S });
+
+    const clamp = (value: number, min: number, max: number): number =>
+        Math.min(max, Math.max(min, value));
+
+    function zoom(event: WheelEvent): void {
+        event.preventDefault();
+        const rect = (event.currentTarget as Element).getBoundingClientRect();
+        const fraction = clamp((event.clientX - rect.left) / rect.width, 0, 1);
+        const plot = clamp((fraction * W - LEFT) / (W - LEFT - RIGHT), 0, 1);
+        const anchor = view.from + plot * (view.to - view.from);
+        const factor = event.deltaY > 0 ? 1.2 : 1 / 1.2;
+        const span = clamp(
+            (view.to - view.from) * factor,
+            120,
+            LOOKBACK_S + HORIZON_S
+        );
+        let from = anchor - plot * span;
+        let to = from + span;
+        if (from < -LOOKBACK_S) {
+            from = -LOOKBACK_S;
+            to = from + span;
+        }
+        if (to > HORIZON_S) {
+            to = HORIZON_S;
+            from = to - span;
+        }
+        view = { from, to };
+    }
+
+    function resetView(): void {
+        view = { from: -LOOKBACK_S, to: HORIZON_S };
+    }
+
+    const ticks = $derived.by(() => {
+        const span = view.to - view.from;
+        const step = [30, 60, 120, 300, 600].find((candidate) => span / candidate <= 6) ?? 900;
+        const values: number[] = [];
+        for (let t = Math.ceil(view.from / step) * step; t <= view.to; t += step) {
+            values.push(t);
+        }
+        if (values.length === 0) values.push(0);
+        return { step, values };
+    });
+
+    const tickLabel = (seconds: number): string => {
+        if (seconds === 0) return 'now';
+        if (ticks.step < 60) return (seconds / 60).toFixed(1);
+        return `${seconds > 0 ? '+' : ''}${Math.round(seconds / 60)}`;
+    };
+
     $effect(() => {
         if (import.meta.env.DEV) {
-            (window as unknown as { __chart?: unknown }).__chart = { motion, chart, now };
+            (window as unknown as { __chart?: unknown }).__chart = { motion, chart, now, view };
         }
     });
 
-    const xScale = (x: number): number => LEFT + ((x + LOOKBACK_S) / SPAN) * (W - LEFT - RIGHT);
+    const xScale = (x: number): number => LEFT + ((x - view.from) / (view.to - view.from)) * (W - LEFT - RIGHT);
     const yDist = (ds: number): number =>
         DIST_BOTTOM -
         ((ds - chart.minDs) / Math.max(1, chart.maxDs - chart.minDs)) * (DIST_BOTTOM - DIST_TOP);
@@ -94,20 +145,27 @@
     );
 
     const zeroX = $derived(xScale(0));
-    const axes = [-5, 0, 5, 10, 15];
+    const showNow = $derived(view.from <= 0 && view.to >= 0);
     const km = (metres: number): string => `${(metres / 1000).toFixed(1)} km`;
 </script>
 
 <figure class="mt-3 border-t border-brand-secondary pt-2" aria-label="Projected progression">
-    <figcaption class="flex items-center justify-between text-[9px] text-brand-text">
-        <span>projection · next 15 min</span>
-        <span>{chart.runCount} comparable</span>
+    <figcaption class="flex items-center justify-between gap-2 text-[9px] text-brand-text">
+        <span>projection · scroll to zoom</span>
+        <span class="shrink-0">{chart.runCount} comparable</span>
     </figcaption>
 
-    <svg viewBox="0 0 {W} 176" class="mt-1 w-full" role="img">
+    <svg
+        viewBox="0 0 {W} 176"
+        class="mt-1 w-full cursor-zoom-in"
+        role="img"
+        onwheel={zoom}
+        ondblclick={resetView}
+        aria-label="Distance and speed projection with a historical band"
+    >
         <!-- x grid -->
-        {#each axes as minute (minute)}
-            {@const x = xScale(minute * 60)}
+        {#each ticks.values as tick (tick)}
+            {@const x = xScale(tick)}
             <line
                 x1={x}
                 y1={DIST_TOP}
@@ -115,10 +173,10 @@
                 y2={VEL_BOTTOM}
                 stroke="#334155"
                 stroke-width="0.5"
-                stroke-dasharray={minute === 0 ? '2 2' : '1 3'}
+                stroke-dasharray={tick === 0 ? '2 2' : '1 3'}
             />
             <text {x} y="170" text-anchor="middle" font-size="7.5" fill="#94a3b8">
-                {minute === 0 ? 'now' : `${minute > 0 ? '+' : ''}${minute}`}
+                {tickLabel(tick)}
             </text>
         {/each}
 
@@ -187,8 +245,28 @@
                 stroke-linecap="round"
             />
         {/if}
+        <!-- Where comparable trains could be at each platform. -->
+        {#each chart.stations as station (station.ds)}
+            <line
+                x1={xScale(station.xLow)}
+                y1={yDist(station.ds)}
+                x2={xScale(station.xHigh)}
+                y2={yDist(station.ds)}
+                stroke={color}
+                stroke-opacity="0.3"
+                stroke-width="1.3"
+                stroke-linecap="round"
+            />
+            <circle
+                cx={xScale(station.xMedian)}
+                cy={yDist(station.ds)}
+                r="1.1"
+                fill={color}
+                opacity="0.6"
+            />
+        {/each}
         {#each chart.stops as stop (stop.x)}
-            <circle cx={xScale(stop.x)} cy={yDist(stop.ds)} r="1.8" fill={color} opacity="0.8">
+            <circle cx={xScale(stop.x)} cy={yDist(stop.ds)} r="1.5" fill={color} opacity="0.9">
                 <title>{stop.stop}</title>
             </circle>
         {/each}
@@ -233,15 +311,17 @@
         {/if}
 
         <!-- now marker -->
-        <line
-            x1={zeroX}
-            y1={DIST_TOP}
-            x2={zeroX}
-            y2={VEL_BOTTOM}
-            stroke="#e2e8f0"
-            stroke-opacity="0.5"
-            stroke-width="0.8"
-        />
+        {#if showNow}
+            <line
+                x1={zeroX}
+                y1={DIST_TOP}
+                x2={zeroX}
+                y2={VEL_BOTTOM}
+                stroke="#e2e8f0"
+                stroke-opacity="0.5"
+                stroke-width="0.8"
+            />
+        {/if}
     </svg>
 
     <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[9px] text-brand-text">
@@ -252,6 +332,10 @@
             <span class="flex items-center gap-1">
                 <span class="h-2 w-3 rounded-sm" style:background-color={color} style:opacity="0.25"
                 ></span>history p10–90
+            </span>
+            <span class="flex items-center gap-1">
+                <span class="h-0.5 w-3 rounded" style:background-color={color} style:opacity="0.5"
+                ></span>station window
             </span>
         {/if}
         {#if chart.past.length > 1}
