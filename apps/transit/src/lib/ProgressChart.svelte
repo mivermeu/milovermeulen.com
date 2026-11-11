@@ -25,6 +25,12 @@
     const chart = $derived(buildProgressChart(motion, geometry, history, now, past));
     const color = $derived(routeColor(motion.route));
 
+    $effect(() => {
+        if (import.meta.env.DEV) {
+            (window as unknown as { __chart?: unknown }).__chart = { motion, chart, now };
+        }
+    });
+
     const xScale = (x: number): number => LEFT + ((x + LOOKBACK_S) / SPAN) * (W - LEFT - RIGHT);
     const yDist = (ds: number): number =>
         DIST_BOTTOM -

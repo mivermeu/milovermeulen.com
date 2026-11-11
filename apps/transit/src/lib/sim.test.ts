@@ -518,6 +518,31 @@ describe('advance', () => {
         expect(next.stale).toBe(true);
     });
 
+    test('never moves the dot backwards', () => {
+        const current = motion({
+            edge: 1,
+            sTotal: 180,
+            departAt: 1000,
+            next: [{ stop: 'S2', arr: 1060, dep: 1070 }]
+        });
+        // The timeline says the train is behind the dot (a correction).
+        const next = advance(current, 1 / 60, geometry, 1000);
+        expect(next.sTotal).toBeGreaterThanOrEqual(180);
+    });
+
+    test('still adopts a backward reset and fades', () => {
+        const current = motion({
+            edge: 1,
+            sTotal: 180,
+            reset: true,
+            departAt: 1000,
+            next: [{ stop: 'S2', arr: 1060, dep: 1070 }]
+        });
+        const next = advance(current, 1 / 60, geometry, 1000);
+        expect(next.sTotal).toBeLessThan(180);
+        expect(next.fade).toBeLessThan(0.1);
+    });
+
     test('never steps further than the blend cap, even against a wild timeline', () => {
         const current = motion({
             edge: 0,
@@ -571,13 +596,26 @@ describe('sliceAlong', () => {
 describe('bracketSlice', () => {
     const geometry = straightGeometry();
 
-    test('covers the current edge while running', () => {
+    test('is a short interval around the dot while running', () => {
         const state = motion({
             edge: 1,
+            sTotal: 150,
+            sigma: 40,
             departAt: 1000,
             next: [{ stop: 'S2', arr: 1060, dep: 1070 }]
         });
-        expect(bracketSlice(state, geometry, 1030)).toEqual(sliceAlong(geometry, 100, 200));
+        expect(bracketSlice(state, geometry, 1030)).toEqual(sliceAlong(geometry, 110, 190));
+    });
+
+    test('clips the interval to the current edge', () => {
+        const state = motion({
+            edge: 1,
+            sTotal: 110,
+            sigma: 80,
+            departAt: 1000,
+            next: [{ stop: 'S2', arr: 1060, dep: 1070 }]
+        });
+        expect(bracketSlice(state, geometry, 1030)).toEqual(sliceAlong(geometry, 100, 160));
     });
 
     test('is empty while dwelling: the platform is the position', () => {

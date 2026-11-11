@@ -51,6 +51,58 @@ MAX_RUNS = 40
 LOCAL_ZONE = ZoneInfo("America/New_York")
 
 
+def _quantile(values: list[float], fraction: float) -> float:
+    ordered = sorted(values)
+    position = (len(ordered) - 1) * fraction
+    low = int(position)
+    high = min(low + 1, len(ordered) - 1)
+    return ordered[low] + (ordered[high] - ordered[low]) * (position - low)
+
+
+def _crossing(values: list[float], run: dict[str, Any], distance: float) -> float | None:
+    if distance < values[0] or distance > values[-1]:
+        return None
+    low, high = 0, len(values) - 1
+    while low < high:
+        middle = (low + high) // 2
+        if values[middle] < distance:
+            low = middle + 1
+        else:
+            high = middle
+    if low == 0:
+        return float(run["start"])
+    before, after = values[low - 1], values[low]
+    fraction = (distance - before) / (after - before) if after > before else 0.0
+    return run["start"] + (low - 1 + fraction) * run["dt"]
+
+
+def _stop_times(
+    run: dict[str, Any], stops: list[float]
+) -> tuple[list[float | None], list[float | None]]:
+    """Arrival and departure time at each stop.
+
+    Departure is the crossing of 15 m past the platform. Run time must be
+    departure-to-arrival: the chart already knows the phase since departure, and
+    an arrival-to-arrival total would make every band one dwell too slow.
+    """
+    values: list[float] = []
+    best = -1e18
+    for value in run["s"]:
+        best = max(best, float(value))
+        values.append(best)
+    arrivals: list[float | None] = []
+    departures: list[float | None] = []
+    for distance in stops:
+        arrival = _crossing(values, run, distance)
+        arrivals.append(arrival)
+        departure = _crossing(values, run, distance + 15)
+        if departure is not None and arrival is not None:
+            departures.append(max(arrival, departure))
+        else:
+            departures.append(arrival)
+    return arrivals, departures
+
+
 def _resample(points: list[tuple[int, float]]) -> list[int] | None:
     """Resample one run onto a fixed grid; None when it is too short or static."""
     if len(points) < MIN_POINTS:
@@ -149,22 +201,72 @@ def build(
     graph_hash: str,
     now: float | None = None,
     max_runs: int = MAX_RUNS,
+    stops_by_pattern: dict[str, list[float]] | None = None,
 ) -> dict[str, dict[str, Any]]:
     stamp = int(time.time() if now is None else now)
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    edge_samples: dict[tuple[str, str, int], list[float]] = defaultdict(list)
+    dwell_samples: dict[tuple[str, int], list[float]] = defaultdict(list)
     total = 0
     for run in runs_from_rows(learn.iter_rows(paths)):
         grouped[run["pattern"]].append(run)
         total += 1
+        stops = (stops_by_pattern or {}).get(run["pattern"])
+        if not stops:
+            continue
+        arrivals, departures = _stop_times(run, stops)
+        kind = "weekend" if run["w"] else "weekday"
+        for index in range(len(stops) - 1):
+            departure = departures[index]
+            arrival = arrivals[index + 1]
+            if departure is None or arrival is None:
+                continue
+            duration = arrival - departure
+            if 5.0 <= duration <= 1800.0:
+                edge_samples[(run["pattern"], kind, index)].append(duration)
+                edge_samples[(run["pattern"], "all", index)].append(duration)
+        for index in range(len(stops)):
+            arrival = arrivals[index]
+            departure = departures[index]
+            if arrival is None or departure is None:
+                continue
+            dwell = departure - arrival
+            if 0.0 <= dwell <= 600.0:
+                dwell_samples[(run["pattern"], index)].append(dwell)
     documents: dict[str, dict[str, Any]] = {}
     for pattern, runs in grouped.items():
         runs.sort(key=lambda run: run["start"], reverse=True)
         kept = sorted(runs[:max_runs], key=lambda run: run["start"])
+        stops = (stops_by_pattern or {}).get(pattern) or []
+        edges: dict[str, list[list[float] | None]] = {"all": [], "weekday": [], "weekend": []}
+        for index in range(max(0, len(stops) - 1)):
+            overall = edge_samples.get((pattern, "all", index), [])
+            if len(overall) < 5:
+                edges["all"].append(None)
+                edges["weekday"].append(None)
+                edges["weekend"].append(None)
+                continue
+            quantiles = [_quantile(overall, p) for p in (0.1, 0.5, 0.9)]
+            edges["all"].append([round(value, 1) for value in quantiles])
+            for kind in ("weekday", "weekend"):
+                sample = edge_samples.get((pattern, kind, index), [])
+                if len(sample) >= 5:
+                    edges[kind].append(
+                        [round(_quantile(sample, p), 1) for p in (0.1, 0.5, 0.9)]
+                    )
+                else:
+                    edges[kind].append([round(value, 1) for value in quantiles])
+        dwells = []
+        for index in range(len(stops)):
+            sample = dwell_samples.get((pattern, index), [])
+            dwells.append(round(_quantile(sample, 0.5), 1) if sample else 0.0)
         documents[pattern] = {
             "v": SCHEMA_VERSION,
             "pattern": pattern,
             "graph": graph_hash,
             "built_at": stamp,
+            "edges": edges,
+            "dwells": dwells,
             "runs": kept,
         }
     log.info(
@@ -211,11 +313,18 @@ def main(argv: list[str] | None = None) -> int:
     data_dir = args.data_dir or Path(os.environ.get("TRANSIT_DATA_DIR", "/var/lib/transit-archive"))
     www_dir = args.www_dir or Path(os.environ.get("TRANSIT_WWW_DIR", "/var/www/transit-api"))
     manifest = json.loads((www_dir / "graph.json").read_text())
+    graph = json.loads((www_dir / manifest["graph"]).read_text())
+    stops_by_pattern = {
+        pattern["id"]: [float(distance) for _, distance in pattern["stops"]]
+        for pattern in graph.get("patterns", [])
+    }
     paths = learn.series_paths(data_dir, args.days)
     if not paths:
         log.error("no series files under %s", data_dir / "series")
         return 1
-    documents = build(paths, manifest["hash"], max_runs=args.max_runs)
+    documents = build(
+        paths, manifest["hash"], max_runs=args.max_runs, stops_by_pattern=stops_by_pattern
+    )
     if args.dry_run:
         return 0
     written = write_artifacts(documents, www_dir, manifest["hash"])

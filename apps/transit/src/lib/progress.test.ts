@@ -1,12 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 
-import { buildProgressChart, crossTime, newYorkClock, sampleRun, selectRuns } from './progress';
-import type { HistoryRun, PatternGeometry, PatternHistory, TrainMotion } from './types';
+import { buildProgressChart, newYorkClock } from './progress';
+import type { PatternGeometry, PatternHistory, TrainMotion } from './types';
 
-/**
- * 2026-11-11 12:00 UTC = 07:00 EST, a Wednesday. Fixed so the time-of-day
- * filter cannot drift with the machine clock.
- */
+/** 2026-11-11 12:00 UTC = 07:00 EST, a Wednesday. */
 const NOW = 1_794_398_400;
 
 function geometry(): PatternGeometry {
@@ -54,57 +51,34 @@ function motion(overrides: Partial<TrainMotion> = {}): TrainMotion {
     };
 }
 
-function run(start: number, values: number[], h = 7, w: 0 | 1 = 0): HistoryRun {
-    return { start, h, w, dt: 30, s: values };
+function history(overrides: Partial<PatternHistory> = {}): PatternHistory {
+    return {
+        v: 1,
+        pattern: 'pA',
+        edges: {
+            all: [
+                [40, 60, 120],
+                [40, 60, 120],
+                [40, 60, 120]
+            ],
+            weekday: [
+                [40, 60, 120],
+                [40, 60, 120],
+                [40, 60, 120]
+            ],
+            weekend: [
+                [60, 90, 150],
+                [60, 90, 150],
+                [60, 90, 150]
+            ]
+        },
+        runs: [],
+        ...overrides
+    };
 }
 
-describe('sampleRun', () => {
-    test('interpolates distance and speed inside the run', () => {
-        const value = sampleRun(run(NOW, [0, 100, 250]), NOW + 15);
-        expect(value?.s).toBeCloseTo(50, 6);
-        expect(value?.v).toBeCloseTo(250 / 60, 6);
-    });
-
-    test('returns null outside the run', () => {
-        expect(sampleRun(run(NOW, [0, 100]), NOW - 1)).toBeNull();
-        expect(sampleRun(run(NOW, [0, 100]), NOW + 31)).toBeNull();
-    });
-});
-
-describe('crossTime', () => {
-    test('interpolates the first crossing of the current distance', () => {
-        expect(crossTime(run(NOW, [0, 100, 250]), 50)).toBeCloseTo(NOW + 15, 6);
-        expect(crossTime(run(NOW, [0, 100, 250]), 100)).toBeCloseTo(NOW + 30, 6);
-        expect(crossTime(run(NOW, [0, 100, 250]), 0)).toBe(NOW);
-    });
-
-    test('rejects a distance the run never covered', () => {
-        expect(crossTime(run(NOW, [0, 100]), 200)).toBeNull();
-    });
-});
-
-describe('selectRuns', () => {
-    test('prefers the same day type within two hours', () => {
-        const runs = [
-            ...Array.from({ length: 6 }, () => run(NOW - 90_000, [0, 100], 7, 0)),
-            ...Array.from({ length: 6 }, () => run(NOW - 80_000, [0, 100], 12, 0)),
-            ...Array.from({ length: 6 }, () => run(NOW - 70_000, [0, 100], 7, 1))
-        ];
-        const selected = selectRuns({ v: 1, pattern: 'pA', runs }, NOW);
-        expect(selected).toHaveLength(6);
-        expect(selected.every((entry) => entry.h === 7 && entry.w === 0)).toBe(true);
-    });
-
-    test('widens before giving up', () => {
-        const runs = [
-            run(NOW - 90_000, [0, 100], 12, 0),
-            run(NOW - 80_000, [0, 100], 7, 1),
-            run(NOW - 70_000, [0, 100], 3, 1)
-        ];
-        expect(selectRuns({ v: 1, pattern: 'pA', runs }, NOW)).toHaveLength(3);
-    });
-
-    test('newYorkClock is New York time, not the machine timezone', () => {
+describe('newYorkClock', () => {
+    test('is New York time, not the machine timezone', () => {
         expect(newYorkClock(NOW)).toEqual({ hour: 7, weekend: false });
     });
 });
@@ -120,22 +94,56 @@ describe('buildProgressChart', () => {
         expect(chart.stops[0].x).toBe(60);
     });
 
-    test('builds a historical band aligned at the current distance', () => {
-        const values = Array.from({ length: 40 }, (_, index) => index * 25);
-        const runs = Array.from({ length: 12 }, (_, index) =>
-            run(NOW - 1000 - index * 60, values, 7, 0)
-        );
-        const history: PatternHistory = { v: 1, pattern: 'pA', runs };
-        const chart = buildProgressChart(motion(), geometry(), history, NOW, []);
+    test('builds a widening band from edge quantiles', () => {
+        const chart = buildProgressChart(motion(), geometry(), history(), NOW, []);
         expect(chart.hasHistory).toBe(true);
-        expect(chart.runCount).toBe(12);
         const atZero = chart.band.find((point) => point.x === 0);
-        expect(atZero?.median).toBeCloseTo(0, 6);
         expect(atZero?.low).toBeCloseTo(0, 6);
+        expect(atZero?.median).toBeCloseTo(0, 6);
         expect(atZero?.high).toBeCloseTo(0, 6);
-        const later = chart.band.find((point) => point.x === 300);
+
+        const later = chart.band.find((point) => point.x === 45);
         expect(later).toBeDefined();
-        expect(later!.high).toBeGreaterThanOrEqual(later!.median);
+        expect(later!.high).toBeGreaterThan(later!.median);
+        expect(later!.median).toBeGreaterThan(later!.low);
+    });
+
+    test('uses the day-type table', () => {
+        const weekday = buildProgressChart(motion(), geometry(), history(), NOW, []);
+        const weekendNow = NOW + 4 * 86400;
+        const weekend = buildProgressChart(
+            motion({ departAt: weekendNow - 30 }),
+            geometry(),
+            history(),
+            weekendNow,
+            []
+        );
+        // The weekend edge times are slower, so the slow edge of the band is
+        // further behind at the same clock time.
+        const weekdayLater = weekday.band.find((point) => point.x === 15);
+        const weekendLater = weekend.band.find((point) => point.x === 15);
+        expect(weekdayLater).toBeDefined();
+        expect(weekendLater).toBeDefined();
+        expect(weekendLater!.median).toBeLessThan(weekdayLater!.median);
+    });
+
+    test('falls back to the all-day table', () => {
+        const chart = buildProgressChart(
+            motion(),
+            geometry(),
+            history({
+                edges: {
+                    all: [
+                        [40, 60, 120],
+                        [40, 60, 120],
+                        [40, 60, 120]
+                    ]
+                }
+            }),
+            NOW,
+            []
+        );
+        expect(chart.hasHistory).toBe(true);
     });
 
     test('uses the observed past when it is available', () => {

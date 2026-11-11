@@ -259,7 +259,10 @@ export function advance(
     } else {
         const blend = 1 - Math.exp(-dt / BLEND_TAU_S);
         const maxStep = MAX_BLEND_MPS * dt;
-        const step = clamp(error * blend, -maxStep, maxStep);
+        // Corrections may pull the estimate backwards, but the dot must not:
+        // a train that visibly reverses and then races forward reads as broken.
+        // Hold until the estimate catches up; a large backward error is a reset.
+        const step = Math.max(0, clamp(error * blend, -maxStep, maxStep));
         sTotal = motion.sTotal + step;
     }
 
@@ -341,9 +344,20 @@ export function bracketSlice(
 ): [number, number][] {
     const stops = geometry.stops;
     if (stops.length < 2 || motion.next.length === 0) return [];
+    // While dwelling the position is the platform; there is no spatial extent
+    // to show, only the departure countdown.
     if (motion.departAt === null || at <= motion.departAt) return [];
     const edge = clamp(motion.edge, 0, stops.length - 2);
-    return sliceAlong(geometry, stops[edge].dist, stops[edge + 1].dist);
+    const start = stops[edge].dist;
+    const end = stops[edge + 1].dist;
+    const span = end - start;
+    if (span <= 0) return [];
+    const half = Math.max(25, Math.min(motion.sigma > 0 ? motion.sigma : 25, span / 2));
+    return sliceAlong(
+        geometry,
+        Math.max(start, motion.sTotal - half),
+        Math.min(end, motion.sTotal + half)
+    );
 }
 
 /**

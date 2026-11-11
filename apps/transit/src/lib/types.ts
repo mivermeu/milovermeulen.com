@@ -86,7 +86,11 @@ export interface PatternHistory {
     pattern: string;
     graph?: string;
     built_at?: number;
-    runs: HistoryRun[];
+    /** Per-edge [p10, p50, p90] run seconds, aligned with the pattern edges. */
+    edges?: Partial<Record<'all' | 'weekday' | 'weekend', (number[] | null)[]>>;
+    /** Median dwell seconds at each stop. */
+    dwells?: number[];
+    runs?: HistoryRun[];
 }
 
 export interface Snapshot {

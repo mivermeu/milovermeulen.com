@@ -59,11 +59,11 @@ displayed position eases toward the new estimate (4 s time constant, 60 m/s cap)
 gliding half a kilometre is worse than a blink.
 
 Uncertainty is **along the track, never radial**. A circle would imply lateral freedom a train does
-not have and would overlap neighbouring lines. For the selected train only, the map draws the
-current edge as a translucent bracket — the stretch between the stop it left and the stop it has not
-reached. While the train is dwelling the bracket is empty, because its position is the platform; the
-inspector shows `departs in ~Ns` instead. `sigma` (metres) is the numeric estimate and is shown in
-the inspector, not as a halo.
+not have and would overlap neighbouring lines. For the selected train only, the map draws a
+translucent ±`sigma` bracket along the track — the stretch the train is plausibly on, clipped to the
+current edge — not the whole station-to-station segment. While the train is dwelling the bracket is
+empty, because its position is the platform; the inspector shows `departs in ~Ns` instead. `sigma`
+(metres) is the numeric estimate and is shown in the inspector, not as a halo.
 
 The details pane also carries a **progress chart** for the selected train: distance and speed
 against time, with the observed past (up to 5 minutes), the projected next 15 minutes, and a p10-p90

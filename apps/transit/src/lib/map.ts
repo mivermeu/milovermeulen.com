@@ -198,8 +198,8 @@ export function installLayers(
         layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: {
             'line-color': ['get', 'color'],
-            'line-width': ['interpolate', ['linear'], ['zoom'], 10, 6, 14, 9, 16, 12],
-            'line-opacity': 0.28
+            'line-width': ['interpolate', ['linear'], ['zoom'], 10, 8, 14, 11, 16, 14],
+            'line-opacity': 0.42
         }
     });
 
